@@ -1081,8 +1081,12 @@ function openSettingsView(user) {
       }
       if (actionName === 'reset-password') {
         const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-        if (error) { console.error(error); showToast('Could not send reset email. Check your Supabase email settings.'); }
-        else showToast('Password reset email sent.');
+        if (error) if (error) {
+  console.error(error);
+  showToast('Could not send reset email. Check your Supabase email settings.');
+  return;
+}
+showToast('Successfully sent! Password reset link email kar di hai. Apna inbox check karein.');
         return;
       }
       if (actionName === 'refresh-credits') { await loadCredits(); return; }

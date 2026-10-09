@@ -7592,3 +7592,31 @@ body {
 .pricing-trial-note span {
     color: rgba(255, 255, 255, 0.7);
 }
+/* JEVEXA Support Dropdown Color Fix */
+#settingsPanel select {
+  background-color: #100d20 !important;
+  color: #f5f3ff !important;
+  border: 1px solid #7048e8 !important;
+}
+
+#settingsPanel select option {
+  background-color: #100d20 !important;
+  color: #f5f3ff !important;
+}
+
+#settingsPanel select:focus {
+  outline: 2px solid #8b5cf6 !important;
+  outline-offset: 2px;
+}
+
+/* Fix Help & Support dropdown colors */
+#settingsPanel select {
+  background-color: #100d20 !important;
+  color: #f5f1ff !important;
+  border: 1px solid #8055e8 !important;
+}
+
+#settingsPanel select option {
+  background-color: #100d20 !important;
+  color: #f5f1ff !important;
+}

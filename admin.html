@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>JEVEXA — Admin Control Center</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+:root{
+    --bg:#05070d;
+    --card:rgba(15,20,34,.72);
+    --border:rgba(255,255,255,.09);
+    --text:#f8fafc;
+    --muted:#8b97aa;
+    --purple:#8b5cf6;
+    --cyan:#06b6d4;
+    --green:#22c55e;
+    --red:#ef4444;
+}
+
+html,body{
+    min-height:100%;
+}
+
+body{
+    font-family:Inter,Segoe UI,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    overflow-x:hidden;
+}
+
+/* ===== BACKGROUND ===== */
+
+.background{
+    position:fixed;
+    inset:0;
+    z-index:-5;
+    overflow:hidden;
+    background:
+        radial-gradient(circle at 15% 20%,rgba(139,92,246,.16),transparent 30%),
+        radial-gradient(circle at 85% 75%,rgba(6,182,212,.13),transparent 30%),
+        #05070d;
+}
+
+.grid{
+    position:absolute;
+    inset:0;
+    background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:45px 45px;
+    mask-image:linear-gradient(to bottom,black,transparent);
+}
+
+.orb{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(70px);
+    animation:float 12s ease-in-out infinite;
+}
+
+.orb.one{
+    width:280px;
+    height:280px;
+    background:rgba(139,92,246,.22);
+    top:-80px;
+    left:-80px;
+}
+
+.orb.two{
+    width:330px;
+    height:330px;
+    background:rgba(6,182,212,.16);
+    right:-100px;
+    bottom:-100px;
+    animation-delay:-5s;
+}
+
+@keyframes float{
+    0%,100%{transform:translate(0,0) scale(1)}
+    50%{transform:translate(40px,-30px) scale(1.12)}
+}
+
+/* ===== LOGIN ===== */
+
+#loginSection{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:25px;
+}
+
+.login-card{
+    width:100%;
+    max-width:460px;
+    padding:42px;
+    border:1px solid var(--border);
+    border-radius:28px;
+    background:rgba(10,14,25,.78);
+    backdrop-filter:blur(25px);
+    box-shadow:
+        0 30px 100px rgba(0,0,0,.55),
+        inset 0 1px 0 rgba(255,255,255,.06);
+    animation:loginIn .8s cubic-bezier(.2,.8,.2,1);
+}
+
+@keyframes loginIn{
+    from{
+        opacity:0;
+        transform:translateY(35px) scale(.96);
+    }
+    to{
+        opacity:1;
+        transform:none;
+    }
+}
+
+.logo{
+    text-align:center;
+    font-size:42px;
+    font-weight:900;
+    letter-spacing:5px;
+    background:linear-gradient(90deg,#fff,#a78bfa,#22d3ee);
+    -webkit-background-clip:text;
+    background-clip: text;
+    color:transparent;
+}
+
+.login-title{
+    text-align:center;
+    font-size:22px;
+    margin-top:8px;
+}
+
+.login-subtitle{
+    text-align:center;
+    color:var(--muted);
+    margin-top:8px;
+    margin-bottom:30px;
+}
+
+.badge{
+    display:table;
+    margin:0 auto 22px;
+    padding:7px 13px;
+    border-radius:30px;
+    font-size:11px;
+    font-weight:700;
+    color:#c4b5fd;
+    border:1px solid rgba(139,92,246,.3);
+    background:rgba(139,92,246,.08);
+}
+
+.field{
+    margin-bottom:18px;
+}
+
+.field label{
+    display:block;
+    margin-bottom:8px;
+    color:#cbd5e1;
+    font-size:13px;
+}
+
+.field input{
+    width:100%;
+    padding:15px 16px;
+    border-radius:13px;
+    border:1px solid var(--border);
+    outline:none;
+    background:rgba(255,255,255,.035);
+    color:#fff;
+    transition:.25s;
+}
+
+.field input:focus{
+    border-color:var(--purple);
+    box-shadow:0 0 0 4px rgba(139,92,246,.1);
+}
+
+.login-btn{
+    width:100%;
+    padding:15px;
+    border:none;
+    border-radius:13px;
+    color:white;
+    font-weight:800;
+    cursor:pointer;
+    background:linear-gradient(100deg,#7c3aed,#06b6d4);
+    box-shadow:0 12px 30px rgba(124,58,237,.25);
+    transition:.25s;
+}
+
+.login-btn:hover{
+    transform:translateY(-2px);
+    box-shadow:0 18px 38px rgba(124,58,237,.35);
+}
+
+.error{
+    min-height:20px;
+    text-align:center;
+    margin-top:15px;
+    color:#f87171;
+    font-size:13px;
+}
+
+/* ===== DASHBOARD ===== */
+
+#dashboard{
+    display:none;
+    min-height:100vh;
+    padding:28px;
+}
+
+.container{
+    max-width:1450px;
+    margin:auto;
+}
+
+/* HEADER */
+
+.topbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:20px;
+    padding:20px 24px;
+    margin-bottom:25px;
+    border:1px solid var(--border);
+    border-radius:22px;
+    background:rgba(10,14,25,.68);
+    backdrop-filter:blur(20px);
+}
+
+.brand{
+    display:flex;
+    align-items:center;
+    gap:14px;
+}
+
+.brand-icon{
+    width:48px;
+    height:48px;
+    display:grid;
+    place-items:center;
+    border-radius:15px;
+    background:linear-gradient(135deg,#7c3aed,#06b6d4);
+    box-shadow:0 8px 30px rgba(124,58,237,.25);
+    font-weight:900;
+}
+
+.brand h1{
+    font-size:21px;
+}
+
+.brand p{
+    color:var(--muted);
+    font-size:12px;
+    margin-top:3px;
+}
+
+.logout{
+    border:1px solid rgba(239,68,68,.25);
+    background:rgba(239,68,68,.08);
+    color:#fca5a5;
+    padding:11px 18px;
+    border-radius:11px;
+    cursor:pointer;
+    font-weight:700;
+    transition:.2s;
+}
+
+.logout:hover{
+    background:rgba(239,68,68,.18);
+}
+
+/* STATUS */
+
+.status{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    margin-bottom:22px;
+    color:#86efac;
+    font-size:12px;
+}
+
+.status-dot{
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    background:#22c55e;
+    box-shadow:0 0 15px #22c55e;
+    animation:pulse 1.8s infinite;
+}
+
+@keyframes pulse{
+    50%{opacity:.35;transform:scale(.7)}
+}
+
+/* STATS */
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:18px;
+    margin-bottom:22px;
+}
+
+.stat{
+    position:relative;
+    overflow:hidden;
+    padding:25px;
+    border:1px solid var(--border);
+    border-radius:20px;
+    background:var(--card);
+    backdrop-filter:blur(18px);
+    transition:.3s;
+}
+
+.stat:hover{
+    transform:translateY(-5px);
+    border-color:rgba(139,92,246,.35);
+    box-shadow:0 20px 45px rgba(0,0,0,.25);
+}
+
+.stat::after{
+    content:"";
+    position:absolute;
+    width:100px;
+    height:100px;
+    right:-35px;
+    top:-35px;
+    border-radius:50%;
+    background:rgba(139,92,246,.12);
+    filter:blur(15px);
+}
+
+.stat-label{
+    color:var(--muted);
+    font-size:13px;
+    margin-bottom:12px;
+}
+
+.stat-value{
+    font-size:31px;
+    font-weight:900;
+}
+
+.stat-small{
+    color:#64748b;
+    font-size:11px;
+    margin-top:6px;
+}
+
+/* TABLE */
+
+.panel{
+    border:1px solid var(--border);
+    border-radius:22px;
+    background:var(--card);
+    backdrop-filter:blur(20px);
+    overflow:hidden;
+}
+
+.panel-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:23px 25px;
+    border-bottom:1px solid var(--border);
+}
+
+.panel-head h2{
+    font-size:18px;
+}
+
+.panel-head span{
+    color:var(--muted);
+    font-size:12px;
+}
+
+.table-wrap{
+    overflow-x:auto;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:850px;
+}
+
+th,td{
+    padding:17px 20px;
+    text-align:left;
+    border-bottom:1px solid rgba(255,255,255,.055);
+}
+
+th{
+    color:#a78bfa;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+}
+
+td{
+    color:#dbe4f0;
+    font-size:13px;
+}
+
+tr{
+    transition:.2s;
+}
+
+tbody tr:hover{
+    background:rgba(139,92,246,.045);
+}
+
+.message{
+    max-width:380px;
+    color:#94a3b8;
+    line-height:1.5;
+}
+
+.empty{
+    padding:55px 20px;
+    text-align:center;
+    color:var(--muted);
+}
+
+.empty-icon{
+    font-size:35px;
+    margin-bottom:12px;
+}
+
+/* LOADING */
+
+.loader{
+    width:24px;
+    height:24px;
+    border:3px solid rgba(255,255,255,.12);
+    border-top-color:#8b5cf6;
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+    margin:auto;
+}
+
+@keyframes spin{
+    to{transform:rotate(360deg)}
+}
+
+/* TOAST */
+
+.toast{
+    position:fixed;
+    right:25px;
+    bottom:25px;
+    padding:14px 18px;
+    border:1px solid var(--border);
+    border-radius:13px;
+    background:#111827;
+    color:white;
+    box-shadow:0 20px 50px rgba(0,0,0,.4);
+    transform:translateY(100px);
+    opacity:0;
+    transition:.3s;
+    z-index:100;
+}
+
+.toast.show{
+    transform:none;
+    opacity:1;
+}
+
+/* RESPONSIVE */
+
+@media(max-width:800px){
+
+    #dashboard{
+        padding:15px;
+    }
+
+    .stats{
+        grid-template-columns:1fr;
+    }
+
+    .topbar{
+        padding:17px;
+    }
+
+    .login-card{
+        padding:30px 23px;
+    }
+
+    .logo{
+        font-size:34px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="background">
+    <div class="grid"></div>
+    <div class="orb one"></div>
+    <div class="orb two"></div>
+</div>
+
+
+<!-- ================= LOGIN ================= -->
+
+<section id="loginSection">
+
+    <div class="login-card">
+
+        <div class="badge">🔐 SECURE ADMIN ACCESS</div>
+
+        <div class="logo">JEVEXA</div>
+
+        <div class="login-title">
+            Admin Control Center
+        </div>
+
+        <div class="login-subtitle">
+            Manage your AI Automation Studio
+        </div>
+
+        <form id="loginForm">
+
+            <div class="field">
+                <label>Admin Email</label>
+
+                <input
+                    type="email"
+                    id="email"
+                    placeholder="Enter admin email"
+                    required
+                >
+            </div>
+
+            <div class="field">
+                <label>Password</label>
+
+                <input
+                    type="password"
+                    id="password"
+                    placeholder="Enter password"
+                    required
+                >
+            </div>
+
+            <button class="login-btn" type="submit">
+                Enter Control Center →
+            </button>
+
+            <div class="error" id="loginError"></div>
+
+        </form>
+
+    </div>
+
+</section>
+
+
+<!-- ================= DASHBOARD ================= -->
+
+<section id="dashboard">
+
+<div class="container">
+
+    <div class="topbar">
+
+        <div class="brand">
+
+            <div class="brand-icon">
+                J
+            </div>
+
+            <div>
+                <h1>JEVEXA Admin</h1>
+                <p>AI Automation Studio • Control Center</p>
+            </div>
+
+        </div>
+
+        <button class="logout" id="logoutBtn">
+            Logout
+        </button>
+
+    </div>
+
+
+    <div class="status">
+        <span class="status-dot"></span>
+        System Online
+    </div>
+
+
+    <!-- STATS -->
+
+    <div class="stats">
+
+        <div class="stat">
+            <div class="stat-label">
+                TOTAL CONTACTS
+            </div>
+
+            <div class="stat-value" id="totalContacts">
+                0
+            </div>
+
+            <div class="stat-small">
+                All website inquiries
+            </div>
+        </div>
+
+
+        <div class="stat">
+            <div class="stat-label">
+                DATABASE
+            </div>
+
+            <div class="stat-value">
+                ONLINE
+            </div>
+
+            <div class="stat-small">
+                Supabase connected
+            </div>
+        </div>
+
+
+        <div class="stat">
+            <div class="stat-label">
+                WEBSITE
+            </div>
+
+            <div class="stat-value">
+                LIVE
+            </div>
+
+            <div class="stat-small">
+                jevexa.net
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- CONTACTS -->
+
+    <div class="panel">
+
+        <div class="panel-head">
+
+            <div>
+                <h2>📩 Contact Submissions</h2>
+                <span>Latest inquiries from your website</span>
+            </div>
+
+            <span id="refreshStatus">
+                Live
+            </span>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Message</th>
+                        <th>Date</th>
+                    </tr>
+
+                </thead>
+
+                <tbody id="contactsTable"></tbody>
+
+            </table>
+
+        </div>
+
+
+        <div class="empty" id="emptyMessage">
+
+            <div class="empty-icon">
+                ✨
+            </div>
+
+            Loading your contacts...
+
+        </div>
+
+    </div>
+
+</div>
+
+</section>
+
+
+<div class="toast" id="toast"></div>
+
+
+<script>
+
+/* =====================================================
+   JEVEXA SUPABASE CONFIG
+===================================================== */
+
+const SUPABASE_URL =
+'https://byopcuspgnhwsrmsxqvm.supabase.co';
+
+const SUPABASE_KEY = 'sb_publishable_AoElF80JEwzufwdNfrmjqQ_lDGq8kcF';
+
+const ADMIN_EMAIL = 'maazofficial107@gmail.com';
+
+const supabaseClient =
+window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+
+
+/* =====================================================
+   ELEMENTS
+===================================================== */
+
+const loginSection =
+document.getElementById('loginSection');
+
+const dashboard =
+document.getElementById('dashboard');
+
+const loginForm =
+document.getElementById('loginForm');
+
+const loginError =
+document.getElementById('loginError');
+
+const contactsTable =
+document.getElementById('contactsTable');
+
+const emptyMessage =
+document.getElementById('emptyMessage');
+
+const totalContacts =
+document.getElementById('totalContacts');
+
+const toast =
+document.getElementById('toast');
+
+
+/* =====================================================
+   LOGIN
+===================================================== */
+
+loginForm.addEventListener('submit', async (e)=>{
+
+    e.preventDefault();
+
+    loginError.textContent='';
+
+    const email =
+    document.getElementById('email')
+    .value.trim();
+
+    const password =
+    document.getElementById('password')
+    .value;
+
+
+    if(
+        email.toLowerCase()
+        !==
+        ADMIN_EMAIL.toLowerCase()
+    ){
+
+        loginError.textContent =
+        'Admin access only.';
+
+        return;
+    }
+
+
+    const {data,error} =
+    await supabaseClient.auth
+    .signInWithPassword({
+        email,
+        password
+    });
+
+
+    if(error){
+
+        loginError.textContent =
+        error.message;
+
+        return;
+    }
+
+
+    showDashboard();
+
+});
+
+
+/* =====================================================
+   SHOW DASHBOARD
+===================================================== */
+
+function showDashboard(){
+
+    loginSection.style.display='none';
+
+    dashboard.style.display='block';
+
+    loadContacts();
+
+}
+
+
+/* =====================================================
+   LOAD CONTACTS
+===================================================== */
+
+async function loadContacts(){
+
+    contactsTable.innerHTML='';
+
+    emptyMessage.innerHTML =
+    '<div class="loader"></div>';
+
+    emptyMessage.style.display='block';
+
+
+    const {data,error} =
+    await supabaseClient
+    .from('Contacts')
+    .select('*')
+    .order(
+        'created_at',
+        {ascending:false}
+    );
+
+
+    if(error){
+
+        emptyMessage.innerHTML =
+        '⚠️ Unable to load contacts.';
+
+        console.error(error);
+
+        return;
+    }
+
+
+    totalContacts.textContent =
+    data.length;
+
+
+    if(!data.length){
+
+        emptyMessage.innerHTML =
+        `
+        <div class="empty-icon">📭</div>
+        No contact submissions yet.
+        `;
+
+        return;
+    }
+
+
+    emptyMessage.style.display='none';
+
+
+    data.forEach(contact=>{
+
+        const row =
+        document.createElement('tr');
+
+
+        row.innerHTML = `
+
+        <td>
+            ${escapeHTML(contact.name || '-')}
+        </td>
+
+        <td>
+            ${escapeHTML(contact.email || '-')}
+        </td>
+
+        <td>
+            ${escapeHTML(contact.phone || '-')}
+        </td>
+
+        <td class="message">
+            ${escapeHTML(contact.message || '-')}
+        </td>
+
+        <td>
+            ${
+                contact.created_at
+                ?
+                new Date(
+                    contact.created_at
+                ).toLocaleString()
+                :
+                '-'
+            }
+        </td>
+
+        `;
+
+
+        contactsTable.appendChild(row);
+
+    });
+
+
+    showToast(
+        `${data.length} contact(s) loaded`
+    );
+
+}
+
+
+/* =====================================================
+   LOGOUT
+===================================================== */
+
+document
+.getElementById('logoutBtn')
+.addEventListener('click',async()=>{
+
+    await supabaseClient.auth.signOut();
+
+    location.reload();
+
+});
+
+
+/* =====================================================
+   SESSION CHECK
+===================================================== */
+
+async function checkSession(){
+
+    const {
+        data:{session}
+    } =
+    await supabaseClient
+    .auth
+    .getSession();
+
+
+    if(
+        session &&
+        session.user.email.toLowerCase()
+        ===
+        ADMIN_EMAIL.toLowerCase()
+    ){
+
+        showDashboard();
+
+    }
+
+}
+
+checkSession();
+
+
+/* =====================================================
+   SECURITY
+===================================================== */
+
+function escapeHTML(value){
+
+    return String(value)
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+
+}
+
+
+/* =====================================================
+   TOAST
+===================================================== */
+
+function showToast(message){
+
+    toast.textContent=message;
+
+    toast.classList.add('show');
+
+    setTimeout(()=>{
+        toast.classList.remove('show');
+    },3000);
+
+}
+
+</script>
+
+</body>
+</html>

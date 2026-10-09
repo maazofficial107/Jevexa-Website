@@ -1,0 +1,1903 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>JEVEXA | AI Automation Studio — Premium</title>
+
+    <meta name="description" content="JEVEXA AI Automation Studio - Premium AI-powered automation solutions. Intelligent agents, chatbots, RPA, workflows & seamless integrations.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght\@400;500;600;700;800;900&family=Inter:wght\@300;400;500;600;700;800&family=Space+Grotesk:wght\@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <link href="https://unpkg.com/aos\@2.3.1/dist/aos.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+
+<body>
+
+    <!-- Animated Background -->
+
+    <div class="mesh-bg">
+
+        <div class="mesh-blob blob-1"></div>
+
+        <div class="mesh-blob blob-2"></div>
+
+        <div class="mesh-blob blob-3"></div>
+
+    </div>
+
+    <canvas id="particles-canvas"></canvas>
+
+
+
+    <!-- Preloader -->
+
+    <div id="preloader">
+
+        <div class="loader">
+
+            <div class="loader-core">
+
+                <div class="loader-ring r1"></div>
+
+                <div class="loader-ring r2"></div>
+
+                <div class="loader-ring r3"></div>
+
+                <div class="loader-logo">J</div>
+
+            </div>
+
+            <div class="loader-text">
+
+                <span>J</span><span>E</span><span>V</span><span>E</span><span>X</span><span>A</span>
+
+            </div>
+
+            <div class="loader-bar"><div class="loader-progress"></div></div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- Navigation -->
+
+    <nav class="navbar" id="navbar">
+
+        <div class="nav-container">
+
+            <a href="#home" class="logo">
+
+                <span class="logo-icon"><i class="fas fa-robot"></i></span>
+
+                <div class="logo-texts">
+
+                    <span class="logo-text">JEVEXA</span>
+
+                    <span class="logo-sub">AI STUDIO</span>
+
+                </div>
+
+            </a>
+
+            <ul class="nav-links" id="navLinks">
+
+                <li><a href="#home" class="nav-link active">Home</a></li>
+
+                <li><a href="#features" class="nav-link">Features</a></li>
+
+                <li><a href="#how" class="nav-link">Process</a></li>
+
+                <li><a href="#pricing" class="nav-link">Pricing</a></li>
+
+                <li><a href="#reviews" class="nav-link">Reviews</a></li>
+
+                <li><a href="#faq" class="nav-link">FAQ</a></li>
+
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+
+            </ul>
+
+            <div class="nav-actions">
+
+                <div id="creditsBadge" class="credits-badge" style="display:none;">
+
+    <span class="credits-lightning">ϟ</span>
+
+    <strong id="creditsCount">100</strong>
+
+    <span>Credits Remaining</span>
+
+</div>
+
+              <a href="#" class="btn btn-nav" onclick="openLogin(); return false;">
+
+                    <span>Get Started</span>
+
+                    <i class="fas fa-arrow-right"></i>
+
+                </a>
+
+                <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
+
+                    <span></span><span></span><span></span>
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </nav>
+
+
+
+    <!-- Hero -->
+
+    <section id="home" class="hero">
+
+        <div class="hero-glow"></div>
+
+        <div class="hero-content">
+
+            <div class="hero-badge" data-aos="fade-down">
+
+                <span class="badge-pulse"></span>
+
+                <i class="fas fa-bolt"></i> Next-Gen AI Automation
+
+            </div>
+
+            <h1 class="hero-title" data-aos="fade-up">
+
+                Automate Your <span class="gradient-text">Future</span><br>
+
+                with <span class="gradient-text">JEVEXA</span>
+
+            </h1>
+
+            <p class="hero-subtitle" data-aos="fade-up" data-aos-delay="100">
+
+                Premium AI Automation Studio that transforms businesses with intelligent agents,&#x20;
+
+                smart workflows, RPA, and 24/7 autonomous systems. <strong>Build once. Scale forever.</strong>
+
+            </p>
+
+            <div class="hero-ctas" data-aos="fade-up" data-aos-delay="200">
+
+                <a href="#pricing" class="btn btn-primary">
+
+                    <span>Start Free Trial</span>
+
+                    <i class="fas fa-rocket"></i>
+
+                </a>
+
+                <a href="#features" class="btn btn-secondary">
+
+                    <i class="fas fa-play-circle"></i>
+
+                    <span>Explore Features</span>
+
+                </a>
+
+            </div>
+
+            <div class="hero-stats" data-aos="fade-up" data-aos-delay="300">
+
+                <div class="stat glass">
+
+                    <span class="stat-number" data-count="2500">0</span><span class="stat-suffix">+</span>
+
+                    <span class="stat-label">Automations Built</span>
+
+                </div>
+
+                <div class="stat glass">
+
+                    <span class="stat-number" data-count="98">0</span><span class="stat-suffix">%</span>
+
+                    <span class="stat-label">Client Satisfaction</span>
+
+                </div>
+
+                <div class="stat glass">
+
+                    <span class="stat-number" data-count="45">0</span><span class="stat-suffix">k</span>
+
+                    <span class="stat-label">Hours Saved</span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="hero-visual" data-aos="zoom-in" data-aos-delay="150">
+
+            <div class="ai-core-container">
+
+                <!-- Floating Status Cards -->
+
+                <div class="status-card status-top-left">
+
+                    <div class="status-icon automation">
+
+                        <i class="fas fa-bolt"></i>
+
+                    </div>
+
+                    <div class="status-text">
+
+                        <span class="status-label">Automation</span>
+
+                        <span class="status-value">Running</span>
+
+                    </div>
+
+                </div>
+
+                <div class="status-card status-top-right">
+
+                    <div class="status-icon agent">
+
+                        <i class="fas fa-robot"></i>
+
+                    </div>
+
+                    <div class="status-text">
+
+                        <span class="status-label">AI Agent</span>
+
+                        <span class="status-value online">Online</span>
+
+                    </div>
+
+                </div>
+
+                <div class="status-card status-bottom-right">
+
+                    <div class="status-icon tasks">
+
+                        <i class="fas fa-check"></i>
+
+                    </div>
+
+                    <div class="status-text">
+
+                        <span class="status-label">Tasks completed</span>
+
+                        <span class="status-value count" data-count="12842">0</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- Main Orb -->
+
+                <div class="ai-orb">
+
+                    <div class="orb-glow-outer"></div>
+
+                    <div class="orb-orbit orbit-1"></div>
+
+                    <div class="orb-orbit orbit-2"></div>
+
+                    <div class="orb-orbit orbit-3"></div>
+
+                    <div class="orb-sphere">
+
+                        <div class="sphere-core"></div>
+
+                        <div class="sphere-highlight"></div>
+
+                        <div class="sphere-star"></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="scroll-indicator">
+
+            <div class="mouse"><div class="wheel"></div></div>
+
+            <span>Scroll to explore</span>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Trust Marquee -->
+
+    <div class="trust-marquee">
+
+        <div class="marquee-track">
+
+            <div class="marquee-content">
+
+                <span><i class="fas fa-shield-halved"></i> Enterprise Security</span>
+
+                <span><i class="fas fa-bolt"></i> 99.99% Uptime</span>
+
+                <span><i class="fas fa-globe"></i> 40+ Countries</span>
+
+                <span><i class="fas fa-users"></i> 2,500+ Clients</span>
+
+                <span><i class="fas fa-award"></i> SOC2 Ready</span>
+
+                <span><i class="fas fa-lock"></i> End-to-End Encryption</span>
+
+                <span><i class="fas fa-rocket"></i> Deploy in Minutes</span>
+
+                <span><i class="fas fa-headset"></i> 24/7 Premium Support</span>
+
+                <span><i class="fas fa-shield-halved"></i> Enterprise Security</span>
+
+                <span><i class="fas fa-bolt"></i> 99.99% Uptime</span>
+
+                <span><i class="fas fa-globe"></i> 40+ Countries</span>
+
+                <span><i class="fas fa-users"></i> 2,500+ Clients</span>
+
+                <span><i class="fas fa-award"></i> SOC2 Ready</span>
+
+                <span><i class="fas fa-lock"></i> End-to-End Encryption</span>
+
+                <span><i class="fas fa-rocket"></i> Deploy in Minutes</span>
+
+                <span><i class="fas fa-headset"></i> 24/7 Premium Support</span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- Features -->
+
+    <section id="features" class="features">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-sparkles"></i> Powerful Capabilities</span>
+
+                <h2 class="section-title">Everything You Need to <span class="gradient-text">Automate</span></h2>
+
+                <p class="section-desc">Complete AI Automation Studio — from chatbots & RPA to document AI, voice agents, and enterprise workflows.</p>
+
+            </div>
+
+            <div class="features-grid">
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="50">
+
+                    <div class="feature-icon"><i class="fas fa-comments"></i></div>
+
+                    <h3>AI Chatbots & Agents</h3>
+
+                    <p>Deploy advanced conversational AI that understands context, handles complex queries, and integrates with CRM & support desks.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Multi-language support</li>
+
+                        <li><i class="fas fa-check"></i> Custom training</li>
+
+                        <li><i class="fas fa-check"></i> 24/7 availability</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="80">
+
+                    <div class="feature-icon"><i class="fas fa-project-diagram"></i></div>
+
+                    <h3>Workflow Automation</h3>
+
+                    <p>Visual no-code / low-code pipelines that connect apps, trigger actions, and orchestrate multi-step processes.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> 300+ integrations</li>
+
+                        <li><i class="fas fa-check"></i> Conditional logic</li>
+
+                        <li><i class="fas fa-check"></i> Error recovery</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="110">
+
+                    <div class="feature-icon"><i class="fas fa-cogs"></i></div>
+
+                    <h3>RPA & Process Automation</h3>
+
+                    <p>Robotic Process Automation that mimics human actions on any software — forms, ERP, legacy systems, and desktops.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Desktop & web RPA</li>
+
+                        <li><i class="fas fa-check"></i> Screen scraping</li>
+
+                        <li><i class="fas fa-check"></i> Unattended bots</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="140">
+
+                    <div class="feature-icon"><i class="fas fa-file-invoice"></i></div>
+
+                    <h3>Document AI & OCR</h3>
+
+                    <p>Extract data from invoices, contracts, PDFs, and images with intelligent OCR and automated classification.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Invoice processing</li>
+
+                        <li><i class="fas fa-check"></i> Smart extraction</li>
+
+                        <li><i class="fas fa-check"></i> Auto classification</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="170">
+
+                    <div class="feature-icon"><i class="fas fa-microphone-lines"></i></div>
+
+                    <h3>Voice AI & Call Agents</h3>
+
+                    <p>AI voice agents that answer calls, book appointments, qualify leads, and handle customer support in natural speech.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Natural conversations</li>
+
+                        <li><i class="fas fa-check"></i> Appointment booking</li>
+
+                        <li><i class="fas fa-check"></i> Call analytics</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="200">
+
+                    <div class="feature-icon"><i class="fas fa-user-check"></i></div>
+
+                    <h3>Lead Scoring & CRM AI</h3>
+
+                    <p>Automatically score, enrich, and route leads. Sync with your CRM and keep pipelines always up to date.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Smart lead scoring</li>
+
+                        <li><i class="fas fa-check"></i> Auto CRM sync</li>
+
+                        <li><i class="fas fa-check"></i> Pipeline automation</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="230">
+
+                    <div class="feature-icon"><i class="fas fa-pen-fancy"></i></div>
+
+                    <h3>Content Generation</h3>
+
+                    <p>Generate blogs, emails, social posts, product descriptions, and ad copy that matches your brand voice.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Brand voice training</li>
+
+                        <li><i class="fas fa-check"></i> SEO optimization</li>
+
+                        <li><i class="fas fa-check"></i> Multi-format output</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="260">
+
+                    <div class="feature-icon"><i class="fas fa-envelope-open-text"></i></div>
+
+                    <h3>Email & Outreach AI</h3>
+
+                    <p>Personalize emails at scale, sequence campaigns, and let AI reply to leads in your tone while you sleep.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Smart sequencing</li>
+
+                        <li><i class="fas fa-check"></i> Reply automation</li>
+
+                        <li><i class="fas fa-check"></i> A/B testing AI</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="290">
+
+                    <div class="feature-icon"><i class="fas fa-share-nodes"></i></div>
+
+                    <h3>Social Media Automation</h3>
+
+                    <p>Schedule, generate captions, reply to comments, and analyze performance across Instagram, LinkedIn, X & TikTok.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Auto-scheduling</li>
+
+                        <li><i class="fas fa-check"></i> Comment AI</li>
+
+                        <li><i class="fas fa-check"></i> Trend detection</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="320">
+
+                    <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+
+                    <h3>Intelligent Analytics</h3>
+
+                    <p>Real-time dashboards powered by AI that surface insights, predict trends, and auto-generate reports.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Predictive models</li>
+
+                        <li><i class="fas fa-check"></i> Custom KPIs</li>
+
+                        <li><i class="fas fa-check"></i> Auto insights</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="350">
+
+                    <div class="feature-icon"><i class="fas fa-database"></i></div>
+
+                    <h3>Data Enrichment & Scraping</h3>
+
+                    <p>Clean, enrich, and structure data from any source. Build lead lists and feed your CRM with verified info.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> Smart extraction</li>
+
+                        <li><i class="fas fa-check"></i> Deduplication</li>
+
+                        <li><i class="fas fa-check"></i> API-ready output</li>
+
+                    </ul>
+
+                </div>
+
+                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="380">
+
+                    <div class="feature-icon"><i class="fas fa-shield-halved"></i></div>
+
+                    <h3>Enterprise Security</h3>
+
+                    <p>SOC2-ready architecture, end-to-end encryption, role-based access, audit logs, and private cloud options.</p>
+
+                    <ul class="feature-list">
+
+                        <li><i class="fas fa-check"></i> GDPR & CCPA</li>
+
+                        <li><i class="fas fa-check"></i> SSO & SAML</li>
+
+                        <li><i class="fas fa-check"></i> Private instances</li>
+
+                    </ul>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- How It Works -->
+
+    <section id="how" class="how-it-works">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-route"></i> Simple Process</span>
+
+                <h2 class="section-title">From Idea to <span class="gradient-text">Autonomous</span> in 4 Steps</h2>
+
+            </div>
+
+            <div class="steps">
+
+                <div class="step glass" data-aos="fade-up" data-aos-delay="100">
+
+                    <div class="step-number">01</div>
+
+                    <div class="step-content">
+
+                        <h3>Discover & Map</h3>
+
+                        <p>We analyze your current processes and identify high-ROI automation opportunities together.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="step glass" data-aos="fade-up" data-aos-delay="200">
+
+                    <div class="step-number">02</div>
+
+                    <div class="step-content">
+
+                        <h3>Design & Build</h3>
+
+                        <p>Our studio crafts custom AI agents and workflows tailored to your exact tools and goals.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="step glass" data-aos="fade-up" data-aos-delay="300">
+
+                    <div class="step-number">03</div>
+
+                    <div class="step-content">
+
+                        <h3>Train & Test</h3>
+
+                        <p>We fine-tune models on your data, run rigorous tests, and iterate until performance is production-grade.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="step glass" data-aos="fade-up" data-aos-delay="400">
+
+                    <div class="step-number">04</div>
+
+                    <div class="step-content">
+
+                        <h3>Deploy & Scale</h3>
+
+                        <p>Go live with monitoring, continuous improvement, and dedicated support so your automation grows with you.</p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Pricing -->
+
+    <section id="pricing" class="pricing">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-gem"></i> Transparent Pricing</span>
+
+                <h2 class="section-title">Choose Your <span class="gradient-text">Power Level</span></h2>
+
+                <p class="section-desc">No hidden fees. Cancel anytime. All plans include core AI features.</p>
+
+                <div class="pricing-trial-note">
+
+    🎁 <strong>Start with 100 Free AI Credits</strong>
+
+    <span>Try JEVEXA before choosing a paid plan.</span>
+
+</div>
+
+            </div>
+
+            <div class="pricing-toggle" data-aos="fade-up">
+
+                <span class="toggle-label">Monthly</span>
+
+                <label class="switch">
+
+                    <input type="checkbox" id="billingToggle">
+
+                    <span class="slider"></span>
+
+                </label>
+
+                <span class="toggle-label">Yearly <span class="save-badge">Save up to 20%</span></span>
+
+            </div>
+
+            <div class="pricing-grid">
+
+                <div class="price-card glass" data-aos="fade-up" data-aos-delay="100">
+
+    <div class="price-header">
+
+        <h3>Starter</h3>
+
+        <p class="price-desc">Perfect for individuals & solo founders</p>
+
+    </div>
+
+
+
+    <div class="price-amount">
+
+        <span class="currency">$</span>
+
+        <span class="amount" data-monthly="19" data-yearly="15">19</span>
+
+        <span class="period">/mo</span>
+
+    </div>
+
+
+
+    <ul class="price-features">
+
+        <li><i class="fas fa-check"></i> 1 AI Automation Agent</li>
+
+        <li><i class="fas fa-check"></i> 5 Workflows</li>
+
+        <li><i class="fas fa-check"></i> 2,000 AI Credits / mo</li>
+
+        <li><i class="fas fa-check"></i> 10+ Integrations</li>
+
+        <li><i class="fas fa-check"></i> AI Content Generation</li>
+
+        <li><i class="fas fa-check"></i> Document AI</li>
+
+        <li><i class="fas fa-check"></i> Email Automation</li>
+
+        <li><i class="fas fa-check"></i> Email Support</li>
+
+    </ul>
+
+
+
+    <button type="button" class="btn btn-outline" data-plan="starter">Choose Starter</button>
+
+</div>
+
+                <div class="price-card glass popular" data-aos="fade-up" data-aos-delay="200">
+
+    <div class="popular-badge">
+
+        <i class="fas fa-crown"></i> Most Popular
+
+    </div>
+
+
+
+    <div class="price-header">
+
+        <h3>Pro</h3>
+
+        <p class="price-desc">For growing businesses & agencies</p>
+
+    </div>
+
+
+
+    <div class="price-amount">
+
+        <span class="currency">$</span>
+
+        <span class="amount" data-monthly="49" data-yearly="39">49</span>
+
+        <span class="period">/mo</span>
+
+    </div>
+
+
+
+    <div class="discount-tag">Annual Billing — Save up to 20%</div>
+
+
+
+    <ul class="price-features">
+
+        <li><i class="fas fa-check"></i> 5 AI Automation Agents</li>
+
+        <li><i class="fas fa-check"></i> 25 Workflows</li>
+
+        <li><i class="fas fa-check"></i> 10,000 AI Credits / mo</li>
+
+        <li><i class="fas fa-check"></i> 50+ Integrations</li>
+
+        <li><i class="fas fa-check"></i> Advanced AI Automation</li>
+
+        <li><i class="fas fa-check"></i> Custom AI Agents</li>
+
+        <li><i class="fas fa-check"></i> RPA Automation</li>
+
+        <li><i class="fas fa-check"></i> Advanced Analytics</li>
+
+        <li><i class="fas fa-check"></i> Priority Support</li>
+
+    </ul>
+
+
+
+    <button type="button" class="btn btn-primary" data-plan="pro">Choose Pro</button>
+
+</div>
+
+                <div class="price-card glass" data-aos="fade-up" data-aos-delay="300">
+
+    <div class="price-header">
+
+        <h3>Business</h3>
+
+        <p class="price-desc">For teams & scaling businesses</p>
+
+    </div>
+
+
+
+    <div class="price-amount">
+
+        <span class="currency">$</span>
+
+        <span class="amount" data-monthly="99" data-yearly="79">99</span>
+
+        <span class="period">/mo</span>
+
+    </div>
+
+
+
+    <div class="discount-tag gold">Annual Billing — Save up to 20%</div>
+
+
+
+    <ul class="price-features">
+
+        <li><i class="fas fa-check"></i> 15 AI Automation Agents</li>
+
+        <li><i class="fas fa-check"></i> 100 Workflows</li>
+
+        <li><i class="fas fa-check"></i> 30,000 AI Credits / mo</li>
+
+        <li><i class="fas fa-check"></i> 100+ Integrations</li>
+
+        <li><i class="fas fa-check"></i> Advanced AI Automation</li>
+
+        <li><i class="fas fa-check"></i> Advanced RPA</li>
+
+        <li><i class="fas fa-check"></i> AI Lead Automation</li>
+
+        <li><i class="fas fa-check"></i> Team Collaboration</li>
+
+        <li><i class="fas fa-check"></i> API & Webhooks</li>
+
+        <li><i class="fas fa-check"></i> Advanced Analytics</li>
+
+        <li><i class="fas fa-check"></i> Priority Support</li>
+
+    </ul>
+
+
+
+   <button type="button" class="btn btn-outline" data-plan="business">Choose Business</button>
+
+</div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Reviews -->
+
+    <section id="reviews" class="reviews">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-star"></i> Client Love</span>
+
+                <h2 class="section-title">Trusted by <span class="gradient-text">Ambitious</span> Teams</h2>
+
+            </div>
+
+            <div class="reviews-grid">
+
+                <div class="review-card glass" data-aos="fade-up" data-aos-delay="50">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #667eea, #764ba2);">SK</div>
+
+                            <div><h4>Sarah Kim</h4><span>Head of Ops, NovaTech</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-badge-check"></i> Verified</div>
+
+                    </div>
+
+                    <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+
+                    <p>"JEVEXA cut our support response time from 6 hours to under 4 minutes. The AI agents actually understand context. ROI was visible in the first week."</p>
+
+                    <span class="review-date">Oct 2, 2025</span>
+
+                </div>
+
+                <div class="review-card glass" data-aos="fade-up" data-aos-delay="100">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #f093fb, #f5576c);">MR</div>
+
+                            <div><h4>Marcus Rivera</h4><span>CEO, ScaleUp Labs</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-badge-check"></i> Verified</div>
+
+                    </div>
+
+                    <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+
+                    <p>"We automated our entire lead qualification + outreach pipeline. Closed 3× more deals with the same team size. The Premium plan is pure gold."</p>
+
+                    <span class="review-date">Sep 28, 2025</span>
+
+                </div>
+
+                <div class="review-card glass" data-aos="fade-up" data-aos-delay="150">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">AP</div>
+
+                            <div><h4>Aisha Patel</h4><span>Marketing Director, Glow</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-badge-check"></i> Verified</div>
+
+                    </div>
+
+                    <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+
+                    <p>"Content generation used to take our team 2 days. Now we generate, schedule, and optimize a full week of posts in under an hour. Brand voice is spot on."</p>
+
+                    <span class="review-date">Sep 21, 2025</span>
+
+                </div>
+
+                <div class="review-card glass" data-aos="fade-up" data-aos-delay="200">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">JL</div>
+
+                            <div><h4>James Liu</h4><span>CTO, Finova Systems</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-badge-check"></i> Verified</div>
+
+                    </div>
+
+                    <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+
+                    <p>"Security and compliance were non-negotiable. JEVEXA's private deployment + audit logs made our legal team happy. Performance is enterprise-grade."</p>
+
+                    <span class="review-date">Sep 15, 2025</span>
+
+                </div>
+
+                <div class="review-card glass" data-aos="fade-up" data-aos-delay="250">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #fa709a, #fee140);">EN</div>
+
+                            <div><h4>Elena Novak</h4><span>Founder, AgencyFlow</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-badge-check"></i> Verified</div>
+
+                    </div>
+
+                    <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+
+                    <p>"We run 12 client accounts on the Max plan. White-label + dedicated manager means we look like a much bigger agency. Clients are impressed."</p>
+
+                    <span class="review-date">Sep 8, 2025</span>
+
+                </div>
+
+                <div class="review-card glass" data-aos="fade-up" data-aos-delay="300">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #a18cd1, #fbc2eb);">DT</div>
+
+                            <div><h4>David Thompson</h4><span>Product Lead, Orbit SaaS</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-badge-check"></i> Verified</div>
+
+                    </div>
+
+                    <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+
+                    <p>"The chatbot we built answers 78% of support tickets without human intervention. Setup took less than a day. Support team is incredibly responsive."</p>
+
+                    <span class="review-date">Aug 30, 2025</span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- FAQ -->
+
+    <section id="faq" class="faq">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-circle-question"></i> Got Questions?</span>
+
+                <h2 class="section-title">Frequently Asked <span class="gradient-text">Questions</span></h2>
+
+            </div>
+
+            <div class="faq-list">
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>What exactly is JEVEXA AI Automation Studio?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>JEVEXA is a premium AI Automation Studio that helps businesses design, train, and deploy intelligent agents, chatbots, RPA bots, document AI, voice agents, and automated workflows — without needing a full data science team.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Do I need coding skills to use JEVEXA?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>No. Our visual no-code / low-code builder lets non-technical teams create sophisticated automations. Developers can also use our APIs and webhooks for advanced customizations.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Is there a free trial?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>Yes! Every plan includes a 14-day free trial with full access. No credit card required to start. Upgrade, downgrade, or cancel anytime.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>How secure is my data?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>We use end-to-end encryption, never train public models on your private data, are GDPR & CCPA compliant, and offer private cloud / on-premise options on the Max plan. SSO, SAML, and full audit logs available.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>What integrations do you support?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>Over 300 native integrations including Slack, HubSpot, Salesforce, Gmail, Notion, Zapier, Make, Shopify, Stripe, and most major CRMs, helpdesks, and marketing tools. Custom webhooks and API access available.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Can I white-label the solution?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>Yes. White-label is available on the Max plan. Fully brand chatbots, dashboards, and client portals under your own name and domain — perfect for agencies.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>How long does it take to launch the first automation?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>Most customers launch their first working automation within 1–3 days. Complex multi-agent or enterprise setups typically take 1–2 weeks with our guidance.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>What kind of support do you offer?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>Basic: Email support. Premium: Priority email + live chat. Max: 24/7 priority, dedicated Slack channel, and a Success Manager. All plans include docs and video tutorials.</p></div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Contact -->
+
+    <section id="contact" class="contact">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-paper-plane"></i> Let's Talk</span>
+
+                <h2 class="section-title">Ready to <span class="gradient-text">Automate</span>?</h2>
+
+                <p class="section-desc">Tell us about your goals. We'll reply within 2 hours.</p>
+
+            </div>
+
+            <div class="contact-wrapper glass" data-aos="fade-up">
+
+                <form id="contactForm" class="contact-form">
+
+                    <div class="form-row">
+
+                        <div class="form-group">
+
+                            <label for="contactName">Full Name</label>
+
+                            <input id="contactName" type="text" name="name" required autocomplete="name" placeholder="John Doe">
+
+                        </div>
+
+                        <div class="form-group">
+
+                            <label for="contactEmail">Work Email</label>
+
+                            <input id="contactEmail" type="email" name="email" required autocomplete="email" placeholder="john\@company.com">
+
+                        </div>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="contactCompany">Company</label>
+
+                        <input id="contactCompany" type="text" name="company" autocomplete="organization" placeholder="Your Company">
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="contactMessage">What do you want to automate?</label>
+
+                        <textarea id="contactMessage" name="message" rows="4" required placeholder="Tell us about your use case..."></textarea>
+
+                    </div>
+
+                    <button type="submit" class="btn btn-primary full-width">
+
+                        <span>Send Message</span>
+
+                        <i class="fas fa-paper-plane"></i>
+
+                    </button>
+
+                </form>
+
+                <div class="contact-info">
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-envelope"></i></div>
+
+                        <div><h4>Email</h4><p>hello\@jevexa.ai</p></div>
+
+                    </div>
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-clock"></i></div>
+
+                        <div><h4>Response Time</h4><p>Under 2 hours</p></div>
+
+                    </div>
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-globe"></i></div>
+
+                        <div><h4>Global</h4><p>Serving 40+ countries</p></div>
+
+                    </div>
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-shield-halved"></i></div>
+
+                        <div><h4>Secure</h4><p>Enterprise-grade privacy</p></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Footer -->
+
+    <footer class="footer">
+
+        <div class="container">
+
+            <div class="footer-top">
+
+                <div class="footer-brand">
+
+                    <a href="#home" class="logo">
+
+                        <span class="logo-icon"><i class="fas fa-robot"></i></span>
+
+                        <div class="logo-texts">
+
+                            <span class="logo-text">JEVEXA</span>
+
+                            <span class="logo-sub">AI STUDIO</span>
+
+                        </div>
+
+                    </a>
+
+                    <p>Premium AI Automation Studio. Build once. Scale forever.</p>
+
+                </div>
+
+                <div class="footer-links">
+
+                    <div>
+
+                        <h4>Product</h4>
+
+                        <a href="#features">Features</a>
+
+                        <a href="#pricing">Pricing</a>
+
+                        <a href="#how">Process</a>
+
+                        <a href="#faq">FAQ</a>
+
+                    </div>
+
+                    <div>
+
+                        <h4>Company</h4>
+
+                        <a href="#reviews">Reviews</a>
+
+                        <a href="#contact">Contact</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Careers">Careers</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Blog">Blog</a>
+
+                    </div>
+
+                    <div>
+
+                        <h4>Legal</h4>
+
+                        <a href="#" class="coming-soon-link" data-page="Privacy">Privacy</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Terms">Terms</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Security">Security</a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="footer-bottom">
+
+                <p>© 2026 JEVEXA AI Automation Studio. All rights reserved.</p>
+
+                <div class="socials">
+
+                    <a href="#" class="social coming-soon-link" data-page="Facebook" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="Instagram" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="Twitter" aria-label="Twitter"><i class="fab fa-x-twitter"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="LinkedIn" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="YouTube" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </footer>
+
+
+
+    <div id="toast" class="toast"></div>
+
+
+
+    <!-- Luxury Premium Chatbot -->
+
+    <div class="chatbot" id="chatbot">
+
+        <button class="chatbot-toggle" id="chatbotToggle" aria-label="Open chat">
+
+            <div class="ct-glow"></div>
+
+            <div class="ct-ring"></div>
+
+            <div class="ct-core">
+
+                <i class="fas fa-wand-magic-sparkles"></i>
+
+            </div>
+
+            <span class="ct-badge">AI</span>
+
+        </button>
+
+        <div class="chatbot-window" id="chatbotWindow">
+
+            <div class="chatbot-header">
+
+                <div class="chatbot-avatar">
+
+                    <div class="avatar-ring"></div>
+
+                    <i class="fas fa-wand-magic-sparkles"></i>
+
+                    <span class="status-dot"></span>
+
+                </div>
+
+                <div class="chatbot-info">
+
+                    <h4>JEVEXA AI Assistant</h4>
+
+                    <span class="status">Online • Instant replies</span>
+
+                </div>
+
+                <button class="chatbot-close" id="chatbotClose"><i class="fas fa-times"></i></button>
+
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+
+                <div class="message bot">
+
+                    <div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div>
+
+                    <div class="msg-content">
+
+                        <p>Hey! 👋 I'm the JEVEXA AI Assistant. I can help with plans, features, RPA, pricing, security, or anything about automating your business. What would you like to know?</p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="chat-suggestions" id="chatSuggestions">
+
+                <button class="suggestion">Pricing plans</button>
+
+                <button class="suggestion">Free trial?</button>
+
+                <button class="suggestion">Features</button>
+
+                <button class="suggestion">Security</button>
+
+            </div>
+
+            <div class="chat-input-area">
+
+                <input type="text" id="chatInput" placeholder="Ask me anything..." autocomplete="off">
+
+                <button id="chatSend" class="chat-send"><i class="fas fa-paper-plane"></i></button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+ <script src="https://unpkg.com/aos\@2.3.1/dist/aos.js"></script>
+
+ <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+ <script src="script.js"></script>
+
+<!-- ===============================
+
+     JEVEXA LOGIN MODAL
+
+     =============================== -->
+
+<div id="loginModal" class="login-modal">
+
+
+
+    <div class="login-box">
+
+
+
+        <!-- LEFT SIDE -->
+
+        <div class="login-visual">
+
+
+
+            <div class="login-brand">
+
+                <div class="login-brand-icon">✦</div>
+
+                <div>
+
+                    <strong>JEVEXA</strong>
+
+                    <span>AI AUTOMATION STUDIO</span>
+
+                </div>
+
+            </div>
+
+
+
+            <h2>
+
+                Welcome to
+
+                <span>JEVEXA</span>
+
+            </h2>
+
+
+
+            <p class="login-visual-text">
+
+                Unlock powerful AI tools, intelligent agents and smart
+
+                automation workflows.
+
+            </p>
+
+
+
+            <div class="login-features">
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">⚡</div>
+
+                    <div>
+
+                        <strong>AI Agents & Automation</strong>
+
+                        <span>Automate repetitive tasks</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">✦</div>
+
+                    <div>
+
+                        <strong>Smart Workflows</strong>
+
+                        <span>Build powerful workflows</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">▥</div>
+
+                    <div>
+
+                        <strong>Boost Productivity</strong>
+
+                        <span>Work smarter with AI</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">◎</div>
+
+                    <div>
+
+                        <strong>Scale Your Business</strong>
+
+                        <span>Grow faster with automation</span>
+
+                    </div>
+
+                </div>
+
+
+
+            </div>
+
+
+
+            <!-- REALISTIC TRUST STATS -->
+
+            <div class="login-stats">
+
+
+
+                <div class="login-stat">
+
+                    <strong>AI-Powered</strong>
+
+                    <span>Automation</span>
+
+                </div>
+
+
+
+                <div class="login-stat">
+
+                    <strong>Secure</strong>
+
+                    <span>Infrastructure</span>
+
+                </div>
+
+
+
+                <div class="login-stat">
+
+                    <strong>24/7</strong>
+
+                    <span>Availability</span>
+
+                </div>
+
+
+
+            </div>
+
+
+
+        </div>
+
+
+
+
+
+        <!-- RIGHT SIDE -->
+
+        <div class="login-form-area">
+
+
+
+            <button
+
+                class="login-close"
+
+                onclick="closeLogin()"
+
+                aria-label="Close login">
+
+                ×
+
+            </button>
+
+
+
+            <div class="login-welcome">
+
+
+
+                <div class="login-badge">
+
+                    ✨ Welcome to JEVEXA
+
+                </div>
+
+
+
+                <h3>
+
+                    Welcome to
+
+                    <span>JEVEXA</span>
+
+                </h3>
+
+
+
+                <p>
+
+                    Login to continue your AI automation journey.
+
+                </p>
+
+
+
+            </div>
+
+
+
+
+
+            <!-- GOOGLE -->
+
+            <button
+
+                onclick="loginWithGoogle()"
+
+                class="social-login">
+
+
+
+                <span class="social-icon google-icon">G</span>
+
+
+
+                <span>Continue with Google</span>
+
+
+
+                <span class="social-arrow">→</span>
+
+
+
+            </button>
+
+
+
+
+
+            <!-- GITHUB -->
+
+            <button
+
+                onclick="loginWithGithub()"
+
+                class="social-login">
+
+
+
+                <span class="social-icon github-icon">●</span>
+
+
+
+                <span>Continue with GitHub</span>
+
+
+
+                <span class="social-arrow">→</span>
+
+
+
+            </button>
+
+
+
+
+
+            <!-- DIVIDER -->
+
+            <div class="login-divider">
+
+                <span></span>
+
+                <small>OR</small>
+
+                <span></span>
+
+            </div>
+
+
+
+            <!-- FULL NAME (only in Create Account) -->
+
+            <div class="login-input-wrapper" id="signupNameWrapper" style="display: none !important;">
+
+                <span class="input-icon">👤</span>
+
+                <input type="text" id="signupName" placeholder="Full name" autocomplete="name">
+
+            </div>
+
+
+
+            <!-- EMAIL -->
+
+            <div class="login-input-wrapper">
+
+                <span class="input-icon">✉</span>
+
+                <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email">
+
+            </div>
+
+
+
+            <!-- PASSWORD -->
+
+            <div class="login-input-wrapper">
+
+                <span class="input-icon">🔒</span>
+
+                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+
+            </div>
+
+
+
+
+
+            <!-- LOGIN -->
+
+            <button
+
+            id="authSubmitButton"
+
+                onclick="handleAuthSubmit()"
+
+                class="login-submit">
+
+
+
+                Login to JEVEXA
+
+                <span>→</span>
+
+
+
+            </button>
+
+
+
+
+
+            <!-- CREATE ACCOUNT -->
+
+            <div class="login-footer" id="authFooter">
+
+    <span id="authFooterText">Don't have an account?</span>
+
+    <a href="#" id="authModeToggle" onclick="toggleAuthMode(); return false;">
+
+        Create Account →
+
+    </a>
+
+</div>
+
+
+
+        </div>
+
+
+
+    </div>
+
+
+
+</div>
+
+</body>
+
+</html>

@@ -1,0 +1,10 @@
+# Cloudflare Worker secrets (set with `npx wrangler secret put NAME`)
+GEMINI_API_KEY=
+RESEND_API_KEY=
+CONTACT_FROM_EMAIL=
+CONTACT_TO_EMAIL=
+
+# Supabase browser configuration belongs in the existing frontend config.
+# NEVER put the Supabase service_role key or payment secrets in frontend files.
+# Payment gateway integration is not live until merchant credentials and
+# a verified server-side webhook are configured and tested.

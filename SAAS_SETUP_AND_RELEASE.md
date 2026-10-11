@@ -28,12 +28,11 @@ The existing Pricing buttons correctly avoid pretending that checkout succeeded.
 Before activating payment, choose the provider and currency for the business and configure its server-side credentials. Then implement its signed webhook to mark one `billing_orders` row paid exactly once and add the purchased credits with a matching `credit_transactions` ledger entry.
 
 ## Deploy and verify
-1. Run `node --check script.js` and `node --check worker.js`.
-2. Run `npx wrangler deploy --dry-run` from the project folder.
-3. Add/verify Cloudflare secrets before deployment.
-4. Deploy with `npx wrangler deploy`.
-5. Test signup, email confirmation, login, account menu, settings, credit display, logout, chatbot, and contact form on `https://jevexa.net`.
-6. Test payments in the provider's sandbox before accepting real payments.
+1. From the project folder, run `npm ci`, `npm test`, and `npm run build`.
+2. Add/verify Cloudflare secrets before deployment; do not put their values in source files.
+3. Push the changes to the `main` branch to trigger the configured Cloudflare Workers Build, or deploy manually with `npm run deploy`.
+4. Test signup, email confirmation, login, account menu, settings, credit display, logout, chatbot, and contact form on `https://jevexa.net`.
+5. Test payments in the provider's sandbox before accepting real payments.
 
 ## Current limitations
 - This package prepares the database foundation for credits and billing but does not claim a live payment gateway or automatic credit deduction for AI usage until the chosen provider and server-side usage path are configured and tested.

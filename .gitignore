@@ -1,12 +1,7 @@
-<<<<<<< HEAD
-.wrangler/
-.dev.vars
+.dev.vars*
 .env
 .env.*
-!.dev.vars.example
-node_modules/
-=======
-
-node_modules/
 .wrangler/
->>>>>>> cb3f2bca44bd5060c6fe36cbc663dc82e1d9a62f
+node_modules/
+.DS_Store
+npm-debug.log*

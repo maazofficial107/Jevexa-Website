@@ -4,7 +4,10 @@
   "description": "Luxury, fully animated, high-converting single-page website for AI Automation Studio.",
   "main": "script.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check": "node --check script.js && node --check worker.js",
+    "test": "npm run check",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
   },
   "repository": {
     "type": "git",

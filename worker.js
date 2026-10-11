@@ -58,6 +58,7 @@ const CHAT_MAX_OUTPUT_TOKENS = 550;
 const CHAT_MAX_ESTIMATED_TOKENS = 50000;
 const REQUEST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STAGING_SUPABASE_HOST = "qibnzlmgewlwzdrihcrs.supabase.co";
+const PRODUCTION_SUPABASE_HOST = "byopcuspgnhwsrmsxqvm.supabase.co";
 
 function parseChatPayload(body) {
   const message = typeof body?.message === "string" ? body.message.trim() : "";
@@ -152,7 +153,10 @@ async function handleCreditQuote(request, env) {
     const result = await readJsonResponse(response);
     if (!response.ok || !Number.isInteger(result) || result < 1) {
       console.error("Credit quote failed:", response.status);
-      return json({ error: "Chat pricing is temporarily unavailable." }, 503);
+      return json({
+        error: "Chat credit pricing could not be confirmed. Please try again later.",
+        code: "credit_pricing_unavailable"
+      }, 503);
     }
     return json({
       estimatedCredits: result,
@@ -161,7 +165,10 @@ async function handleCreditQuote(request, env) {
     });
   } catch (error) {
     console.error("Credit quote request failed:", error?.message || "network");
-    return json({ error: "Chat pricing is temporarily unavailable." }, 503);
+    return json({
+      error: "Chat credit pricing could not be confirmed. Please try again later.",
+      code: "credit_pricing_unavailable"
+    }, 503);
   }
 }
 
@@ -540,13 +547,20 @@ const BILLING_PLANS = {
 function getPublicSupabaseConfig(env) {
   const url = String(env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
   const anon = String(env.SUPABASE_ANON_KEY || "").trim();
+  const environment = String(env.JEVEXA_ENVIRONMENT || "").trim().toLowerCase();
   let parsedUrl;
   try {
     parsedUrl = new URL(url);
   } catch {
     throw new Error("Missing or invalid SUPABASE_URL");
   }
-  if (parsedUrl.protocol !== "https:" || !parsedUrl.hostname || !anon) {
+  const expectedHost = environment === "staging"
+    ? STAGING_SUPABASE_HOST
+    : environment === "production"
+      ? PRODUCTION_SUPABASE_HOST
+      : null;
+  if (parsedUrl.protocol !== "https:" || !expectedHost
+    || parsedUrl.hostname.toLowerCase() !== expectedHost || !anon) {
     throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required");
   }
   return { url, anon };
@@ -624,12 +638,12 @@ async function getAuthenticatedUser(request, cfg) {
 
 async function createSafepayCheckout(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  if (!isStagingSandboxEnabled(env, { url: String(env.SUPABASE_URL || "") })) {
+    return json({ error: "Safepay checkout is restricted to an explicitly configured staging sandbox." }, 403);
+  }
   let cfg;
   try { cfg = getSupabaseConfig(env); }
   catch { return json({ error: "Billing backend is not configured. Add the required Worker secrets." }, 503); }
-  if (!isStagingSandboxEnabled(env, cfg)) {
-    return json({ error: "Safepay checkout is restricted to an explicitly configured staging sandbox." }, 403);
-  }
   const secret = env.SAFEPAY_SECRET_KEY;
   const publicKey = env.SAFEPAY_API_KEY;
   if (!secret || !publicKey) return json({ error: "Safepay sandbox API keys are not configured yet." }, 503);
@@ -748,12 +762,12 @@ async function verifySafepaySignature(rawBody, signature, secret) {
 
 async function handleSafepayWebhook(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  if (!isStagingSandboxEnabled(env, { url: String(env.SUPABASE_URL || "") })) {
+    return json({ error: "Safepay webhooks are restricted to an explicitly configured staging sandbox." }, 403);
+  }
   let cfg;
   try { cfg = getSupabaseConfig(env); }
   catch { return json({ error: "Billing backend is not configured." }, 503); }
-  if (!isStagingSandboxEnabled(env, cfg)) {
-    return json({ error: "Safepay webhooks are restricted to an explicitly configured staging sandbox." }, 403);
-  }
   const webhookSecret = env.SAFEPAY_WEBHOOK_SECRET;
   if (!webhookSecret) return json({ error: "Webhook secret is not configured." }, 503);
   const rawBody = await request.text();

@@ -66,6 +66,8 @@ window.setTimeout(finishLoading, 8000);
 // ===============================
 
 const supabaseConfig = window.JEVEXA_SUPABASE_CONFIG;
+const SUPABASE_URL = supabaseConfig?.url;
+const SUPABASE_KEY = supabaseConfig?.anonKey;
 const hasSupabaseConfig = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
 const hasSupabaseSdk = typeof window.supabase?.createClient === 'function';
 let supabaseClient = null;
@@ -3144,7 +3146,7 @@ const JEVEXA_PLANS = {
             event.preventDefault();
             event.stopImmediatePropagation();
             if (window.JEVEXA_SUPABASE_CONFIG?.safepaySandboxEnabled !== true) {
-                toast('Paid checkout is unavailable. Only staging Safepay sandbox payments are enabled.');
+                toast('Paid checkout is not available yet. Live payments require merchant approval, production credentials and a verified signed webhook.');
                 return;
             }
             const plan = JEVEXA_PLANS?.[planButton.dataset.plan];

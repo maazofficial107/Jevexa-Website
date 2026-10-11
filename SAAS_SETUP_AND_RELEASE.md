@@ -50,6 +50,7 @@ For a future remotely hosted staging site, create a separate Cloudflare Worker (
 
 ## Worker environment variables and secrets
 For a future production release, set the production project’s values in Cloudflare Workers > `jevexa-website` > Settings > Variables and Secrets before deploying. Do not use production values in local staging or a staging Worker.
+- `JEVEXA_ENVIRONMENT=production` — required environment marker. The Worker rejects configuration unless the Supabase host matches the production allowlist; staging must use `JEVEXA_ENVIRONMENT=staging` and the separate staging project.
 - `SUPABASE_URL` — project URL for the corresponding environment (production Worker uses production; a separate staging Worker uses staging).
 - `SUPABASE_ANON_KEY` — publishable/anon key for that same project; this is intentionally sent to the browser by `/config.js`.
 - `SUPABASE_SERVICE_ROLE_KEY` — service-role/secret key for that same project; server-side only, never returned to the browser.
@@ -61,6 +62,8 @@ For a future production release, set the production project’s values in Cloudf
 - `SAFEPAY_API_KEY`, `SAFEPAY_SECRET_KEY`, and `SAFEPAY_WEBHOOK_SECRET` — only for a separately configured payment environment; omit them from ordinary credit staging tests.
 
 Safepay sandbox routes are additionally restricted in code to the verified `jevexa-staging` Supabase project (`qibnzlmgewlwzdrihcrs.supabase.co`) and require `JEVEXA_ENVIRONMENT=staging`. A staging flag and payment secrets on the production Worker do not enable those routes for the production project.
+
+The production Worker has previously been observed using `byopcuspgnhwsrmsxqvm.supabase.co`; the Worker only serves browser config when `JEVEXA_ENVIRONMENT=production` and the URL matches that production host. It serves staging config only for `qibnzlmgewlwzdrihcrs.supabase.co` with the staging marker. `/config.js` returns only `SUPABASE_URL` and `SUPABASE_ANON_KEY`; never configure the service-role key as a browser variable.
 
 Never put secret keys in `script.js`, `index.html`, or a public ZIP. A Gemini key shown in a screenshot should be revoked and replaced.
 

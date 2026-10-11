@@ -9,9 +9,10 @@ const requestId = "00000000-0000-4000-8000-000000000001";
 const userId = "9f6d10a8-e03a-4f6b-8aa2-5b7da1c42fb1";
 const env = {
   GEMINI_API_KEY: "unit-test",
-  SUPABASE_URL: "https://supabase.test",
+  SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
   SUPABASE_ANON_KEY: "unit-test",
-  SUPABASE_SERVICE_ROLE_KEY: "unit-test"
+  SUPABASE_SERVICE_ROLE_KEY: "unit-test",
+  JEVEXA_ENVIRONMENT: "production"
 };
 
 function makeRequest(path = "/api/chat", { body = { message: "Hello" }, headers = {} } = {}) {
@@ -100,17 +101,40 @@ test("duplicate in-flight reservation responses preserve their request ID", asyn
 
 test("browser Supabase configuration needs only public environment values", async () => {
   const response = await worker.fetch(makeRequest("/config.js"), {
-    SUPABASE_URL: "https://staging-project.supabase.co",
-    SUPABASE_ANON_KEY: "staging-publishable-key"
+    SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
+    SUPABASE_ANON_KEY: "production-publishable-key",
+    SUPABASE_SERVICE_ROLE_KEY: "must-not-be-exposed",
+    JEVEXA_ENVIRONMENT: "production"
   });
   const script = await response.text();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("Content-Type"), /application\/javascript/);
   assert.match(response.headers.get("Cache-Control"), /no-store/);
-  assert.match(script, /https:\/\/staging-project\.supabase\.co/);
-  assert.match(script, /staging-publishable-key/);
+  assert.match(script, /https:\/\/byopcuspgnhwsrmsxqvm\.supabase\.co/);
+  assert.match(script, /production-publishable-key/);
+  assert.doesNotMatch(script, /must-not-be-exposed/);
   assert.doesNotMatch(script, /service.?role|private.?key/i);
   assert.match(script, /"safepaySandboxEnabled":false/);
+});
+
+test("Worker refuses to mix production and staging Supabase configuration", async () => {
+  const stagingUrlInProduction = await worker.fetch(makeRequest("/config.js"), {
+    SUPABASE_URL: "https://qibnzlmgewlwzdrihcrs.supabase.co",
+    SUPABASE_ANON_KEY: "publishable-key",
+    JEVEXA_ENVIRONMENT: "production"
+  });
+  const productionUrlInStaging = await worker.fetch(makeRequest("/config.js"), {
+    SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
+    SUPABASE_ANON_KEY: "publishable-key",
+    JEVEXA_ENVIRONMENT: "staging"
+  });
+  const missingEnvironment = await worker.fetch(makeRequest("/config.js"), {
+    SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
+    SUPABASE_ANON_KEY: "publishable-key"
+  });
+  assert.equal(stagingUrlInProduction.status, 503);
+  assert.equal(productionUrlInStaging.status, 503);
+  assert.equal(missingEnvironment.status, 503);
 });
 
 test("Safepay sandbox configuration is restricted to the verified staging project", async () => {
@@ -125,7 +149,7 @@ test("Safepay sandbox configuration is restricted to the verified staging projec
   const productionResponse = await worker.fetch(makeRequest("/config.js"), {
     SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
     SUPABASE_ANON_KEY: "production-publishable-key",
-    JEVEXA_ENVIRONMENT: "staging",
+    JEVEXA_ENVIRONMENT: "production",
     SAFEPAY_API_KEY: "sandbox-public-key",
     SAFEPAY_SECRET_KEY: "sandbox-secret",
     SAFEPAY_WEBHOOK_SECRET: "sandbox-webhook-secret"
@@ -138,6 +162,12 @@ test("browser Supabase configuration fails closed if staging settings are missin
   const response = await worker.fetch(makeRequest("/config.js"), {});
   assert.equal(response.status, 503);
   assert.match(await response.text(), /Supabase browser configuration/i);
+});
+
+test("Wrangler project explicitly targets the production Worker", async () => {
+  const config = JSON.parse(await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
+  assert.equal(config.name, "jevexa-website");
+  assert.deepEqual(config.assets.run_worker_first, ["/api/*", "/config.js"]);
 });
 
 test("frontend explains missing Supabase configuration instead of failing silently", async () => {
@@ -208,6 +238,13 @@ test("optional AOS resources do not block page parsing or hide content on failur
   assert.match(script, /stylesheet\.media = 'print'/);
   assert.match(script, /stylesheet\.addEventListener\('load'/);
   assert.doesNotMatch(script, /querySelectorAll\('\[data-aos\]'\)\.forEach\(el => el\.removeAttribute/);
+});
+
+test("contact form public Supabase variables come from Worker browser configuration", async () => {
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(script, /const SUPABASE_URL = supabaseConfig\?\.url/);
+  assert.match(script, /const SUPABASE_KEY = supabaseConfig\?\.anonKey/);
+  assert.match(script, /`\$\{SUPABASE_URL\}\/rest\/v1\/Contacts`/);
 });
 
 test("signup does not log Supabase user response data", async () => {
@@ -561,6 +598,34 @@ test("pricing quote is authenticated and comes from the database function", asyn
   } finally {
     mock.restore();
   }
+});
+
+test("credit quote database errors fail closed and never call the AI provider", async () => {
+  const mock = mockFetch(url => {
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") {
+      return Response.json({ message: "function unavailable" }, { status: 404 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  });
+  try {
+    const response = await worker.fetch(makeRequest("/api/credits/quote"), env);
+    const payload = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(payload.code, "credit_pricing_unavailable");
+    assert.match(payload.error, /credit pricing could not be confirmed/i);
+    assert.equal(mock.calls.some(call => call.url.hostname === "generativelanguage.googleapis.com"), false);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("production pricing UI explains checkout remains unavailable pending payment verification", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(html, /Paid checkout is not available yet/);
+  assert.match(html, /merchant approval, production credentials and a verified signed webhook/);
+  assert.match(script, /Paid checkout is not available yet\. Live payments require merchant approval, production credentials and a verified signed webhook/);
+  assert.match(script, /safepaySandboxEnabled !== true/);
 });
 
 test("invalid nonpositive database pricing quotes fail closed", async () => {

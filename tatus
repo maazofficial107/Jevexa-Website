@@ -1,0 +1,40 @@
+[33m< 421674f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Update JEVEXA website
+[33m> 5a24a3b[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix Supabase library loading
+[33m> 34eb8aa[m Stabilize JEVEXA SaaS
+[33m> bc554cd[m Update JEVEXA settings functionality
+[33m> c048489[m Add master settings functionality
+[33m> 6d89f44[m Update pricing plan and billing selection
+[33m> 9c60018[m Complete settings UI
+[33m> 31f7cca[m Upgrade profile system
+[33m> 7360f70[m Fix logged-in CTA behavior
+[33m> 191c232[m Fix credits badge
+[33m> 55a5d24[m Update JEVEXA website
+[33m> 657ec0f[m Fix authentication and GitHub login
+[33m> b3674ba[m Update signup and login system
+[33m> 945544b[m Update JEVEXA website
+[33m> f1f12d4[m Add login system
+[33m> d185753[m Connect contact form to Resend
+[33m> 17a1339[m Add Resend contact email automation
+[33m> f1a1c62[m Upgrade JEVEXA chatbot
+[33m> 47e8bd7[m Fix wrangler config
+[33m> 7ca66fb[m Fix CSS background clip warnings
+[33m> e7a298f[m Fix CSS syntax
+[33m> 8fbf50a[m Update Gemini model
+[33m> 2c3fbb1[m Update worker.js
+[33m> 749c307[m Update worker.js
+[33m> 7735738[m Update worker.js
+[33m> b927069[m Update script.js
+[33m> 6f508b0[m Update script.js
+[33m> 3c313db[m Update wrangler.jsonc
+[33m> 9121c39[m Update wrangler.jsonc
+[33m> 1a473fd[m Update wrangler.jsonc
+[33m> 251f4c6[m Create wrangler.jsonc
+[33m> 0d64b6f[m Update script.js
+[33m> e0f33c0[m Update worker.js
+[33m> 5c0136e[m Create worker.js
+[33m> 99d402e[m Update admin.html
+[33m> cec35b5[m Update admin.html
+[33m> 8ab8cc6[m Update admin.html
+[33m> 10cf68f[m Create admin.html
+[33m> 330a465[m Update script.js
+[33m> 0673caa[m Initial JEVEXA website

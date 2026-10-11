@@ -15,10 +15,12 @@ In Cloudflare → Workers & Pages → `jevexa-website` → Settings → Variable
 - `SAFEPAY_SECRET_KEY` — Safepay sandbox secret API key.
 - `SAFEPAY_WEBHOOK_SECRET` — shared HMAC secret shown under Safepay Sandbox Dashboard → Developers → Endpoints.
 
-Optional non-secret values may be configured as Worker variables:
+Optional non-secret values may be configured as Worker variables for the existing production deployment only:
 
-- `SUPABASE_URL` = `https://byopcuspgnhwsrmsxqvm.supabase.co`
-- `SUPABASE_ANON_KEY` = the existing Supabase publishable key used by the frontend.
+- `SUPABASE_URL` = the production Supabase project URL.
+- `SUPABASE_ANON_KEY` = the production Supabase publishable key used by the frontend.
+
+For staging, create a separate Supabase project and use its URL/key on a separate staging Worker or local `.dev.vars`. Never reuse production Supabase settings in staging. The frontend gets the public URL/key from `/config.js`; the service-role key remains Worker-only. Do not deploy this setup as part of staging verification.
 
 Do not paste secrets into chat, GitHub, `script.js`, or the ZIP.
 

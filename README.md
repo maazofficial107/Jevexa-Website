@@ -18,7 +18,7 @@ Luxury, fully animated, high-converting single-page website for AI Automation St
 - Smooth hover & micro-interactions
 - Premium preloader
 
-### Complete AI Automation Features (12)
+### Service cards (12)
 1. AI Chatbots & Agents
 2. Workflow Automation (300+ integrations)
 3. RPA & Process Automation
@@ -32,9 +32,11 @@ Luxury, fully animated, high-converting single-page website for AI Automation St
 11. Data Enrichment & Scraping
 12. Enterprise Security
 
+These cards describe JEVEXA's service offerings; they are not all live integrations. The Gemini-powered AI chatbot is the only currently connected AI operation. The other 11 services remain unavailable until their real providers and server-side workflows are implemented.
+
 ### Premium Chatbot
 - Luxury floating button (glow + rotating ring + gradient core + AI badge)
-- Intelligent responses (plans, RPA, voice, security, trial…)
+- Authenticated Gemini responses with server-side credit reservations and measured-usage settlement
 - Typing indicator + suggestion chips
 
 ### Social
@@ -45,9 +47,9 @@ Facebook • Instagram • X (Twitter) • LinkedIn • YouTube • Discord
 - 6 verified reviews • 8 FAQ • Contact form
 - Fully responsive
 
-## How to Run
-1. Extract the zip
-2. Open `index.html` in any modern browser
-3. Or use Live Server / `python -m http.server`
+## Local checks
+1. Run `npm ci`.
+2. Run `npm test`.
+3. Run `npm run build` for a Cloudflare Workers dry-run.
 
-No build step. CDN libraries only.
+The static website can be previewed with Live Server, but login, Gemini chat, email, billing, and credit operations require the configured Supabase project and Cloudflare Worker. See [SAAS_SETUP_AND_RELEASE.md](./SAAS_SETUP_AND_RELEASE.md) for migration order and deployment requirements.

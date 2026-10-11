@@ -4,6 +4,7 @@
 **/.dev.vars*
 **/.env*
 **/.vscode/**
+**/tests/**
 **/*.md
 .dev.vars.example
 package.json
@@ -12,3 +13,4 @@ wrangler.jsonc
 .gitignore
 .assetsignore
 supabase/**
+tests/**

@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "Luxury, fully animated, high-converting single-page website for AI Automation Studio.",
   "main": "script.js",
+  "type": "module",
   "scripts": {
-    "check": "node --check script.js && node --check worker.js",
-    "test": "npm run check",
+    "check": "node --check script.js && node --check worker.js && node --check credits.js",
+    "test": "npm run check && node --test",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy"
   },

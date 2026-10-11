@@ -18,18 +18,6 @@
 
 
 
-const SUPABASE_URL = 'https://byopcuspgnhwsrmsxqvm.supabase.co';
-
-
-
-const SUPABASE_KEY = 'sb_publishable_AoElF80JEwzufwdNfrmjqQ_lDGq8kcF';
-
-
-
-
-
-
-
 // Preloader + visible counter timing
 
 
@@ -80,9 +68,17 @@ function finishLoading() {
 // JEVEXA Professional Authentication System
 // ===============================
 
+const supabaseConfig = window.JEVEXA_SUPABASE_CONFIG;
+if (!supabaseConfig?.url || !supabaseConfig?.anonKey) {
+    const configError = document.getElementById('appConfigError');
+    if (configError) configError.hidden = false;
+    throw new Error('Supabase configuration is unavailable. Configure this Worker with the correct environment URL and publishable key.');
+}
+const { url: SUPABASE_URL, anonKey: SUPABASE_KEY } = supabaseConfig;
+
 const supabaseClient = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
+    supabaseConfig.url,
+    supabaseConfig.anonKey
 );
 // ===== JEVEXA THEME SYSTEM =====
 
@@ -236,7 +232,7 @@ async function loginWithGoogle() {
 
     const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: 'https://jevexa.net' }
+        options: { redirectTo: window.location.origin }
     });
 
     if (error) {
@@ -251,7 +247,7 @@ async function loginWithGithub() {
 
     const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'github',
-        options: { redirectTo: 'https://jevexa.net' }
+        options: { redirectTo: window.location.origin }
     });
 
     if (error) {
@@ -362,7 +358,7 @@ async function createAccountWithEmail() {
                     full_name: name,
                     name: name
                 },
-                emailRedirectTo: 'https://jevexa.net'
+                emailRedirectTo: window.location.origin
             }
         });
 
@@ -371,8 +367,6 @@ async function createAccountWithEmail() {
             showAuthMessage(getFriendlyAuthError(error, 'signup'));
             return;
         }
-
-        console.log('Account created:', data);
 
         // When email confirmation is enabled, Supabase normally returns a user
         // with no active session until the email is verified.
@@ -792,9 +786,7 @@ function openProfileView(user) {
                             Subscription
                         </div>
 
-                        <strong style="font-size:15px;">
-                            Trial access
-                        </strong>
+                        <strong id="profilePlanValue" style="font-size:15px;">Loading…</strong>
                     </div>
 
                     <div style="
@@ -867,15 +859,28 @@ function openProfileView(user) {
     backdrop.style.display = 'flex';
 
     const profileCreditsValue = backdrop.querySelector('#profileCreditsValue');
-    if (profileCreditsValue) {
-        supabaseClient.from('user_credits').select('balance, monthly_allowance')
+    const profilePlanValue = backdrop.querySelector('#profilePlanValue');
+    if (profileCreditsValue || profilePlanValue) {
+        supabaseClient.from('user_credits').select('balance, plan')
             .eq('user_id', user.id).maybeSingle()
             .then(({ data, error }) => {
-                if (!profileCreditsValue.isConnected) return;
-                if (error || !data) profileCreditsValue.textContent = 'Unavailable';
-                else profileCreditsValue.textContent = `${data.balance} / ${data.monthly_allowance}`;
+                if (error || !data) {
+                    if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = 'Unavailable';
+                    if (profilePlanValue?.isConnected) profilePlanValue.textContent = 'Unavailable';
+                    return;
+                }
+                if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = String(data.balance);
+                if (profilePlanValue?.isConnected) {
+                    profilePlanValue.textContent = data.plan
+                        ? String(data.plan).replace(/[_-]+/g, ' ')
+                        : 'Unavailable';
+                }
             })
-            .catch(error => { console.error('Profile credits error:', error); if (profileCreditsValue.isConnected) profileCreditsValue.textContent = 'Unavailable'; });
+            .catch(error => {
+                console.error('Profile account summary error:', error);
+                if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = 'Unavailable';
+                if (profilePlanValue?.isConnected) profilePlanValue.textContent = 'Unavailable';
+            });
     }
 
     // Close profile
@@ -964,31 +969,6 @@ function openSettingsView(user) {
       statusNode.textContent = 'Balance loaded from your account.';
       const headerCount = document.getElementById('creditsCount');
       if (headerCount) headerCount.textContent = String(data.balance);
-      const used = content.querySelector('#settingsUsed');
-      if (used) used.textContent = String(Math.max(0, Number(data.monthly_allowance || 0) - Number(data.balance || 0))); 
-    }
-
-    async function loadTransactions() {
-      const list = content.querySelector('#settingsTransactions');
-      if (!list) return;
-      list.innerHTML = '<p class="settings-muted">Loading transactions…</p>';
-      const { data, error } = await supabaseClient.from('credit_transactions')
-        .select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10);
-      if (error) {
-        console.error('Credit transaction load error:', error);
-        list.innerHTML = '<p class="settings-muted">Transaction history is unavailable right now.</p>';
-        return;
-      }
-      if (!data?.length) {
-        list.innerHTML = '<p class="settings-muted">No credit transactions yet.</p>';
-        return;
-      }
-      list.innerHTML = data.map(row => {
-        const date = row.created_at ? new Date(row.created_at).toLocaleString() : '—';
-        const amount = Number(row.amount ?? row.credits ?? 0);
-        const label = escape(row.description || row.reason || row.type || 'Credit activity');
-        return `<div class="settings-transaction"><span><strong>${label}</strong><small>${escape(date)}</small></span><b>${amount > 0 ? '+' : ''}${amount}</b></div>`;
-      }).join('');
     }
 
     function render(section) {
@@ -1045,12 +1025,16 @@ function openSettingsView(user) {
       } else if (section === 'credits') {
         content.innerHTML = `
           ${card('Credit balance','Live values are loaded from your Supabase account.',`
-            <div class="settings-stats"><div><small>Remaining credits</small><strong id="settingsBalance">…</strong></div><div><small>Monthly allowance</small><strong id="settingsAllowance">…</strong></div><div><small>Used this allowance</small><strong id="settingsUsed">—</strong></div></div>
+            <div class="settings-stats"><div><small>Current balance</small><strong id="settingsBalance">…</strong></div><div><small>Plan allocation</small><strong id="settingsAllowance">…</strong></div></div>
             <p id="settingsCreditStatus" class="settings-muted">Loading credit balance…</p>
             ${action('Refresh balance','refresh-credits',true)}`)}
           ${card('Recent transactions','Latest credit activity recorded for your account.',`<div id="settingsTransactions"><p class="settings-muted">Loading transactions…</p></div>${action('Refresh transactions','refresh-transactions',true)}`)}`;
         loadCredits();
-        loadTransactions();
+        if (window.JEVEXA_CREDITS?.refreshHistory) {
+          void window.JEVEXA_CREDITS.refreshHistory();
+        } else {
+          content.querySelector('#settingsTransactions').textContent = 'Transaction history is unavailable right now.';
+        }
       } else if (section === 'support') {
         content.innerHTML = `
           ${card('Contact support','Send a message to the JEVEXA support mailbox.',`
@@ -1095,7 +1079,11 @@ function openSettingsView(user) {
 }
 
       if (actionName === 'refresh-credits') { await loadCredits(); return; }
-      if (actionName === 'refresh-transactions') { await loadTransactions(); return; }
+      if (actionName === 'refresh-transactions') {
+        if (window.JEVEXA_CREDITS?.refreshHistory) await window.JEVEXA_CREDITS.refreshHistory();
+        else toast('Transaction history is unavailable right now.');
+        return;
+      }
       if (actionName === 'reset-preferences') {
         ['compact','confirmations','reduce_motion'].forEach(key => localStorage.removeItem(userKey + key));
         document.documentElement.classList.remove('jevexa-reduce-motion','jevexa-compact');
@@ -1235,31 +1223,17 @@ async function updateCreditsHeader(user) {
     if (error) {
         console.error('Credits fetch error:', error);
         creditsCount.textContent = '—';
-        updateCreditsSettingsUI(0, 100);
         return;
     }
 
     if (!data) {
         // Missing row is a backend provisioning issue, not proof the user has zero credits.
-        creditsCount.textContent = 'Setup';
-        updateCreditsSettingsUI(0, 100);
+        creditsCount.textContent = '—';
         console.warn('No user_credits row found. Run supabase/jevexa_saas_setup.sql.');
         return;
     }
 
     creditsCount.textContent = String(data.balance);
-    updateCreditsSettingsUI(data.balance, data.monthly_allowance ?? 100);
-}
-
-
-// YAHAN PASTE KARO
-function updateCreditsSettingsUI(balance, allowance = 100) {
-    const total = document.getElementById('settingsTotalCredits');
-    const used = document.getElementById('settingsUsedCredits');
-    const remaining = document.getElementById('settingsRemainingCredits');
-    if (total) total.textContent = String(allowance);
-    if (remaining) remaining.textContent = String(balance);
-    if (used) used.textContent = String(Math.max(0, Number(allowance) - Number(balance)));
 }
 
 initializeAuthSession();
@@ -2420,26 +2394,6 @@ const chatbotClose = document.getElementById('chatbotClose');
 
 
 
-const chatMessages = document.getElementById('chatMessages');
-
-
-
-const chatInput = document.getElementById('chatInput');
-
-
-
-const chatSend = document.getElementById('chatSend');
-
-
-
-const chatSuggestions = document.getElementById('chatSuggestions');
-
-
-
-
-
-
-
 chatbotToggle?.addEventListener('click', () => {
 
 
@@ -2485,1394 +2439,6 @@ chatbotClose?.addEventListener('click', () => {
 
 
     chatbotWindow?.classList.remove('open');
-
-
-
-});
-
-
-
-
-
-
-
-const knowledge = {
-
-
-
-    plans: {
-
-
-
-        keywords: [
-
-
-
-            'plan',
-
-
-
-            'pricing',
-
-
-
-            'price',
-
-
-
-            'cost',
-
-
-
-            'basic',
-
-
-
-            'premium',
-
-
-
-            'max',
-
-
-
-            'package',
-
-
-
-            'subscription',
-
-
-
-            'how much',
-
-
-
-            'fee'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `We offer three powerful plans:<br><br>
-
-
-
-🔹 <strong>Basic</strong> — $19/mo<br>
-
-
-
-• 1 AI Chatbot • 5 Workflows • 2,000 credits<br><br>
-
-
-
-🔥 <strong>Premium</strong> — $49/mo <em>(was $59 — Save 17%)</em><br>
-
-
-
-• 5 Chatbots • 25 Workflows • 15,000 credits • Custom Agents • Priority Support<br><br>
-
-
-
-🚀 <strong>Max</strong> — $99/mo <em>(was $129 — Save 23%)</em><br>
-
-
-
-• Unlimited everything • White-label • SSO • Dedicated Manager<br><br>
-
-
-
-All plans include a <strong>14-day free trial</strong>. Which one interests you?`
-
-
-
-    },
-
-
-
-
-
-
-
-    trial: {
-
-
-
-        keywords: [
-
-
-
-            'trial',
-
-
-
-            'free',
-
-
-
-            'demo',
-
-
-
-            'test',
-
-
-
-            'try',
-
-
-
-            'start free'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Yes! Every plan comes with a <strong>14-day free trial</strong>. No credit card required to start. You get full access to all features of the plan you choose.<br><br>Ready? Click <strong>Start Free Trial</strong> on any plan!`
-
-
-
-    },
-
-
-
-
-
-
-
-    features: {
-
-
-
-        keywords: [
-
-
-
-            'feature',
-
-
-
-            'what can',
-
-
-
-            'capability',
-
-
-
-            'do you offer',
-
-
-
-            'automation',
-
-
-
-            'workflow',
-
-
-
-            'chatbot',
-
-
-
-            'what do you',
-
-
-
-            'rpa',
-
-
-
-            'voice',
-
-
-
-            'document'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `JEVEXA is a complete AI Automation Studio:<br><br>
-
-
-
-✨ AI Chatbots & Intelligent Agents<br>
-
-
-
-✨ Visual Workflow Builder (300+ integrations)<br>
-
-
-
-✨ RPA & Process Automation<br>
-
-
-
-✨ Document AI & OCR<br>
-
-
-
-✨ Voice AI & Call Agents<br>
-
-
-
-✨ Lead Scoring & CRM AI<br>
-
-
-
-✨ Content Generation<br>
-
-
-
-✨ Email & Outreach Automation<br>
-
-
-
-✨ Social Media Automation<br>
-
-
-
-✨ Intelligent Analytics<br>
-
-
-
-✨ Data Enrichment<br>
-
-
-
-✨ Enterprise Security<br><br>
-
-
-
-What would you like to automate?`
-
-
-
-    },
-
-
-
-
-
-
-
-    email: {
-
-
-
-        keywords: [
-
-
-
-            'email',
-
-
-
-            'outreach',
-
-
-
-            'sequence',
-
-
-
-            'campaign',
-
-
-
-            'cold'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Our Email & Outreach AI can:<br>
-
-
-
-• Personalize every email at scale<br>
-
-
-
-• Smart sequences that adapt to replies<br>
-
-
-
-• Auto-reply in your tone<br>
-
-
-
-• A/B testing + CRM sync<br><br>
-
-
-
-Teams cut outreach time by <strong>80%</strong>. Want details on Premium or Max?`
-
-
-
-    },
-
-
-
-
-
-
-
-    security: {
-
-
-
-        keywords: [
-
-
-
-            'secure',
-
-
-
-            'security',
-
-
-
-            'data',
-
-
-
-            'privacy',
-
-
-
-            'gdpr',
-
-
-
-            'safe',
-
-
-
-            'encrypt',
-
-
-
-            'compliance'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Security is core to JEVEXA:<br>
-
-
-
-• End-to-end encryption<br>
-
-
-
-• Never train public models on your data<br>
-
-
-
-• GDPR & CCPA compliant<br>
-
-
-
-• Private cloud / on-premise on Max<br>
-
-
-
-• SSO, SAML, audit logs<br><br>
-
-
-
-Your data stays yours. Always. 🔒`
-
-
-
-    },
-
-
-
-
-
-
-
-    support: {
-
-
-
-        keywords: [
-
-
-
-            'support',
-
-
-
-            'help',
-
-
-
-            'contact',
-
-
-
-            'human',
-
-
-
-            'team',
-
-
-
-            'manager'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Support levels:<br>
-
-
-
-• <strong>Basic</strong>: Email support<br>
-
-
-
-• <strong>Premium</strong>: Priority email + live chat<br>
-
-
-
-• <strong>Max</strong>: 24/7 + dedicated Slack + Success Manager<br><br>
-
-
-
-Reach us at <strong>hello@jevexa.ai</strong> or keep chatting!`
-
-
-
-    },
-
-
-
-
-
-
-
-    how: {
-
-
-
-        keywords: [
-
-
-
-            'how work',
-
-
-
-            'how does',
-
-
-
-            'process',
-
-
-
-            'get started',
-
-
-
-            'start',
-
-
-
-            'begin',
-
-
-
-            'onboard'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Getting started is simple:<br><br>
-
-
-
-1️⃣ Choose a plan (or free trial)<br>
-
-
-
-2️⃣ Map processes with our team (or DIY)<br>
-
-
-
-3️⃣ Build workflows / train agents<br>
-
-
-
-4️⃣ Deploy & scale<br><br>
-
-
-
-Most launch first automation in <strong>1–3 days</strong>.`
-
-
-
-    },
-
-
-
-
-
-
-
-    integration: {
-
-
-
-        keywords: [
-
-
-
-            'integrat',
-
-
-
-            'connect',
-
-
-
-            'zapier',
-
-
-
-            'slack',
-
-
-
-            'hubspot',
-
-
-
-            'salesforce',
-
-
-
-            'api'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `We support <strong>300+ integrations</strong>: Slack, HubSpot, Salesforce, Gmail, Notion, Zapier, Make, Shopify, Stripe, and more. Custom webhooks & API on Premium/Max.`
-
-
-
-    },
-
-
-
-
-
-
-
-    white: {
-
-
-
-        keywords: [
-
-
-
-            'white-label',
-
-
-
-            'whitelabel',
-
-
-
-            'rebrand',
-
-
-
-            'agency',
-
-
-
-            'client'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Full white-label is on the <strong>Max plan</strong>. Brand chatbots, dashboards & portals under your name — perfect for agencies.`
-
-
-
-    },
-
-
-
-
-
-
-
-    rpa: {
-
-
-
-        keywords: [
-
-
-
-            'rpa',
-
-
-
-            'robotic',
-
-
-
-            'desktop',
-
-
-
-            'legacy',
-
-
-
-            'erp'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Yes — we offer full <strong>RPA & Process Automation</strong>:<br>
-
-
-
-• Desktop & web bots<br>
-
-
-
-• Screen scraping<br>
-
-
-
-• Unattended automation<br>
-
-
-
-• Works with legacy systems & ERPs<br><br>
-
-
-
-Great for repetitive form filling and back-office tasks.`
-
-
-
-    },
-
-
-
-
-
-
-
-    voice: {
-
-
-
-        keywords: [
-
-
-
-            'voice',
-
-
-
-            'call',
-
-
-
-            'phone',
-
-
-
-            'speech',
-
-
-
-            'appointment'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Our <strong>Voice AI & Call Agents</strong> can answer calls, book appointments, qualify leads, and handle support in natural speech — with full call analytics.`
-
-
-
-    },
-
-
-
-
-
-
-
-    greeting: {
-
-
-
-        keywords: [
-
-
-
-            'hello',
-
-
-
-            'hi',
-
-
-
-            'hey',
-
-
-
-            'good morning',
-
-
-
-            'good afternoon',
-
-
-
-            'namaste',
-
-
-
-            'salam'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `Hey! 👋 Welcome to JEVEXA. I can help with pricing, features, RPA, voice AI, security, free trial, or anything about automating your business. What do you need?`
-
-
-
-    },
-
-
-
-
-
-
-
-    thanks: {
-
-
-
-        keywords: [
-
-
-
-            'thank',
-
-
-
-            'thanks',
-
-
-
-            'appreciate',
-
-
-
-            'great',
-
-
-
-            'awesome',
-
-
-
-            'cool'
-
-
-
-        ],
-
-
-
-
-
-
-
-        response: `You're welcome! 😊 Anything else? Plans, features, security — just ask.`
-
-
-
-    },
-
-
-
-
-
-
-
-    default: {
-
-
-
-        response: `I can help with:<br>
-
-
-
-• Plans & pricing<br>
-
-
-
-• All features (RPA, Voice, Document AI, etc.)<br>
-
-
-
-• Free trial<br>
-
-
-
-• Security & compliance<br>
-
-
-
-• Integrations<br>
-
-
-
-• Getting started<br><br>
-
-
-
-What would you like to know?`
-
-
-
-    }
-
-
-
-};
-
-
-
-
-
-
-
-async function getBotResponse(input) {
-
-
-
-    try {
-
-
-
-        const response = await fetch('/api/chat', {
-
-
-
-            method: 'POST',
-
-
-
-            headers: {
-
-
-
-                'Content-Type': 'application/json'
-
-
-
-            },
-
-
-
-            body: JSON.stringify({
-
-
-
-                message: input
-
-
-
-            })
-
-
-
-        });
-
-
-
-
-
-
-
-        if (!response.ok) {
-
-
-
-            throw new Error('Chatbot API failed');
-
-
-
-        }
-
-
-
-
-
-
-
-        const data = await response.json();
-
-
-
-
-
-
-
-        return data.reply || 'Sorry, I could not generate a response.';
-
-
-
-    } catch (error) {
-
-
-
-        console.error('Chatbot error:', error);
-
-
-
-        return 'Sorry, chatbot is temporarily unavailable. Please try again.';
-
-
-
-    }
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-function addMessage(content, isUser = false) {
-
-
-
-    if (!chatMessages) return;
-
-
-
-
-
-
-
-    const msg = document.createElement('div');
-
-
-
-
-
-
-
-    msg.className = `message ${isUser ? 'user' : 'bot'}`;
-
-
-
-
-
-
-
-    msg.innerHTML = `
-
-
-
-        <div class="msg-avatar">
-
-
-
-            <i class="fas fa-${isUser ? 'user' : 'wand-magic-sparkles'}"></i>
-
-
-
-        </div>
-
-
-
-        <div class="msg-content">
-
-
-
-            <p>${content}</p>
-
-
-
-        </div>
-
-
-
-    `;
-
-
-
-
-
-
-
-    chatMessages.appendChild(msg);
-
-
-
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-
-
-}
-
-
-
-
-
-
-
-function showTyping() {
-
-
-
-    if (!chatMessages) return;
-
-
-
-
-
-
-
-    const typing = document.createElement('div');
-
-
-
-
-
-
-
-    typing.className = 'message bot';
-
-
-
-    typing.id = 'typingMsg';
-
-
-
-
-
-
-
-    typing.innerHTML = `
-
-
-
-        <div class="msg-avatar">
-
-
-
-            <i class="fas fa-wand-magic-sparkles"></i>
-
-
-
-        </div>
-
-
-
-        <div class="typing-indicator">
-
-
-
-            <span></span>
-
-
-
-            <span></span>
-
-
-
-            <span></span>
-
-
-
-        </div>
-
-
-
-    `;
-
-
-
-
-
-
-
-    chatMessages.appendChild(typing);
-
-
-
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-
-
-}
-
-
-
-
-
-
-
-function hideTyping() {
-
-
-
-    document.getElementById('typingMsg')?.remove();
-
-
-
-}
-
-
-
-
-
-
-
-async function handleSend() {
-
-
-
-    const text = chatInput?.value.trim();
-
-
-
-    if (!text) return;
-
-
-
-
-
-
-
-    addMessage(text, true);
-
-
-
-    chatInput.value = '';
-
-
-
-    showTyping();
-
-
-
-
-
-
-
-    try {
-
-
-
-        const reply = await getBotResponse(text);
-
-
-
-        hideTyping();
-
-
-
-        addMessage(reply);
-
-
-
-    } catch (error) {
-
-
-
-        hideTyping();
-
-
-
-        addMessage('Sorry, chatbot is temporarily unavailable. Please try again.');
-
-
-
-    }
-
-
-
-}
-
-
-
-
-
-
-
-chatSend?.addEventListener('click', handleSend);
-
-
-
-
-
-
-
-chatInput?.addEventListener('keypress', (e) => {
-
-
-
-    if (e.key === 'Enter') {
-
-
-
-        handleSend();
-
-
-
-    }
-
-
-
-});
-
-
-
-
-
-
-
-chatSuggestions?.addEventListener('click', (e) => {
-
-
-
-    if (e.target.classList.contains('suggestion')) {
-
-
-
-        if (chatInput) {
-
-
-
-            chatInput.value = e.target.textContent;
-
-
-
-        }
-
-
-
-
-
-
-
-        handleSend();
-
-
-
-    }
 
 
 
@@ -4599,6 +3165,10 @@ const JEVEXA_PLANS = {
         if (planButton) {
             event.preventDefault();
             event.stopImmediatePropagation();
+            if (window.JEVEXA_SUPABASE_CONFIG?.safepaySandboxEnabled !== true) {
+                toast('Paid checkout is unavailable. Only staging Safepay sandbox payments are enabled.');
+                return;
+            }
             const plan = JEVEXA_PLANS?.[planButton.dataset.plan];
             const cycle = document.getElementById('billingToggle')?.checked ? 'yearly' : 'monthly';
             if (!plan) { toast('This plan is not available.'); return; }
@@ -4664,11 +3234,29 @@ const JEVEXA_PLANS = {
             if (!currentUser) return null;
             const { data, error } = await supabaseClient.from('user_credits')
                 .select('balance, monthly_allowance').eq('user_id', currentUser.id).maybeSingle();
-            if (error) { console.error(error); toast('Could not refresh credits.'); return null; }
+            if (error) {
+                console.error('Credits refresh error:', error);
+                const count = document.getElementById('creditsCount');
+                if (count) count.textContent = '—';
+                const status = document.getElementById('settingsCreditStatus');
+                if (status) status.textContent = 'Could not refresh credits. Please try again.';
+                toast('Could not refresh credits.');
+                return null;
+            }
             if (data) {
                 const count = document.getElementById('creditsCount');
                 if (count) count.textContent = String(data.balance);
-                updateCreditsSettingsUI(data.balance, data.monthly_allowance ?? 100);
+                const balance = document.getElementById('settingsBalance');
+                const allowance = document.getElementById('settingsAllowance');
+                const status = document.getElementById('settingsCreditStatus');
+                if (balance) balance.textContent = String(data.balance);
+                if (allowance) allowance.textContent = String(data.monthly_allowance ?? '—');
+                if (status) status.textContent = 'Balance loaded from your account.';
+            } else {
+                const balance = document.getElementById('settingsBalance');
+                const status = document.getElementById('settingsCreditStatus');
+                if (balance) balance.textContent = 'Not set up';
+                if (status) status.textContent = 'No credit account exists for this user yet.';
             }
             return data;
         }

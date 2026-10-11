@@ -7,6 +7,7 @@
 <title>JEVEXA — Admin Control Center</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
 
 <style>
 *{
@@ -725,17 +726,15 @@ tbody tr:hover{
    JEVEXA SUPABASE CONFIG
 ===================================================== */
 
-const SUPABASE_URL =
-'https://byopcuspgnhwsrmsxqvm.supabase.co';
-
-const SUPABASE_KEY = 'sb_publishable_AoElF80JEwzufwdNfrmjqQ_lDGq8kcF';
-
-const ADMIN_EMAIL = 'maazofficial107@gmail.com';
+const supabaseConfig = window.JEVEXA_SUPABASE_CONFIG;
+if (!supabaseConfig?.url || !supabaseConfig?.anonKey) {
+    throw new Error('Supabase configuration is unavailable. Set staging Worker Supabase variables before testing.');
+}
 
 const supabaseClient =
 window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
+    supabaseConfig.url,
+    supabaseConfig.anonKey
 );
 
 
@@ -787,37 +786,17 @@ loginForm.addEventListener('submit', async (e)=>{
     .value;
 
 
-    if(
-        email.toLowerCase()
-        !==
-        ADMIN_EMAIL.toLowerCase()
-    ){
-
-        loginError.textContent =
-        'Admin access only.';
-
-        return;
+    try {
+        const {data,error} = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) {
+            loginError.textContent = error.message;
+            return;
+        }
+        await showDashboard(data.session);
+    } catch (error) {
+        console.error('Admin sign-in failed:', error);
+        loginError.textContent = 'Could not verify admin access. Please try again.';
     }
-
-
-    const {data,error} =
-    await supabaseClient.auth
-    .signInWithPassword({
-        email,
-        password
-    });
-
-
-    if(error){
-
-        loginError.textContent =
-        error.message;
-
-        return;
-    }
-
-
-    showDashboard();
 
 });
 
@@ -826,14 +805,11 @@ loginForm.addEventListener('submit', async (e)=>{
    SHOW DASHBOARD
 ===================================================== */
 
-function showDashboard(){
-
+async function showDashboard(session){
+    const authorized = await loadContacts(session);
+    if (!authorized) return;
     loginSection.style.display='none';
-
     dashboard.style.display='block';
-
-    loadContacts();
-
 }
 
 
@@ -841,104 +817,73 @@ function showDashboard(){
    LOAD CONTACTS
 ===================================================== */
 
-async function loadContacts(){
+async function loadContacts(session){
 
     contactsTable.innerHTML='';
-
-    emptyMessage.innerHTML =
-    '<div class="loader"></div>';
-
+    emptyMessage.textContent = 'Loading your contacts…';
     emptyMessage.style.display='block';
 
-
-    const {data,error} =
-    await supabaseClient
-    .from('Contacts')
-    .select('*')
-    .order(
-        'created_at',
-        {ascending:false}
-    );
-
-
-    if(error){
-
-        emptyMessage.innerHTML =
-        '⚠️ Unable to load contacts.';
-
-        console.error(error);
-
-        return;
+    const {data,error} = session
+        ? { data: { session }, error: null }
+        : await supabaseClient.auth.getSession();
+    if (error || !data?.session?.access_token) {
+        emptyMessage.textContent = 'Please sign in to continue.';
+        loginError.textContent = 'Your session is unavailable. Please sign in again.';
+        return false;
     }
 
-
-    totalContacts.textContent =
-    data.length;
-
-
-    if(!data.length){
-
-        emptyMessage.innerHTML =
-        `
-        <div class="empty-icon">📭</div>
-        No contact submissions yet.
-        `;
-
-        return;
+    let response;
+    let result;
+    try {
+        response = await fetch('/api/admin/contacts', {
+            headers: { Authorization: `Bearer ${data.session.access_token}` }
+        });
+        result = await response.json().catch(() => ({}));
+    } catch (error) {
+        console.error('Admin contacts request failed:', error);
+        emptyMessage.textContent = 'Contact submissions are temporarily unavailable.';
+        loginError.textContent = 'Could not verify admin access. Please try again.';
+        return false;
     }
+    if (!response.ok || !Array.isArray(result.contacts)) {
+        const message = result.error || 'Contact submissions are temporarily unavailable.';
+        emptyMessage.textContent = message;
+        loginError.textContent = response.status === 403
+            ? 'Admin access only.'
+            : message;
+        return false;
+    }
+    const contacts = result.contacts;
 
+    totalContacts.textContent = String(contacts.length);
+
+    if(!contacts.length){
+        emptyMessage.textContent = 'No contact submissions yet.';
+        return true;
+    }
 
     emptyMessage.style.display='none';
 
-
-    data.forEach(contact=>{
-
-        const row =
-        document.createElement('tr');
-
-
-        row.innerHTML = `
-
-        <td>
-            ${escapeHTML(contact.name || '-')}
-        </td>
-
-        <td>
-            ${escapeHTML(contact.email || '-')}
-        </td>
-
-        <td>
-            ${escapeHTML(contact.phone || '-')}
-        </td>
-
-        <td class="message">
-            ${escapeHTML(contact.message || '-')}
-        </td>
-
-        <td>
-            ${
-                contact.created_at
-                ?
-                new Date(
-                    contact.created_at
-                ).toLocaleString()
-                :
-                '-'
-            }
-        </td>
-
-        `;
-
-
+    contacts.forEach(contact => {
+        const row = document.createElement('tr');
+        const values = [
+            contact.name || '-',
+            contact.email || '-',
+            contact.phone || '-',
+            contact.message || '-',
+            contact.created_at ? new Date(contact.created_at).toLocaleString() : '-'
+        ];
+        values.forEach((value, index) => {
+            const cell = document.createElement('td');
+            cell.textContent = String(value);
+            if (index === 3) cell.className = 'message';
+            row.appendChild(cell);
+        });
         contactsTable.appendChild(row);
-
     });
 
-
-    showToast(
-        `${data.length} contact(s) loaded`
-    );
-
+    showToast(`${contacts.length} contact(s) loaded`);
+    return true;
 }
 
 
@@ -950,8 +895,12 @@ document
 .getElementById('logoutBtn')
 .addEventListener('click',async()=>{
 
-    await supabaseClient.auth.signOut();
-
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) {
+        loginError.textContent = 'Could not sign out. Please try again.';
+        console.error('Admin sign-out failed:', error);
+        return;
+    }
     location.reload();
 
 });
@@ -962,26 +911,14 @@ document
 ===================================================== */
 
 async function checkSession(){
-
-    const {
-        data:{session}
-    } =
-    await supabaseClient
-    .auth
-    .getSession();
-
-
-    if(
-        session &&
-        session.user.email.toLowerCase()
-        ===
-        ADMIN_EMAIL.toLowerCase()
-    ){
-
-        showDashboard();
-
+    try {
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) throw error;
+        if (data?.session) await showDashboard(data.session);
+    } catch (error) {
+        console.error('Admin session check failed:', error);
+        loginError.textContent = 'Could not verify your session. Please sign in again.';
     }
-
 }
 
 checkSession();
@@ -990,18 +927,6 @@ checkSession();
 /* =====================================================
    SECURITY
 ===================================================== */
-
-function escapeHTML(value){
-
-    return String(value)
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
-    .replaceAll("'","&#039;");
-
-}
-
 
 /* =====================================================
    TOAST

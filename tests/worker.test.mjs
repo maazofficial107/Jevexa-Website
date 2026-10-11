@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 import worker from "../worker.js";
 
 const requestId = "00000000-0000-4000-8000-000000000001";
@@ -144,7 +145,69 @@ test("frontend explains missing Supabase configuration instead of failing silent
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
   assert.match(html, /id="appConfigError"[^>]*role="alert"/);
   assert.match(script, /getElementById\('appConfigError'\)/);
-  assert.match(script, /Configure this Worker with the correct environment URL and publishable key/);
+  assert.match(script, /Worker is missing its environment-specific public Supabase configuration/);
+});
+
+test("preloader clears on DOMContentLoaded and has a standalone timeout fallback", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const fallback = html.match(/<script id="preloader-fallback">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(fallback, "index.html must include the preloader fallback before application scripts");
+
+  let domReady;
+  let timeout;
+  let hidden = false;
+  const document = {
+    readyState: "loading",
+    getElementById(id) {
+      assert.equal(id, "preloader");
+      return { classList: { add(name) { hidden ||= name === "hidden"; } } };
+    },
+    addEventListener(name, callback) {
+      assert.equal(name, "DOMContentLoaded");
+      domReady = callback;
+    }
+  };
+  runInNewContext(fallback, {
+    document,
+    window: { setTimeout(callback, delay) { assert.equal(delay, 8000); timeout = callback; } }
+  });
+  assert.equal(typeof domReady, "function");
+  assert.equal(typeof timeout, "function");
+  domReady();
+  assert.equal(hidden, true, "DOM ready should hide the preloader");
+  hidden = false;
+  timeout();
+  assert.equal(hidden, false, "the one-shot fallback should not repeat after DOM ready");
+
+  hidden = false;
+  const stalledDocument = {
+    ...document,
+    addEventListener() {}
+  };
+  runInNewContext(fallback, {
+    document: stalledDocument,
+    window: { setTimeout(callback) { timeout = callback; } }
+  });
+  timeout();
+  assert.equal(hidden, true, "timeout should hide the preloader if DOMContentLoaded never fires");
+});
+
+test("missing Supabase setup is reported without aborting page initialization", async () => {
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(script, /window\.JEVEXA_SUPABASE_READY = Boolean\(supabaseClient\)/);
+  assert.match(script, /if \(supabaseClient\) void initializeAuthSession\(\)/);
+  assert.match(script, /if \(supabaseClient\) \{\s*supabaseClient\.auth\.onAuthStateChange/);
+  assert.doesNotMatch(script, /throw new Error\('Supabase configuration is unavailable/);
+});
+
+test("optional AOS resources do not block page parsing or hide content on failure", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(html, /<script async src="https:\/\/unpkg\.com\/aos@2\.3\.1\/dist\/aos\.js"/);
+  assert.doesNotMatch(html, /unpkg\.com\/aos@2\.3\.1\/dist\/aos\.css/);
+  assert.match(script, /stylesheet\.media = 'print'/);
+  assert.match(script, /stylesheet\.addEventListener\('load'/);
+  assert.doesNotMatch(script, /querySelectorAll\('\[data-aos\]'\)\.forEach\(el => el\.removeAttribute/);
 });
 
 test("signup does not log Supabase user response data", async () => {
@@ -284,8 +347,9 @@ test("admin contacts are read through the service-role Worker route only", async
 
 test("homepage external asset URLs and contact addresses are not escape-corrupted", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
   assert.match(html, /fonts\.googleapis\.com\/css2\?family=Orbitron:wght@/);
-  assert.match(html, /unpkg\.com\/aos@2\.3\.1\/dist\/aos\.css/);
+  assert.match(script, /https:\/\/unpkg\.com\/aos@2\.3\.1\/dist\/aos\.css/);
   assert.match(html, /unpkg\.com\/aos@2\.3\.1\/dist\/aos\.js/);
   assert.match(html, /placeholder="john@company\.com"/);
   assert.doesNotMatch(html, /\\@/);

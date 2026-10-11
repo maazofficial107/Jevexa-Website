@@ -24,21 +24,16 @@
 
 let countersReady = false;
 
-
-
 let counterObserver = null;
 
-
-
-
+let loadingFinished = false;
 
 
 
 function finishLoading() {
 
-
-
-
+    if (loadingFinished) return;
+    loadingFinished = true;
 
 
 
@@ -54,32 +49,52 @@ function finishLoading() {
 
 
 
-    setupCounterObserver();
-
+    setupCounterObserver();
 
 
 }
-
-
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', finishLoading, { once: true });
+} else {
+    finishLoading();
+}
+window.setTimeout(finishLoading, 8000);
 
 // ===============================
-
 // ===============================
 // JEVEXA Professional Authentication System
 // ===============================
 
 const supabaseConfig = window.JEVEXA_SUPABASE_CONFIG;
-if (!supabaseConfig?.url || !supabaseConfig?.anonKey) {
+const hasSupabaseConfig = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
+const hasSupabaseSdk = typeof window.supabase?.createClient === 'function';
+let supabaseClient = null;
+if (hasSupabaseConfig && hasSupabaseSdk) {
+    try {
+        supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+    } catch {
+        console.error('Supabase client initialization failed.');
+    }
+}
+window.JEVEXA_SUPABASE_READY = Boolean(supabaseClient);
+if (!window.JEVEXA_SUPABASE_READY) {
+    const configError = document.getElementById('appConfigError');
+    if (configError) {
+        configError.textContent = !hasSupabaseConfig
+            ? 'JEVEXA account features could not load because this Worker is missing its environment-specific public Supabase configuration. Please try again later.'
+            : !hasSupabaseSdk
+                ? 'JEVEXA account features could not load because the Supabase browser library is unavailable. Please try again later.'
+                : 'JEVEXA account features could not load because the Worker Supabase configuration could not be initialized. Please try again later.';
+        configError.hidden = false;
+    }
+    console.error('JEVEXA account features are unavailable; public Supabase configuration or browser library is missing.');
+}
+
+function showSupabaseUnavailable() {
     const configError = document.getElementById('appConfigError');
     if (configError) configError.hidden = false;
-    throw new Error('Supabase configuration is unavailable. Configure this Worker with the correct environment URL and publishable key.');
+    showAuthMessage('Account features are temporarily unavailable. Please try again later.');
 }
-const { url: SUPABASE_URL, anonKey: SUPABASE_KEY } = supabaseConfig;
-
-const supabaseClient = window.supabase.createClient(
-    supabaseConfig.url,
-    supabaseConfig.anonKey
-);
 // ===== JEVEXA THEME SYSTEM =====
 
 function applyJevexaTheme(theme) {
@@ -229,6 +244,7 @@ function clearAuthMessage() {
 async function loginWithGoogle() {
     if (authBusy) return;
     clearAuthMessage();
+    if (!supabaseClient) return showSupabaseUnavailable();
 
     const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
@@ -244,6 +260,7 @@ async function loginWithGoogle() {
 async function loginWithGithub() {
     if (authBusy) return;
     clearAuthMessage();
+    if (!supabaseClient) return showSupabaseUnavailable();
 
     const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'github',
@@ -258,6 +275,7 @@ async function loginWithGithub() {
 
 async function loginWithEmail() {
     if (authBusy) return;
+    if (!supabaseClient) return showSupabaseUnavailable();
 
     const email = document.getElementById('loginEmail')?.value.trim() || '';
     const password = document.getElementById('loginPassword')?.value || '';
@@ -311,6 +329,7 @@ async function loginWithEmail() {
 
 async function createAccountWithEmail() {
     if (authBusy) return;
+    if (!supabaseClient) return showSupabaseUnavailable();
 
     const name = document.getElementById('signupName')?.value.trim() || '';
     const email = document.getElementById('loginEmail')?.value.trim() || '';
@@ -1175,6 +1194,7 @@ async function logoutUser() {
 }
 
 async function initializeAuthSession() {
+    if (!supabaseClient) return;
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) console.error('Session check error:', error);
     currentUser = data?.session?.user || null;
@@ -1182,12 +1202,14 @@ async function initializeAuthSession() {
     await updateCreditsHeader(currentUser);
 }
 
-supabaseClient.auth.onAuthStateChange((event, session) => {
-    currentUser = session?.user || null;
-    if (currentUser) renderUserAccount(currentUser);
-    else removeUserAccountUI();
-    void updateCreditsHeader(currentUser);
-});
+if (supabaseClient) {
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+        currentUser = session?.user || null;
+        if (currentUser) renderUserAccount(currentUser);
+        else removeUserAccountUI();
+        void updateCreditsHeader(currentUser);
+    });
+}
 
 async function updateCreditsHeader(user) {
     const creditsBadge = document.getElementById('creditsBadge');
@@ -1236,81 +1258,32 @@ async function updateCreditsHeader(user) {
     creditsCount.textContent = String(data.balance);
 }
 
-initializeAuthSession();
+if (supabaseClient) void initializeAuthSession();
 
-// Don't make the preloader wait for fonts or other external resources.
+// Optional animations are initialized only after the library loads successfully.
+function initializeJevexaAnimations() {
+    if (typeof window.AOS?.init !== 'function') return;
 
+    if (!document.getElementById('jevexa-aos-styles')) {
+        const stylesheet = document.createElement('link');
+        stylesheet.id = 'jevexa-aos-styles';
+        stylesheet.rel = 'stylesheet';
+        stylesheet.href = 'https://unpkg.com/aos@2.3.1/dist/aos.css';
+        stylesheet.media = 'print';
+        stylesheet.addEventListener('load', () => { stylesheet.media = 'all'; }, { once: true });
+        document.head.appendChild(stylesheet);
+    }
 
-
-if (document.readyState === 'loading') {
-
-
-
-    document.addEventListener('DOMContentLoaded', finishLoading, { once: true });
-
-
-
-} else {
-
-
-
-    finishLoading();
-
-
-
+    window.AOS.init({
+        duration: 700,
+        once: true,
+        offset: 50,
+        easing: 'ease-out-cubic',
+        disable: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    });
 }
-
-
-
-
-
-
-
-// AOS — lighter settings for smoothness
-
-
-
-if (window.AOS && typeof AOS.init === 'function') {
-
-
-
-    AOS.init({
-
-
-
-        duration: 700,
-
-
-
-        once: true,
-
-
-
-        offset: 50,
-
-
-
-        easing: 'ease-out-cubic',
-
-
-
-        disable: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-
-
-    });
-
-
-
-} else {
-
-
-
-    document.querySelectorAll('[data-aos]').forEach(el => el.removeAttribute('data-aos'));
-
-
-
-}
+window.JEVEXA_INIT_AOS = initializeJevexaAnimations;
+initializeJevexaAnimations();
 
 
 
@@ -3085,6 +3058,11 @@ document.addEventListener('click', async function (event) {
     if (!protectedCTA) return;
 
     // Check the REAL Supabase login session
+    if (!supabaseClient) {
+        event.preventDefault();
+        showSupabaseUnavailable();
+        return;
+    }
     const { data } = await supabaseClient.auth.getSession();
 
     const loggedInUser = data?.session?.user || null;
@@ -3225,13 +3203,15 @@ const JEVEXA_PLANS = {
         // Existing global function is retained; the auth state handler below reapplies preferences.
         window.renderUserAccount = priorRender;
     }
-    supabaseClient.auth.onAuthStateChange((_event, session) => applyUserPreferences(session?.user || null));
+    if (supabaseClient) {
+        supabaseClient.auth.onAuthStateChange((_event, session) => applyUserPreferences(session?.user || null));
+    }
     setTimeout(() => applyUserPreferences(currentUser), 0);
 
     window.JEVEXA_SETTINGS = {
         open: () => currentUser ? openSettingsView(currentUser) : openLogin(),
         refreshCredits: async () => {
-            if (!currentUser) return null;
+            if (!currentUser || !supabaseClient) return null;
             const { data, error } = await supabaseClient.from('user_credits')
                 .select('balance, monthly_allowance').eq('user_id', currentUser.id).maybeSingle();
             if (error) {

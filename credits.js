@@ -64,6 +64,9 @@
     }
 
     async function getSession() {
+        if (!window.JEVEXA_SUPABASE_READY) {
+            throw new Error('Account and AI chat features are temporarily unavailable. Please try again later.');
+        }
         const { data, error } = await supabaseClient.auth.getSession();
         if (error) throw new Error('Could not verify your sign-in. Please sign in again.');
         if (!data?.session?.access_token) return null;

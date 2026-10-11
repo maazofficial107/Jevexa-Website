@@ -4603,9 +4603,26 @@ const JEVEXA_PLANS = {
             const cycle = document.getElementById('billingToggle')?.checked ? 'yearly' : 'monthly';
             if (!plan) { toast('This plan is not available.'); return; }
             if (!currentUser) { openLogin(); return; }
-            // Do not claim a purchase or grant credits until a verified provider checkout/webhook exists.
-            toast('Secure checkout is not configured yet. No payment was taken and your plan has not changed.');
-            console.warn('Billing requires a payment provider account, server-side checkout, and signed webhook.');
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+            if (!accessToken) { toast('Your session expired. Please sign in again.'); openLogin(); return; }
+            const originalText = planButton.textContent;
+            planButton.disabled = true;
+            planButton.textContent = 'Opening secure checkout…';
+            try {
+                const response = await fetch('/api/billing/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+                    body: JSON.stringify({ plan: planButton.dataset.plan, cycle })
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.checkoutUrl) throw new Error(result.error || 'Could not start checkout.');
+                window.location.assign(result.checkoutUrl);
+            } catch (error) {
+                toast(error?.message || 'Checkout is temporarily unavailable.');
+                planButton.disabled = false;
+                planButton.textContent = originalText;
+            }
             return;
         }
     }, true);
@@ -4674,4 +4691,51 @@ const JEVEXA_PLANS = {
       @media(max-width:700px){#settingsPanel{width:100%;height:100dvh;max-height:100dvh;border-radius:0;flex-direction:column}#settingsPanel>aside{width:100%;max-height:220px;padding:12px;border-right:0;border-bottom:1px solid var(--border,rgba(255,255,255,.1))}#settingsPanel .settings-brand{padding:3px 6px 10px}.settings-brand strong{font-size:17px}#settingsPanel #settingsNav{display:flex;overflow-x:auto;padding-bottom:4px}.jevexa-settings-nav{min-width:150px;padding:8px}.settings-logout-btn{position:absolute;right:64px;top:12px;margin:0;padding:8px 10px}#settingsPanel>main{padding:17px}.settings-stats{grid-template-columns:1fr}.settings-topbar h2{font-size:22px}}
     `;
     document.head.appendChild(style);
+})();
+
+
+// Safepay return pages are informational only. Credits are granted by the signed server webhook.
+(function handleSafepayReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get('payment');
+    if (!payment) return;
+    if (payment === 'cancelled') {
+        if (typeof showToast === 'function') showToast('Payment cancelled. No credits were added. You can try again anytime.');
+        params.delete('payment');
+        const clean = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash}`;
+        history.replaceState({}, '', clean);
+        return;
+    }
+    if (payment !== 'return') return;
+    const tracker = params.get('tracker');
+    if (typeof showToast === 'function') showToast('Payment returned from Safepay. Verifying securely…');
+    (async () => {
+        const { data } = await supabaseClient.auth.getSession();
+        const token = data?.session?.access_token;
+        if (!token || !tracker) {
+            if (typeof showToast === 'function') showToast('Payment is awaiting server verification. Sign in and refresh Credits & Usage shortly.');
+            return;
+        }
+        for (let attempt = 0; attempt < 8; attempt++) {
+            try {
+                const response = await fetch(`/api/billing/status?tracker=${encodeURIComponent(tracker)}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const status = await response.json().catch(() => ({}));
+                if (status.status === 'paid') {
+                    if (typeof showToast === 'function') showToast('Payment verified! Your credits have been added.');
+                    if (window.JEVEXA_SETTINGS?.refreshCredits) await window.JEVEXA_SETTINGS.refreshCredits();
+                    break;
+                }
+                if (status.status === 'failed' || status.status === 'cancelled') {
+                    if (typeof showToast === 'function') showToast('Payment was not completed. No paid credits were added.');
+                    break;
+                }
+            } catch (error) { console.warn('Payment status check failed.'); }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        params.delete('payment');
+        const clean = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash}`;
+        history.replaceState({}, '', clean);
+    })();
 })();

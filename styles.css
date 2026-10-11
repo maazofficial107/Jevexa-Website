@@ -1164,7 +1164,8 @@ section { padding: 100px 0; position: relative; }
     .contact-wrapper { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
-    
+    .nav-actions { gap: 8px; }
+    #jevexaAccountUI { order: 1; margin-left: 0 !important; }
     .nav-links {
         position: fixed; top: 0; right: -100%; width: 280px; height: 100vh;
         background: rgba(10,10,26,0.98); backdrop-filter: blur(20px);
@@ -1173,7 +1174,7 @@ section { padding: 100px 0; position: relative; }
         gap: 4px;
     }
     .nav-links.open { right: 0; }
-    .mobile-toggle { display: flex; }
+    .mobile-toggle { display: flex; order: 2; }
     .btn-nav { display: none; }
     .hero-title { font-size: 2.2rem; }
     .ai-core-container { width: 300px; height: 300px; }
@@ -7500,9 +7501,17 @@ body {
 
 @media (max-width: 700px) {
 
+    .credits-badge {
+        gap: 4px;
+        padding: 6px 8px;
+    }
+
+    .credits-badge span:last-child { display: none; }
+    .credits-lightning { margin-right: 0; font-size: 16px; }
+    #creditsCount { font-size: 14px; }
+
     /* Top account button */
     #jevexaAccountUI {
-        margin-left: 6px !important;
         max-width: 48px !important;
     }
 
@@ -7523,7 +7532,7 @@ body {
     #jevexaProfilePanel {
         width: min(290px, calc(100vw - 24px)) !important;
         max-width: calc(100vw - 24px) !important;
-        right: 0 !important;
+        right: -48px !important;
         box-sizing: border-box !important;
     }
 
@@ -7555,9 +7564,14 @@ body {
 /* Very small phones */
 @media (max-width: 380px) {
 
+    .nav-container { padding: 0 12px; }
+    .logo { gap: 8px; }
+    .logo-icon { width: 36px; height: 36px; }
+    .logo-text { font-size: 16px; letter-spacing: 1px; }
+
     #jevexaProfilePanel {
-        width: calc(100vw - 16px) !important;
-        max-width: calc(100vw - 16px) !important;
+        width: calc(100vw - 24px) !important;
+        max-width: calc(100vw - 24px) !important;
     }
 
     #jevexaAccountBackdrop {

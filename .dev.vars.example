@@ -1,10 +1,13 @@
-# Cloudflare Worker secrets (set with `npx wrangler secret put NAME`)
+# Local development only; do not commit real .dev.vars values.
 GEMINI_API_KEY=
 RESEND_API_KEY=
 CONTACT_FROM_EMAIL=
 CONTACT_TO_EMAIL=
 
-# Supabase browser configuration belongs in the existing frontend config.
-# NEVER put the Supabase service_role key or payment secrets in frontend files.
-# Payment gateway integration is not live until merchant credentials and
-# a verified server-side webhook are configured and tested.
+SUPABASE_URL=https://byopcuspgnhwsrmsxqvm.supabase.co
+SUPABASE_ANON_KEY=sb_publishable_AoElF80JEwzufwdNfrmjqQ_lDGq8kcF
+SUPABASE_SERVICE_ROLE_KEY=
+SAFEPAY_API_KEY=
+SAFEPAY_SECRET_KEY=
+SAFEPAY_WEBHOOK_SECRET=
+# Safepay API is intentionally sandbox-only in this package.

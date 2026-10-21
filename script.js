@@ -37,15 +37,15 @@ function finishLoading() {
 
 
 
-    const pre = document.getElementById('preloader');
+    const pre = document.getElementById('preloader');
 
 
 
-    if (pre) pre.classList.add('hidden');
+    if (pre) pre.classList.add('hidden');
 
 
 
-    countersReady = true;
+    countersReady = true;
 
 
 
@@ -123,14 +123,29 @@ initializeJevexaTheme();
 let isSignupMode = false;
 let authBusy = false;
 let currentUser = null;
+let authStateRevision = 0;
+let previousLoginFocus = null;
 
-function openLogin() {
+function showLoginModal() {
     const modal = document.getElementById('loginModal');
     if (modal) {
+        if (!modal.classList.contains('open')) previousLoginFocus = document.activeElement;
         modal.classList.add('open');
         document.body.classList.add('login-open');
         document.documentElement.classList.add('login-open');
+        window.requestAnimationFrame(() => {
+            document.getElementById(isSignupMode ? 'signupName' : 'loginEmail')?.focus({ preventScroll: true });
+        });
     }
+}
+
+function openLogin() {
+    if (isSignupMode) {
+        isSignupMode = false;
+        syncAuthModeUI();
+    }
+    clearAuthMessage();
+    showLoginModal();
 }
 
 function closeLogin() {
@@ -139,8 +154,44 @@ function closeLogin() {
         modal.classList.remove('open');
         document.body.classList.remove('login-open');
         document.documentElement.classList.remove('login-open');
+        if (previousLoginFocus instanceof HTMLElement) previousLoginFocus.focus({ preventScroll: true });
+        previousLoginFocus = null;
     }
 }
+
+document.addEventListener('keydown', event => {
+    const modal = document.getElementById('loginModal');
+    if (!modal?.classList.contains('open')) return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeLogin();
+        return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...modal.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled)')]
+        .filter(element => element.getClientRects().length > 0);
+    if (!focusable.length) {
+        event.preventDefault();
+        modal.focus();
+        return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+});
+
+document.addEventListener('submit', event => {
+    if (event.target.matches('#authForm')) {
+        event.preventDefault();
+        void handleAuthSubmit();
+    }
+});
 
 function getFriendlyAuthError(error, action = 'login') {
     const message = String(error?.message || '').toLowerCase();
@@ -247,15 +298,21 @@ async function loginWithGoogle() {
     if (authBusy) return;
     clearAuthMessage();
     if (!supabaseClient) return showSupabaseUnavailable();
-
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin }
-    });
-
-    if (error) {
-        console.error('Google login error:', error);
+    authBusy = true;
+    try {
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.origin }
+        });
+        if (error) {
+            console.error('Google login error:', error);
+            showAuthMessage(getFriendlyAuthError(error, 'login'));
+        }
+    } catch (error) {
+        console.error('Google login request failed:', error);
         showAuthMessage(getFriendlyAuthError(error, 'login'));
+    } finally {
+        authBusy = false;
     }
 }
 
@@ -263,15 +320,21 @@ async function loginWithGithub() {
     if (authBusy) return;
     clearAuthMessage();
     if (!supabaseClient) return showSupabaseUnavailable();
-
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'github',
-        options: { redirectTo: window.location.origin }
-    });
-
-    if (error) {
-        console.error('GitHub login error:', error);
+    authBusy = true;
+    try {
+        const { error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'github',
+            options: { redirectTo: window.location.origin }
+        });
+        if (error) {
+            console.error('GitHub login error:', error);
+            showAuthMessage('GitHub login is currently unavailable. Please try another login method.');
+        }
+    } catch (error) {
+        console.error('GitHub login request failed:', error);
         showAuthMessage('GitHub login is currently unavailable. Please try another login method.');
+    } finally {
+        authBusy = false;
     }
 }
 
@@ -317,12 +380,12 @@ async function loginWithEmail() {
             return;
         }
 
-        currentUser = data?.user || null;
         closeLogin();
         clearAuthFields();
-        showToast(`✓ Welcome back${getUserFirstName(currentUser) ? `, ${getUserFirstName(currentUser)}` : ''}!`);
-        renderUserAccount(currentUser);
-        updateCreditsHeader(currentUser);
+        showToast(`✓ Welcome back${getUserFirstName(data?.user) ? `, ${getUserFirstName(data.user)}` : ''}!`);
+    } catch (error) {
+        console.error('Email login request failed:', error);
+        showAuthMessage(getFriendlyAuthError(error, 'login'));
     } finally {
         authBusy = false;
         setAuthButtonLoading(false);
@@ -392,41 +455,45 @@ async function createAccountWithEmail() {
         // When email confirmation is enabled, Supabase normally returns a user
         // with no active session until the email is verified.
         if (data?.session) {
-            currentUser = data.user;
             closeLogin();
             clearAuthFields();
             showToast(`✓ Welcome to JEVEXA, ${name.split(' ')[0]}!`);
-            renderUserAccount(currentUser);
         } else {
             showAuthMessage(
                 '✓ Account created! Please check your email and click the verification link.',
                 'success'
             );
         }
+    } catch (error) {
+        console.error('Signup request failed:', error);
+        showAuthMessage(getFriendlyAuthError(error, 'signup'));
     } finally {
         authBusy = false;
         setAuthButtonLoading(false);
     }
 }
 
-function toggleAuthMode() {
-    isSignupMode = !isSignupMode;
-    clearAuthMessage();
-
+function syncAuthModeUI() {
     const nameWrapper = document.getElementById('signupNameWrapper');
+    const nameInput = document.getElementById('signupName');
     const submitButton = document.getElementById('authSubmitButton');
     const modeToggle = document.getElementById('authModeToggle');
     const footerText = document.getElementById('authFooterText');
     const welcomeText = document.querySelector('.login-welcome p');
+    const passwordInput = document.getElementById('loginPassword');
 
     if (isSignupMode) {
         if (nameWrapper) nameWrapper.style.setProperty('display', 'block', 'important');
+        if (nameInput) nameInput.required = true;
+        if (passwordInput) passwordInput.autocomplete = 'new-password';
         if (submitButton) submitButton.innerHTML = 'Create Account <span>→</span>';
         if (footerText) footerText.textContent = 'Already have an account?';
         if (modeToggle) modeToggle.textContent = 'Login →';
         if (welcomeText) welcomeText.textContent = 'Create your JEVEXA account to get started.';
     } else {
         if (nameWrapper) nameWrapper.style.setProperty('display', 'none', 'important');
+        if (nameInput) nameInput.required = false;
+        if (passwordInput) passwordInput.autocomplete = 'current-password';
         if (submitButton) submitButton.innerHTML = 'Login to JEVEXA <span>→</span>';
         if (footerText) footerText.textContent = "Don't have an account?";
         if (modeToggle) modeToggle.textContent = 'Create Account →';
@@ -434,7 +501,23 @@ function toggleAuthMode() {
     }
 }
 
-        
+function toggleAuthMode() {
+    isSignupMode = !isSignupMode;
+    clearAuthMessage();
+    syncAuthModeUI();
+}
+
+function openAuthModal(mode = 'login') {
+    const targetMode = mode === 'signup';
+    isSignupMode = targetMode;
+    clearAuthMessage();
+    syncAuthModeUI();
+    showLoginModal();
+}
+
+function openSignup() {
+    openAuthModal('signup');
+}
 
 async function handleAuthSubmit() {
     if (isSignupMode) {
@@ -489,7 +572,11 @@ function renderUserAccount(user) {
 
     const button = document.createElement('button');
     button.type = 'button';
+    button.className = 'jevexa-account-toggle';
     button.setAttribute('aria-label', 'Open account menu');
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-controls', 'jevexaProfilePanel');
+    button.setAttribute('aria-expanded', 'false');
     button.style.cssText = `
         display:flex;align-items:center;gap:9px;padding:6px 10px 6px 6px;
         border:1px solid rgba(139,92,246,.35);border-radius:999px;
@@ -504,6 +591,8 @@ function renderUserAccount(user) {
 
     const menu = document.createElement('div');
     menu.id = 'jevexaProfilePanel';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Account menu');
     menu.style.cssText = `
         display:none;position:absolute;right:0;top:calc(100% + 10px);width:290px;
         padding:14px;border:1px solid rgba(139,92,246,.28);border-radius:18px;
@@ -519,10 +608,10 @@ function renderUserAccount(user) {
             </div>
         </div>
         <div style="padding:12px 6px 6px;font-size:12px;opacity:.6;text-transform:uppercase;letter-spacing:.08em;">Account</div>
-        <button type="button" data-account-action="profile" style="${accountMenuButtonStyle()}">👤 Profile</button>
-        <button type="button" data-account-action="settings" style="${accountMenuButtonStyle()}">⚙ Settings</button>
+        <button type="button" role="menuitem" data-account-action="profile" style="${accountMenuButtonStyle()}">👤 Profile</button>
+        <button type="button" role="menuitem" data-account-action="settings" style="${accountMenuButtonStyle()}">⚙ Settings</button>
         <div style="height:1px;background:rgba(255,255,255,.08);margin:8px 0;"></div>
-        <button type="button" data-account-action="logout" style="${accountMenuButtonStyle(true)}">↪ Logout</button>
+        <button type="button" role="menuitem" data-account-action="logout" style="${accountMenuButtonStyle(true)}">↪ Logout</button>
     `;
 
     account.append(button, menu);
@@ -530,7 +619,9 @@ function renderUserAccount(user) {
 
     button.addEventListener('click', (event) => {
         event.stopPropagation();
-        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        const isOpen = menu.style.display !== 'block';
+        menu.style.display = isOpen ? 'block' : 'none';
+        button.setAttribute('aria-expanded', String(isOpen));
     });
 
     menu.addEventListener('click', async (event) => {
@@ -539,10 +630,19 @@ function renderUserAccount(user) {
 
         const action = actionButton.dataset.accountAction;
         menu.style.display = 'none';
+        button.setAttribute('aria-expanded', 'false');
 
         if (action === 'logout') await logoutUser();
         if (action === 'profile') openProfileView(user);
         if (action === 'settings') openSettingsView(user);
+    });
+
+    menu.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            menu.style.display = 'none';
+            button.setAttribute('aria-expanded', 'false');
+            button.focus();
+        }
     });
 
     if (!window.__jevexaAccountOutsideClickBound) {
@@ -551,6 +651,7 @@ function renderUserAccount(user) {
             const liveMenu = document.getElementById('jevexaProfilePanel');
             if (liveMenu && liveAccount && !liveAccount.contains(event.target)) {
                 liveMenu.style.display = 'none';
+                liveAccount.querySelector('.jevexa-account-toggle')?.setAttribute('aria-expanded', 'false');
             }
         });
         window.__jevexaAccountOutsideClickBound = true;
@@ -804,7 +905,7 @@ function openProfileView(user) {
                             text-transform:uppercase;
                             margin-bottom:5px;
                         ">
-                            Subscription
+                            Credit package
                         </div>
 
                         <strong id="profilePlanValue" style="font-size:15px;">Loading…</strong>
@@ -1183,72 +1284,95 @@ function openSettingsView(user) {
 }
 
 async function logoutUser() {
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) {
+    if (!supabaseClient) return showSupabaseUnavailable();
+    try {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) throw error;
+    } catch (error) {
         console.error('Logout error:', error);
         showToast('Could not log out. Please try again.');
         return;
     }
-    currentUser = null;
-    removeUserAccountUI();
-    await updateCreditsHeader(null);
     showToast('You have been logged out.');
 }
 
-async function initializeAuthSession() {
-    if (!supabaseClient) return;
-    const { data, error } = await supabaseClient.auth.getSession();
-    if (error) console.error('Session check error:', error);
-    currentUser = data?.session?.user || null;
+function syncAuthNavigation(user) {
+    const signedIn = Boolean(user);
+    const desktopActions = document.querySelector('.nav-cta-group');
+    if (desktopActions) desktopActions.hidden = signedIn;
+    document.querySelectorAll('.nav-link-mobile').forEach(item => {
+        item.hidden = signedIn;
+    });
+    // Hide all public auth entry points while signed in, including the hero Create Account CTA.
+    // Keep the links in the DOM so they automatically return after sign-out.
+    document.querySelectorAll('[data-auth-action="signup"], [data-auth-action="login"]').forEach(link => {
+        link.hidden = signedIn;
+        link.setAttribute('aria-hidden', String(signedIn));
+        if (signedIn) link.setAttribute('tabindex', '-1');
+        else link.removeAttribute('tabindex');
+    });
+
+    const creditsBadge = document.getElementById('creditsBadge');
+    const creditsCount = document.getElementById('creditsCount');
+    if (creditsBadge) creditsBadge.style.display = signedIn ? 'inline-flex' : 'none';
+    if (creditsCount && !signedIn) creditsCount.textContent = '—';
+    closeMobileMenu();
+}
+
+function applyAuthState(user) {
+    currentUser = user || null;
+    const revision = ++authStateRevision;
+    syncAuthNavigation(currentUser);
+
     if (currentUser) renderUserAccount(currentUser);
-    await updateCreditsHeader(currentUser);
+    else removeUserAccountUI();
+
+    window.setTimeout(() => {
+        if (revision === authStateRevision) {
+            void updateCreditsHeader(currentUser, revision);
+        }
+    }, 0);
 }
 
 if (supabaseClient) {
     supabaseClient.auth.onAuthStateChange((event, session) => {
-        currentUser = session?.user || null;
-        if (currentUser) renderUserAccount(currentUser);
-        else removeUserAccountUI();
-        void updateCreditsHeader(currentUser);
+        applyAuthState(session?.user || null);
+        if (event === 'SIGNED_IN') closeLogin();
     });
 }
 
-async function updateCreditsHeader(user) {
+async function updateCreditsHeader(user, revision = authStateRevision) {
     const creditsBadge = document.getElementById('creditsBadge');
-    const getStarted = document.querySelector('.btn.btn-nav');
-
+    const creditsCount = document.getElementById('creditsCount');
     if (!creditsBadge) return;
 
     if (!user) {
-        if (getStarted) {
-            getStarted.style.display = '';
-        }
-
         creditsBadge.style.display = 'none';
+        if (creditsCount) creditsCount.textContent = '—';
         return;
     }
 
-    if (getStarted) {
-        getStarted.style.display = 'none';
-    }
-
     creditsBadge.style.display = 'inline-flex';
-
-    const creditsCount = document.getElementById('creditsCount');
-
     if (!creditsCount) return;
 
-    const { data, error } = await supabaseClient
-        .from('user_credits')
-        .select('balance')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-    if (error) {
+    creditsCount.textContent = '—';
+    let data;
+    try {
+        const result = await supabaseClient
+            .from('user_credits')
+            .select('balance')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (result.error) throw result.error;
+        data = result.data;
+    } catch (error) {
+        if (revision !== authStateRevision || currentUser?.id !== user.id) return;
         console.error('Credits fetch error:', error);
         creditsCount.textContent = '—';
         return;
     }
+
+    if (revision !== authStateRevision || currentUser?.id !== user.id) return;
 
     if (!data) {
         // Missing row is a backend provisioning issue, not proof the user has zero credits.
@@ -1259,8 +1383,6 @@ async function updateCreditsHeader(user) {
 
     creditsCount.textContent = String(data.balance);
 }
-
-if (supabaseClient) void initializeAuthSession();
 
 // Optional animations are initialized only after the library loads successfully.
 function initializeJevexaAnimations() {
@@ -1321,27 +1443,27 @@ window.addEventListener('scroll', () => {
 
 
 
-    if (!ticking) {
+    if (!ticking) {
 
 
 
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
 
 
 
-            if (navbar) {
+            if (navbar) {
 
 
 
-                if (window.scrollY > 50) navbar.classList.add('scrolled');
+                if (window.scrollY > 50) navbar.classList.add('scrolled');
 
 
 
-                else navbar.classList.remove('scrolled');
+                else navbar.classList.remove('scrolled');
 
 
 
-            }
+            }
 
 
 
@@ -1349,7 +1471,7 @@ window.addEventListener('scroll', () => {
 
 
 
-            let current = '';
+            let current = '';
 
 
 
@@ -1357,23 +1479,23 @@ window.addEventListener('scroll', () => {
 
 
 
-            document.querySelectorAll('section[id]').forEach(section => {
+            document.querySelectorAll('section[id]').forEach(section => {
 
 
 
-                if (window.scrollY >= section.offsetTop - 120) {
+                if (window.scrollY >= section.offsetTop - 120) {
 
 
 
-                    current = section.getAttribute('id');
+                    current = section.getAttribute('id');
 
 
 
-                }
+                }
 
 
 
-            });
+            });
 
 
 
@@ -1381,11 +1503,11 @@ window.addEventListener('scroll', () => {
 
 
 
-            navLinks.forEach(link => {
+            navLinks.forEach(link => {
 
 
 
-                link.classList.remove('active');
+                link.classList.remove('active');
 
 
 
@@ -1393,19 +1515,19 @@ window.addEventListener('scroll', () => {
 
 
 
-                if (link.getAttribute('href') === `#${current}`) {
+                if (link.getAttribute('href') === `#${current}`) {
 
 
 
-                    link.classList.add('active');
+                    link.classList.add('active');
 
 
 
-                }
+                }
 
 
 
-            });
+            });
 
 
 
@@ -1413,11 +1535,11 @@ window.addEventListener('scroll', () => {
 
 
 
-            ticking = false;
+            ticking = false;
 
 
 
-        });
+        });
 
 
 
@@ -1425,11 +1547,11 @@ window.addEventListener('scroll', () => {
 
 
 
-        ticking = true;
+        ticking = true;
 
 
 
-    }
+    }
 
 
 
@@ -1447,85 +1569,83 @@ window.addEventListener('scroll', () => {
 
 const mobileToggle = document.getElementById('mobileToggle');
 
-
-
 const navLinksEl = document.getElementById('navLinks');
 
-
-
-
-
-
+function closeMobileMenu() {
+    document.getElementById('navLinks')?.classList.remove('open');
+    const toggle = document.getElementById('mobileToggle');
+    toggle?.classList.remove('active');
+    toggle?.setAttribute('aria-expanded', 'false');
+    toggle?.setAttribute('aria-label', 'Open navigation menu');
+}
 
 mobileToggle?.addEventListener('click', () => {
-
-
-
-    const isOpen = navLinksEl?.classList.toggle('open') ?? false;
-
-
-
-
-
-
-
-    mobileToggle.classList.toggle('active', isOpen);
-
-
-
-    mobileToggle.setAttribute('aria-expanded', String(isOpen));
-
-
-
+    const isOpen = navLinksEl?.classList.toggle('open') ?? false;
+    mobileToggle.classList.toggle('active', isOpen);
+    mobileToggle.setAttribute('aria-expanded', String(isOpen));
+    mobileToggle.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
 });
 
+document.addEventListener('click', (event) => {
+    if (!navLinksEl?.classList.contains('open')) return;
+    const clickInsideNav = navLinksEl.contains(event.target);
+    const clickToggle = mobileToggle?.contains(event.target);
+    if (!clickInsideNav && !clickToggle) {
+          closeMobileMenu();
+    }
+});
 
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && navLinksEl?.classList.contains('open')) {
+          closeMobileMenu();
+          mobileToggle?.focus();
+    }
+});
 
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) closeMobileMenu();
+});
 
+function handleAuthNavigation(event) {
+    const action = event.currentTarget.dataset.authAction;
+    if (action !== 'login' && action !== 'signup') return;
+    event.preventDefault();
 
-
+    if (navLinksEl?.contains(event.currentTarget)) {
+        closeMobileMenu();
+        mobileToggle?.focus({ preventScroll: true });
+    }
+    openAuthModal(action);
+}
 
 navLinks.forEach(link => {
 
+    link.addEventListener('click', (event) => {
 
+          if (event.currentTarget.dataset.authAction) {
+              handleAuthNavigation(event);
+              return;
+          }
 
-    link.addEventListener('click', () => {
+          closeMobileMenu();
 
-
-
-        navLinksEl?.classList.remove('open');
-
-
-
-        mobileToggle?.classList.remove('active');
-
-
-
-        mobileToggle?.setAttribute('aria-expanded', 'false');
-
-
-
-    });
-
-
+    });
 
 });
 
-
-
+document.querySelectorAll('.nav-actions [data-auth-action], .hero-ctas [data-auth-action]')
+    .forEach(link => link.addEventListener('click', handleAuthNavigation));
 
 
 
 
 // Counter Animation — smooth count-up when each counter becomes visible
 
-
-
 function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-    if (!el || el.dataset.animated === '1') return;
+    if (!el || el.dataset.animated === '1') return;
 
 
 
@@ -1533,11 +1653,11 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-    el.dataset.animated = '1';
+    el.dataset.animated = '1';
 
 
 
-    el.textContent = '0';
+    el.textContent = '0';
 
 
 
@@ -1545,7 +1665,7 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-    const start = performance.now();
+    const start = performance.now();
 
 
 
@@ -1553,11 +1673,11 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-    const update = (now) => {
+    const update = (now) => {
 
 
 
-        const progress = Math.min((now - start) / duration, 1);
+        const progress = Math.min((now - start) / duration, 1);
 
 
 
@@ -1565,11 +1685,11 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-        const eased = 1 - Math.pow(1 - progress, 3);
+        const eased = 1 - Math.pow(1 - progress, 3);
 
 
 
-        const value = Math.floor(target * eased);
+        const value = Math.floor(target * eased);
 
 
 
@@ -1577,7 +1697,7 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-        el.textContent = useComma ? value.toLocaleString() : value;
+        el.textContent = useComma ? value.toLocaleString() : value;
 
 
 
@@ -1585,27 +1705,27 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-        if (progress < 1) {
+        if (progress < 1) {
 
 
 
-            requestAnimationFrame(update);
+            requestAnimationFrame(update);
 
 
 
-        } else {
+        } else {
 
 
 
-            el.textContent = useComma ? target.toLocaleString() : target;
+            el.textContent = useComma ? target.toLocaleString() : target;
 
 
 
-        }
+        }
 
 
 
-    };
+    };
 
 
 
@@ -1613,7 +1733,7 @@ function animateValue(el, target, duration = 1800, useComma = false) {
 
 
 
-    requestAnimationFrame(update);
+    requestAnimationFrame(update);
 
 
 
@@ -1629,7 +1749,7 @@ function animateCounterElement(el) {
 
 
 
-    if (!el || !countersReady || el.dataset.animated === '1') return;
+    if (!el || !countersReady || el.dataset.animated === '1') return;
 
 
 
@@ -1637,7 +1757,7 @@ function animateCounterElement(el) {
 
 
 
-    const target = Number(el.getAttribute('data-count'));
+    const target = Number(el.getAttribute('data-count'));
 
 
 
@@ -1645,7 +1765,7 @@ function animateCounterElement(el) {
 
 
 
-    if (!Number.isFinite(target)) return;
+    if (!Number.isFinite(target)) return;
 
 
 
@@ -1653,7 +1773,7 @@ function animateCounterElement(el) {
 
 
 
-    const isTaskCounter = el.classList.contains('count');
+    const isTaskCounter = el.classList.contains('count');
 
 
 
@@ -1661,27 +1781,27 @@ function animateCounterElement(el) {
 
 
 
-    animateValue(
+    animateValue(
 
 
 
-        el,
+        el,
 
 
 
-        target,
+        target,
 
 
 
-        isTaskCounter ? 2200 : 1800,
+        isTaskCounter ? 2200 : 1800,
 
 
 
-        isTaskCounter
+        isTaskCounter
 
 
 
-    );
+    );
 
 
 
@@ -1697,7 +1817,7 @@ function setupCounterObserver() {
 
 
 
-    const counters = document.querySelectorAll('.stat-number, .status-value.count');
+    const counters = document.querySelectorAll('.stat-number, .status-value.count');
 
 
 
@@ -1705,7 +1825,7 @@ function setupCounterObserver() {
 
 
 
-    if (!counters.length) return;
+    if (!counters.length) return;
 
 
 
@@ -1713,19 +1833,19 @@ function setupCounterObserver() {
 
 
 
-    if (!('IntersectionObserver' in window)) {
+    if (!('IntersectionObserver' in window)) {
 
 
 
-        counters.forEach(animateCounterElement);
+        counters.forEach(animateCounterElement);
 
 
 
-        return;
+        return;
 
 
 
-    }
+    }
 
 
 
@@ -1733,7 +1853,7 @@ function setupCounterObserver() {
 
 
 
-    counterObserver?.disconnect();
+    counterObserver?.disconnect();
 
 
 
@@ -1741,47 +1861,47 @@ function setupCounterObserver() {
 
 
 
-    counterObserver = new IntersectionObserver((entries) => {
+    counterObserver = new IntersectionObserver((entries) => {
 
 
 
-        entries.forEach(entry => {
+        entries.forEach(entry => {
 
 
 
-            if (entry.isIntersecting) {
+            if (entry.isIntersecting) {
 
 
 
-                animateCounterElement(entry.target);
+                animateCounterElement(entry.target);
 
 
 
-                counterObserver.unobserve(entry.target);
+                counterObserver.unobserve(entry.target);
 
 
 
-            }
+            }
 
 
 
-        });
+        });
 
 
 
-    }, {
+    }, {
 
 
 
-        threshold: 0,
+        threshold: 0,
 
 
 
-        rootMargin: '0px'
+        rootMargin: '0px'
 
 
 
-    });
+    });
 
 
 
@@ -1789,23 +1909,23 @@ function setupCounterObserver() {
 
 
 
-    counters.forEach(counter => {
+    counters.forEach(counter => {
 
 
 
-        counter.textContent = '0';
+        counter.textContent = '0';
 
 
 
-        counter.dataset.animated = '0';
+        counter.dataset.animated = '0';
 
 
 
-        counterObserver.observe(counter);
+        counterObserver.observe(counter);
 
 
 
-    });
+    });
 
 
 
@@ -1833,7 +1953,7 @@ billingToggle?.addEventListener('change', () => {
 
 
 
-    const yearly = billingToggle.checked;
+    const yearly = billingToggle.checked;
 
 
 
@@ -1841,127 +1961,131 @@ billingToggle?.addEventListener('change', () => {
 
 
 
-    document.querySelectorAll('.amount').forEach(el => {
+    document.querySelectorAll('.period[data-monthly-label][data-yearly-label]').forEach(el => {
+        el.textContent = yearly ? el.dataset.yearlyLabel : el.dataset.monthlyLabel;
+    });
 
+    document.querySelectorAll('.amount').forEach(el => {
 
 
-        const next = +(
 
+        const next = +(
 
 
-            yearly
 
+            yearly
 
 
-                ? el.getAttribute('data-yearly')
 
+                ? el.getAttribute('data-yearly')
 
 
-                : el.getAttribute('data-monthly')
 
+                : el.getAttribute('data-monthly')
 
 
-        );
 
+        );
 
 
 
 
 
 
-        const current = parseInt(el.textContent, 10) || 0;
 
+        const current = parseInt(el.textContent, 10) || 0;
 
 
 
 
 
 
-        el.dataset.animated = '0';
 
+        el.dataset.animated = '0';
 
 
 
 
 
 
-        const start = performance.now();
 
+        const start = performance.now();
 
 
-        const duration = 450;
 
+        const duration = 450;
 
 
 
 
 
 
-        const update = (now) => {
 
+        const update = (now) => {
 
 
-            const progress = Math.min((now - start) / duration, 1);
 
+            const progress = Math.min((now - start) / duration, 1);
 
 
-            const eased = 1 - Math.pow(1 - progress, 3);
 
+            const eased = 1 - Math.pow(1 - progress, 3);
 
 
 
 
 
 
-            el.textContent = Math.round(
 
+            el.textContent = Math.round(
 
 
-                current + (next - current) * eased
 
+                current + (next - current) * eased
 
 
-            );
 
+            );
 
 
 
 
 
 
-            if (progress < 1) {
 
+            if (progress < 1) {
 
 
-                requestAnimationFrame(update);
 
+                requestAnimationFrame(update);
 
 
-            } else {
 
+            } else {
 
 
-                el.textContent = next;
 
+                el.textContent = next;
 
 
-            }
 
+            }
 
 
-        };
 
+        };
 
 
 
 
 
 
-        requestAnimationFrame(update);
 
+        requestAnimationFrame(update);
 
 
-    });
+
+    });
 
 
 
@@ -1981,47 +2105,15 @@ document.querySelectorAll('.faq-question').forEach(btn => {
 
 
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', () => {
 
 
 
-        const item = btn.parentElement;
+        const item = btn.parentElement;
 
 
 
-        const isActive = item.classList.contains('active');
-
-
-
-
-
-
-
-        document.querySelectorAll('.faq-item').forEach(i => {
-
-
-
-            i.classList.remove('active');
-
-
-
-            i.querySelector('.faq-question')?.setAttribute(
-
-
-
-                'aria-expanded',
-
-
-
-                'false'
-
-
-
-            );
-
-
-
-        });
+        const isActive = item.classList.contains('active');
 
 
 
@@ -2029,23 +2121,55 @@ document.querySelectorAll('.faq-question').forEach(btn => {
 
 
 
-        if (!isActive) {
+        document.querySelectorAll('.faq-item').forEach(i => {
 
 
 
-            item.classList.add('active');
+            i.classList.remove('active');
 
 
 
-            btn.setAttribute('aria-expanded', 'true');
+            i.querySelector('.faq-question')?.setAttribute(
 
 
 
-        }
+                'aria-expanded',
 
 
 
-    });
+                'false'
+
+
+
+            );
+
+
+
+        });
+
+
+
+
+
+
+
+        if (!isActive) {
+
+
+
+            item.classList.add('active');
+
+
+
+            btn.setAttribute('aria-expanded', 'true');
+
+
+
+        }
+
+
+
+    });
 
 
 
@@ -2065,187 +2189,187 @@ document.querySelectorAll('.faq-question').forEach(btn => {
 
 document.getElementById('contactForm')?.addEventListener('submit', async (e) => {
 
-    e.preventDefault();
+    e.preventDefault();
 
 
 
-    const form = e.target;
+    const form = e.target;
 
 
 
-    const name = form.elements.name?.value.trim() || '';
+    const name = form.elements.name?.value.trim() || '';
 
-    const email = form.elements.email?.value.trim() || '';
+    const email = form.elements.email?.value.trim() || '';
 
-    const company = form.elements.company?.value.trim() || '';
+    const company = form.elements.company?.value.trim() || '';
 
-    const message = form.elements.message?.value.trim() || '';
+    const message = form.elements.message?.value.trim() || '';
 
 
 
-    if (!name || !email || !message) {
+    if (!name || !email || !message) {
 
-        showToast('⚠ Please fill in all required fields.');
+        showToast('⚠ Please fill in all required fields.');
 
-        return;
+        return;
 
-    }
+    }
 
 
 
-    const submitButton = form.querySelector('button[type="submit"]');
+    const submitButton = form.querySelector('button[type="submit"]');
 
-    const originalButtonText = submitButton?.innerHTML;
+    const originalButtonText = submitButton?.innerHTML;
 
 
 
-    if (submitButton) {
+    if (submitButton) {
 
-        submitButton.disabled = true;
+        submitButton.disabled = true;
 
-        submitButton.innerHTML = 'Sending...';
+        submitButton.innerHTML = 'Sending...';
 
-    }
+    }
 
 
 
-    const finalMessage =
+    const finalMessage =
 
-        `Company: ${company || 'N/A'}\n\n` +
+        `Company: ${company || 'N/A'}\n\n` +
 
-        `Automation request:\n${message}`;
+        `Automation request:\n${message}`;
 
 
 
-    try {
+    try {
 
-        // 1. Save lead to Supabase
+        // 1. Save lead to Supabase
 
-        const response = await fetch(
+        const response = await fetch(
 
-            `${SUPABASE_URL}/rest/v1/Contacts`,
+            `${SUPABASE_URL}/rest/v1/Contacts`,
 
-            {
+            {
 
-                method: 'POST',
+                method: 'POST',
 
-                headers: {
+                headers: {
 
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json',
 
-                    'apikey': SUPABASE_KEY,
+                    'apikey': SUPABASE_KEY,
 
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
 
-                    'Prefer': 'return=minimal'
+                    'Prefer': 'return=minimal'
 
-                },
+                },
 
-                body: JSON.stringify({
+                body: JSON.stringify({
 
-                    name: name,
+                    name: name,
 
-                    email: email,
+                    email: email,
 
-                    message: finalMessage
+                    message: finalMessage
 
-                })
+                })
 
-            }
+            }
 
-        );
+        );
 
 
 
-        if (!response.ok) {
+        if (!response.ok) {
 
-            const errorText = await response.text();
+            const errorText = await response.text();
 
-            console.error('Supabase error:', errorText);
+            console.error('Supabase error:', errorText);
 
-            throw new Error('Submission failed');
+            throw new Error('Submission failed');
 
-        }
+        }
 
 
 
-        // 2. Send email notification through Cloudflare Worker + Resend
+        // 2. Send email notification through Cloudflare Worker + Resend
 
-        try {
+        try {
 
-            const emailResponse = await fetch('/api/contact', {
+            const emailResponse = await fetch('/api/contact', {
 
-                method: 'POST',
+                method: 'POST',
 
-                headers: {
+                headers: {
 
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json'
 
-                },
+                },
 
-                body: JSON.stringify({
+                body: JSON.stringify({
 
-                    name: name,
+                    name: name,
 
-                    email: email,
+                    email: email,
 
-                    company: company,
+                    company: company,
 
-                    message: message
+                    message: message
 
-                })
+                })
 
-            });
+            });
 
 
 
-            if (!emailResponse.ok) {
+            if (!emailResponse.ok) {
 
-                const emailError = await emailResponse.text();
+                const emailError = await emailResponse.text();
 
-                console.error('Resend notification error:', emailError);
+                console.error('Resend notification error:', emailError);
 
-            }
+            }
 
-        } catch (emailError) {
+        } catch (emailError) {
 
-            console.error('Email notification failed:', emailError);
+            console.error('Email notification failed:', emailError);
 
-        }
+        }
 
 
 
-        showToast('✓ Your inquiry has been submitted successfully!');
+        showToast('✓ Your inquiry has been submitted successfully!');
 
-        form.reset();
+        form.reset();
 
 
 
-    } catch (error) {
+    } catch (error) {
 
-        console.error('Contact form error:', error);
+        console.error('Contact form error:', error);
 
-        showToast('✕ Something went wrong. Please try again.');
+        showToast('✕ Something went wrong. Please try again.');
 
 
 
-    } finally {
+    } finally {
 
-        if (submitButton) {
+        if (submitButton) {
 
-            submitButton.disabled = false;
+            submitButton.disabled = false;
 
 
 
-            if (originalButtonText) {
+            if (originalButtonText) {
 
-                submitButton.innerHTML = originalButtonText;
+                submitButton.innerHTML = originalButtonText;
 
-            }
+            }
 
-        }
+        }
 
-    }
+    }
 
 });
 
@@ -2261,19 +2385,11 @@ document.querySelectorAll('.coming-soon-link').forEach(link => {
 
 
 
-    link.addEventListener('click', (e) => {
+    link.addEventListener('click', (e) => {
 
 
 
-        e.preventDefault();
-
-
-
-
-
-
-
-        const page = link.dataset.page || 'This page';
+        e.preventDefault();
 
 
 
@@ -2281,11 +2397,19 @@ document.querySelectorAll('.coming-soon-link').forEach(link => {
 
 
 
-        showToast(`${page} page is not connected yet.`);
+        const page = link.dataset.page || 'This page';
 
 
 
-    });
+
+
+
+
+        showToast(`${page} page is not connected yet.`);
+
+
+
+    });
 
 
 
@@ -2301,7 +2425,7 @@ function showToast(message) {
 
 
 
-    const toast = document.getElementById('toast');
+    const toast = document.getElementById('toast');
 
 
 
@@ -2309,7 +2433,7 @@ function showToast(message) {
 
 
 
-    if (!toast) return;
+    if (!toast) return;
 
 
 
@@ -2317,11 +2441,11 @@ function showToast(message) {
 
 
 
-    toast.textContent = message;
+    toast.textContent = message;
 
 
 
-    toast.classList.add('show');
+    toast.classList.add('show');
 
 
 
@@ -2329,15 +2453,15 @@ function showToast(message) {
 
 
 
-    setTimeout(() => {
+    setTimeout(() => {
 
 
 
-        toast.classList.remove('show');
+        toast.classList.remove('show');
 
 
 
-    }, 3500);
+    }, 3500);
 
 
 
@@ -2373,7 +2497,7 @@ chatbotToggle?.addEventListener('click', () => {
 
 
 
-    chatbotWindow?.classList.toggle('open');
+    chatbotWindow?.classList.toggle('open');
 
 
 
@@ -2381,15 +2505,15 @@ chatbotToggle?.addEventListener('click', () => {
 
 
 
-    const badge = chatbotToggle.querySelector(
+    const badge = chatbotToggle.querySelector(
 
 
 
-        '.ct-badge, .toggle-badge'
+        '.ct-badge, .toggle-badge'
 
 
 
-    );
+    );
 
 
 
@@ -2397,7 +2521,7 @@ chatbotToggle?.addEventListener('click', () => {
 
 
 
-    if (badge) badge.style.display = 'none';
+    if (badge) badge.style.display = 'none';
 
 
 
@@ -2413,7 +2537,7 @@ chatbotClose?.addEventListener('click', () => {
 
 
 
-    chatbotWindow?.classList.remove('open');
+    chatbotWindow?.classList.remove('open');
 
 
 
@@ -2441,11 +2565,11 @@ if (
 
 
 
-    canvas &&
+    canvas &&
 
 
 
-    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 
 
@@ -2453,7 +2577,7 @@ if (
 
 
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
 
 
 
@@ -2461,11 +2585,11 @@ if (
 
 
 
-    let particles = [];
+    let particles = [];
 
 
 
-    let w, h;
+    let w, h;
 
 
 
@@ -2473,7 +2597,7 @@ if (
 
 
 
-    const COUNT = 35;
+    const COUNT = 35;
 
 
 
@@ -2481,19 +2605,19 @@ if (
 
 
 
-    function resize() {
+    function resize() {
 
 
 
-        w = canvas.width = window.innerWidth;
+        w = canvas.width = window.innerWidth;
 
 
 
-        h = canvas.height = window.innerHeight;
+        h = canvas.height = window.innerHeight;
 
 
 
-    }
+    }
 
 
 
@@ -2501,7 +2625,7 @@ if (
 
 
 
-    resize();
+    resize();
 
 
 
@@ -2509,7 +2633,7 @@ if (
 
 
 
-    let resizeTimer;
+    let resizeTimer;
 
 
 
@@ -2517,11 +2641,11 @@ if (
 
 
 
-    window.addEventListener('resize', () => {
+    window.addEventListener('resize', () => {
 
 
 
-        clearTimeout(resizeTimer);
+        clearTimeout(resizeTimer);
 
 
 
@@ -2529,11 +2653,11 @@ if (
 
 
 
-        resizeTimer = setTimeout(resize, 150);
+        resizeTimer = setTimeout(resize, 150);
 
 
 
-    }, { passive: true });
+    }, { passive: true });
 
 
 
@@ -2541,19 +2665,19 @@ if (
 
 
 
-    class Particle {
+    class Particle {
 
 
 
-        constructor() {
+        constructor() {
 
 
 
-            this.reset();
+            this.reset();
 
 
 
-        }
+        }
 
 
 
@@ -2561,31 +2685,31 @@ if (
 
 
 
-        reset() {
+        reset() {
 
 
 
-            this.x = Math.random() * w;
+            this.x = Math.random() * w;
 
 
 
-            this.y = Math.random() * h;
+            this.y = Math.random() * h;
 
 
 
-            this.size = Math.random() * 1.8 + 0.4;
+            this.size = Math.random() * 1.8 + 0.4;
 
 
 
-            this.speedX = (Math.random() - 0.5) * 0.3;
+            this.speedX = (Math.random() - 0.5) * 0.3;
 
 
 
-            this.speedY = (Math.random() - 0.5) * 0.3;
+            this.speedY = (Math.random() - 0.5) * 0.3;
 
 
 
-            this.opacity = Math.random() * 0.4 + 0.1;
+            this.opacity = Math.random() * 0.4 + 0.1;
 
 
 
@@ -2593,23 +2717,23 @@ if (
 
 
 
-            const colors = [
+            const colors = [
 
 
 
-                '139,92,246',
+                '139,92,246',
 
 
 
-                '34,211,238',
+                '34,211,238',
 
 
 
-                '232,121,249'
+                '232,121,249'
 
 
 
-            ];
+            ];
 
 
 
@@ -2617,15 +2741,15 @@ if (
 
 
 
-            this.color =
+            this.color =
 
 
 
-                colors[Math.floor(Math.random() * colors.length)];
+                colors[Math.floor(Math.random() * colors.length)];
 
 
 
-        }
+        }
 
 
 
@@ -2633,15 +2757,15 @@ if (
 
 
 
-        update() {
+        update() {
 
 
 
-            this.x += this.speedX;
+            this.x += this.speedX;
 
 
 
-            this.y += this.speedY;
+            this.y += this.speedY;
 
 
 
@@ -2649,39 +2773,39 @@ if (
 
 
 
-            if (
+            if (
 
 
 
-                this.x < 0 ||
+                this.x < 0 ||
 
 
 
-                this.x > w ||
+                this.x > w ||
 
 
 
-                this.y < 0 ||
+                this.y < 0 ||
 
 
 
-                this.y > h
+                this.y > h
 
 
 
-            ) {
+            ) {
 
 
 
-                this.reset();
+                this.reset();
 
 
 
-            }
+            }
 
 
 
-        }
+        }
 
 
 
@@ -2689,11 +2813,11 @@ if (
 
 
 
-        draw() {
+        draw() {
 
 
 
-            ctx.beginPath();
+            ctx.beginPath();
 
 
 
@@ -2701,31 +2825,31 @@ if (
 
 
 
-            ctx.arc(
+            ctx.arc(
 
 
 
-                this.x,
+                this.x,
 
 
 
-                this.y,
+                this.y,
 
 
 
-                this.size,
+                this.size,
 
 
 
-                0,
+                0,
 
 
 
-                Math.PI * 2
+                Math.PI * 2
 
 
 
-            );
+            );
 
 
 
@@ -2733,11 +2857,11 @@ if (
 
 
 
-            ctx.fillStyle =
+            ctx.fillStyle =
 
 
 
-                `rgba(${this.color},${this.opacity})`;
+                `rgba(${this.color},${this.opacity})`;
 
 
 
@@ -2745,15 +2869,15 @@ if (
 
 
 
-            ctx.fill();
+            ctx.fill();
 
 
 
-        }
+        }
 
 
 
-    }
+    }
 
 
 
@@ -2761,15 +2885,15 @@ if (
 
 
 
-    for (let i = 0; i < COUNT; i++) {
+    for (let i = 0; i < COUNT; i++) {
 
 
 
-        particles.push(new Particle());
+        particles.push(new Particle());
 
 
 
-    }
+    }
 
 
 
@@ -2777,39 +2901,39 @@ if (
 
 
 
-    function connect() {
+    function connect() {
 
 
 
-        for (let i = 0; i < particles.length; i++) {
+        for (let i = 0; i < particles.length; i++) {
 
 
 
-            for (
+            for (
 
 
 
-                let j = i + 1;
+                let j = i + 1;
 
 
 
-                j < Math.min(i + 8, particles.length);
+                j < Math.min(i + 8, particles.length);
 
 
 
-                j++
+                j++
 
 
 
-            ) {
+            ) {
 
 
 
-                const dx =
+                const dx =
 
 
 
-                    particles[i].x - particles[j].x;
+                    particles[i].x - particles[j].x;
 
 
 
@@ -2817,11 +2941,11 @@ if (
 
 
 
-                const dy =
+                const dy =
 
 
 
-                    particles[i].y - particles[j].y;
+                    particles[i].y - particles[j].y;
 
 
 
@@ -2829,11 +2953,11 @@ if (
 
 
 
-                const dist =
+                const dist =
 
 
 
-                    dx * dx + dy * dy;
+                    dx * dx + dy * dy;
 
 
 
@@ -2841,11 +2965,11 @@ if (
 
 
 
-                if (dist < 10000) {
+                if (dist < 10000) {
 
 
 
-                    ctx.beginPath();
+                    ctx.beginPath();
 
 
 
@@ -2853,11 +2977,11 @@ if (
 
 
 
-                    ctx.strokeStyle =
+                    ctx.strokeStyle =
 
 
 
-                        `rgba(139,92,246,${0.06 * (1 - dist / 10000)})`;
+                        `rgba(139,92,246,${0.06 * (1 - dist / 10000)})`;
 
 
 
@@ -2865,7 +2989,7 @@ if (
 
 
 
-                    ctx.lineWidth = 0.4;
+                    ctx.lineWidth = 0.4;
 
 
 
@@ -2873,19 +2997,19 @@ if (
 
 
 
-                    ctx.moveTo(
+                    ctx.moveTo(
 
 
 
-                        particles[i].x,
+                        particles[i].x,
 
 
 
-                        particles[i].y
+                        particles[i].y
 
 
 
-                    );
+                    );
 
 
 
@@ -2893,19 +3017,19 @@ if (
 
 
 
-                    ctx.lineTo(
+                    ctx.lineTo(
 
 
 
-                        particles[j].x,
+                        particles[j].x,
 
 
 
-                        particles[j].y
+                        particles[j].y
 
 
 
-                    );
+                    );
 
 
 
@@ -2913,23 +3037,23 @@ if (
 
 
 
-                    ctx.stroke();
+                    ctx.stroke();
 
 
 
-                }
+                }
 
 
 
-            }
+            }
 
 
 
-        }
+        }
 
 
 
-    }
+    }
 
 
 
@@ -2937,7 +3061,7 @@ if (
 
 
 
-    let last = 0;
+    let last = 0;
 
 
 
@@ -2945,15 +3069,15 @@ if (
 
 
 
-    function animate(t) {
+    function animate(t) {
 
 
 
-        if (t - last > 32) {
+        if (t - last > 32) {
 
 
 
-            last = t;
+            last = t;
 
 
 
@@ -2961,27 +3085,27 @@ if (
 
 
 
-            ctx.clearRect(
+            ctx.clearRect(
 
 
 
-                0,
+                0,
 
 
 
-                0,
+                0,
 
 
 
-                w,
+                w,
 
 
 
-                h
+                h
 
 
 
-            );
+            );
 
 
 
@@ -2989,19 +3113,19 @@ if (
 
 
 
-            particles.forEach(p => {
+            particles.forEach(p => {
 
 
 
-                p.update();
+                p.update();
 
 
 
-                p.draw();
+                p.draw();
 
 
 
-            });
+            });
 
 
 
@@ -3009,11 +3133,11 @@ if (
 
 
 
-            connect();
+            connect();
 
 
 
-        }
+        }
 
 
 
@@ -3021,11 +3145,11 @@ if (
 
 
 
-        requestAnimationFrame(animate);
+        requestAnimationFrame(animate);
 
 
 
-    }
+    }
 
 
 
@@ -3033,94 +3157,39 @@ if (
 
 
 
-    requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
 
 
 }
 
-// ===============================
-// JEVEXA Protected CTA System
-// ===============================
-document.addEventListener('click', async function (event) {
-
-    const button = event.target.closest('a, button');
-
-    if (!button) return;
-
-    const text = button.textContent.trim().toLowerCase();
-
-    const protectedCTA =
-        text.includes('get started') ||
-        text.includes('start free trial') ||
-        text.includes('contact sales') ||
-        text.includes('custom sales');
-
-    // Not a protected CTA
-    if (!protectedCTA) return;
-
-    // Check the REAL Supabase login session
-    if (!supabaseClient) {
-        event.preventDefault();
-        showSupabaseUnavailable();
-        return;
-    }
-    const { data } = await supabaseClient.auth.getSession();
-
-    const loggedInUser = data?.session?.user || null;
-
-    // ===============================
-    // USER IS ALREADY LOGGED IN
-    // ===============================
-    if (loggedInUser) {
-
-        currentUser = loggedInUser;
-
-        // Do NOT show login page.
-        // Allow the original button action to continue.
-        return;
-    }
-
-    // ===============================
-    // USER IS NOT LOGGED IN
-    // ===============================
-    event.preventDefault();
-    event.stopPropagation();
-
-    openLogin();
-
-});
 // ===== JEVEXA PRICING PLANS =====
 const JEVEXA_PLANS = {
-    starter: {
-        name: 'Starter',
-        monthly: 19,
-        yearly: 15,
-        credits: 2000
-    },
-    pro: {
-        name: 'Pro',
-        monthly: 49,
-        yearly: 39,
-        credits: 10000
-    },
-    business: {
-        name: 'Business',
-        monthly: 99,
-        yearly: 79,
-        credits: 30000
-    }
+    starter: { name: 'Starter' },
+    pro: { name: 'Pro' },
+    business: { name: 'Business' }
 };
 // ============================================================
 // JEVEXA CONSOLIDATED SETTINGS + PRICING CONTROLLER
 // Core account controls are real; billing checkout and AI providers
-// must be configured server-side before subscription/AI execution.
+// must be configured server-side before checkout/AI execution.
 // ============================================================
 (function () {
     const toast = message => {
         if (typeof showToast === 'function') showToast(message);
         else console.info('[JEVEXA]', message);
     };
+    const sandboxCheckoutAvailable = window.JEVEXA_SUPABASE_CONFIG?.safepaySandboxEnabled === true;
+    const checkoutNotice = document.getElementById('pricingCheckoutNotice');
+    if (checkoutNotice && sandboxCheckoutAvailable) {
+        checkoutNotice.textContent = 'Safepay sandbox checkout is enabled for staging tests only. Purchases are one-time and do not auto-renew.';
+    }
+    document.querySelectorAll('[data-plan]').forEach(button => {
+        const plan = JEVEXA_PLANS[button.dataset.plan];
+        if (!plan) return;
+        button.disabled = !sandboxCheckoutAvailable;
+        button.textContent = sandboxCheckoutAvailable ? `Choose ${plan.name} (staging)` : 'Coming Soon';
+    });
     const safeTheme = theme => ['dark', 'light', 'system'].includes(theme) ? theme : 'dark';
 
     function applyThemeChoice(theme, button) {
@@ -3145,7 +3214,7 @@ const JEVEXA_PLANS = {
         if (planButton) {
             event.preventDefault();
             event.stopImmediatePropagation();
-            if (window.JEVEXA_SUPABASE_CONFIG?.safepaySandboxEnabled !== true) {
+            if (!sandboxCheckoutAvailable) {
                 toast('Paid checkout is not available yet. Live payments require merchant approval, production credentials and a verified signed webhook.');
                 return;
             }
@@ -3153,7 +3222,15 @@ const JEVEXA_PLANS = {
             const cycle = document.getElementById('billingToggle')?.checked ? 'yearly' : 'monthly';
             if (!plan) { toast('This plan is not available.'); return; }
             if (!currentUser) { openLogin(); return; }
-            const { data: sessionData } = await supabaseClient.auth.getSession();
+            let sessionData;
+            try {
+                ({ data: sessionData } = await supabaseClient.auth.getSession());
+            } catch (error) {
+                console.error('Checkout session verification failed:', error);
+                toast('Could not verify your session. Please sign in again.');
+                openLogin();
+                return;
+            }
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) { toast('Your session expired. Please sign in again.'); openLogin(); return; }
             const originalText = planButton.textContent;

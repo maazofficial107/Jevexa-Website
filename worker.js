@@ -25,7 +25,7 @@ function escapeHtml(value = "") {
 
 const SYSTEM_PROMPT = `You are JEVEXA AI Assistant — a friendly, smart and natural AI for JEVEXA AI Automation Studio.
 
-JEVEXA currently provides a Gemini-backed AI chatbot, Supabase account sign-in, and a credit wallet.
+JEVEXA currently provides an AI chat assistant, account sign-in, and a credit wallet.
 
 PERSONALITY:
 - Talk like a real helpful human, not a robot.
@@ -44,10 +44,10 @@ RULES:
 - Only reply with normal text. No markdown tables unless really needed.
 
 CURRENT PRODUCT LIMITS:
-- The only implemented AI provider service is this Gemini-backed chatbot. The other eleven catalog services are unavailable; do not describe them as working.
+- The only implemented AI provider service is the JEVEXA chat assistant. The other eleven catalog services are unavailable; do not describe them as working.
 - The app includes Supabase sign-in, a credit wallet, transaction history, and server-side credit reservation and settlement. Do not claim live database behavior unless it has been verified.
-- Safepay checkout is restricted to an explicitly configured staging sandbox. Live payments, recurring subscriptions, automatic renewals, refunds, and merchant approval are not confirmed.
-- The displayed packages are one-time credit packages in staging, not live subscriptions. Do not promise workflow builders, third-party integrations, compliance certifications, 24/7 support, white-labeling, or enterprise features.
+- Paid checkout is not available in production until merchant approval, production credentials, and a verified webhook are configured. Do not promise workflow builders, third-party integrations, compliance certifications, 24/7 support, white-labeling, or enterprise features.
+- The displayed packages are one-time credit packages, not live subscriptions. Do not promise workflow builders, third-party integrations, compliance certifications, 24/7 support, white-labeling, or enterprise features.
 
 SALES STYLE:
 - First understand what the user actually needs.
@@ -55,10 +55,19 @@ SALES STYLE:
 - Be helpful, not pushy.`;
 
 const CHAT_MAX_OUTPUT_TOKENS = 550;
+const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 const CHAT_MAX_ESTIMATED_TOKENS = 50000;
 const REQUEST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STAGING_SUPABASE_HOST = "qibnzlmgewlwzdrihcrs.supabase.co";
 const PRODUCTION_SUPABASE_HOST = "byopcuspgnhwsrmsxqvm.supabase.co";
+
+function getGeminiModel(env) {
+  const configured = String(env.GEMINI_MODEL || "").trim();
+  // Only allow a model identifier, never a URL/path or arbitrary user-controlled string.
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(configured)
+    ? configured
+    : DEFAULT_GEMINI_MODEL;
+}
 
 function parseChatPayload(body) {
   const message = typeof body?.message === "string" ? body.message.trim() : "";
@@ -161,7 +170,7 @@ async function handleCreditQuote(request, env) {
     return json({
       estimatedCredits: result,
       estimatedTokens: parsed.estimatedTokens,
-      pricing: "Maximum reservation; final charge uses Gemini-reported token usage."
+      pricing: "Maximum reservation; final charge uses provider-reported token usage."
     });
   } catch (error) {
     console.error("Credit quote request failed:", error?.message || "network");
@@ -353,7 +362,7 @@ async function handleChat(request, env) {
   let data;
   try {
     response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(getGeminiModel(env))}:generateContent`,
       {
         method: "POST",
         signal: controller.signal,
@@ -368,9 +377,8 @@ async function handleChat(request, env) {
             { role: "user", parts: [{ text: parsed.message }] }
           ],
           generationConfig: {
-            temperature: 0.7,
             maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
-            topP: 0.9
+            thinkingConfig: { thinkingLevel: "low" }
           }
         })
       }
@@ -391,9 +399,14 @@ async function handleChat(request, env) {
   }
 
   if (!response.ok) {
-    console.error("Gemini status:", response.status, requestId);
+    const providerStatus = String(data?.error?.status || "unknown").slice(0, 80);
+    const providerMessage = String(data?.error?.message || "No provider error message").replace(/[\r\n\t]+/g, " ").slice(0, 240);
+    console.error("Gemini request rejected:", response.status, providerStatus, providerMessage, requestId);
     if (response.status === 429) {
       return releaseWithError("AI is busy right now. Reserved credits were released; please try again shortly.", 429);
+    }
+    if (response.status === 400 || response.status === 404) {
+      return releaseWithError("AI model configuration needs attention. Reserved credits were released.", 502);
     }
     if (response.status === 401 || response.status === 403) {
       return releaseWithError("AI service configuration needs attention. Reserved credits were released.", 502);
@@ -539,9 +552,9 @@ async function handleContact(request, env) {
 
 // ---- Safepay sandbox checkout and signed webhook ----
 const BILLING_PLANS = {
-  starter: { name: "Starter", monthlyPrice: 19, yearlyMonthlyPrice: 15, monthlyCredits: 2000 },
-  pro: { name: "Pro", monthlyPrice: 49, yearlyMonthlyPrice: 39, monthlyCredits: 10000 },
-  business: { name: "Business", monthlyPrice: 99, yearlyMonthlyPrice: 79, monthlyCredits: 30000 }
+  starter: { name: "Starter", monthlyPrice: 5, yearlyPrice: 48, monthlyCredits: 2000 },
+  pro: { name: "Pro", monthlyPrice: 12, yearlyPrice: 115, monthlyCredits: 10000 },
+  business: { name: "Business", monthlyPrice: 25, yearlyPrice: 240, monthlyCredits: 30000 }
 };
 
 function getPublicSupabaseConfig(env) {
@@ -591,7 +604,13 @@ function handleClientConfig(request, env) {
       url: cfg.url,
       anonKey: cfg.anon,
       safepaySandboxEnabled: isStagingSandboxEnabled(env, cfg)
-        && Boolean(env.SAFEPAY_API_KEY && env.SAFEPAY_SECRET_KEY && env.SAFEPAY_WEBHOOK_SECRET)
+        && [
+          env.SUPABASE_SERVICE_ROLE_KEY,
+          env.SAFEPAY_API_KEY,
+          env.SAFEPAY_SECRET_KEY,
+          env.SAFEPAY_WEBHOOK_SECRET
+        ]
+          .every(value => String(value || "").trim().length > 0)
     })};`,
     {
       headers: {
@@ -658,7 +677,7 @@ async function createSafepayCheckout(request, env) {
   if (!plan || !["monthly", "yearly"].includes(cycle)) return json({ error: "Invalid plan or billing cycle." }, 400);
 
   // Prices and credits are server-owned; never accept client-submitted amounts.
-  const price = cycle === "yearly" ? plan.yearlyMonthlyPrice * 12 : plan.monthlyPrice;
+  const price = cycle === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
   const credits = plan.monthlyCredits * (cycle === "yearly" ? 12 : 1);
   let orderId;
   const origin = new URL(request.url).origin;

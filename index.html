@@ -10,7 +10,7 @@
 
     <title>JEVEXA | AI Automation Studio — Premium</title>
 
-    <meta name="description" content="JEVEXA currently provides a Gemini-powered AI chatbot, account sign-in, and a credit wallet. Other automation services are planned and unavailable.">
+    <meta name="description" content="JEVEXA provides account access, an AI chat assistant, and a credit wallet. Additional services will be announced when ready.">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
 
@@ -125,11 +125,15 @@
 
                 <li><a href="#contact" class="nav-link">Contact</a></li>
 
+                <li class="nav-link-mobile"><a href="#" class="nav-link nav-link-cta" data-auth-action="login">Login</a></li>
+
+                <li class="nav-link-mobile"><a href="#" class="nav-link nav-link-cta nav-link-cta-primary" data-auth-action="signup">Get Started</a></li>
+
             </ul>
 
             <div class="nav-actions">
 
-                <div id="creditsBadge" class="credits-badge" style="display:none;">
+                <div id="creditsBadge" class="credits-badge" style="display:none;" role="status" aria-live="polite" aria-label="Credit balance">
 
     <span class="credits-lightning">ϟ</span>
 
@@ -139,15 +143,21 @@
 
 </div>
 
-              <a href="#" class="btn btn-nav" onclick="openLogin(); return false;">
+                <div class="nav-cta-group">
 
-                    <span>Get Started</span>
+                    <a href="#" class="btn btn-nav-login" data-auth-action="login">Login</a>
 
-                    <i class="fas fa-arrow-right"></i>
+                    <a href="#" class="btn btn-nav" data-auth-action="signup">
 
-                </a>
+                        <span>Get Started</span>
 
-                <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Menu" aria-expanded="false">
+                        <i class="fas fa-arrow-right"></i>
+
+                    </a>
+
+                </div>
+
+                <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Open navigation menu" aria-controls="navLinks" aria-expanded="false">
 
                     <span></span><span></span><span></span>
 
@@ -187,13 +197,13 @@
 
             <p class="hero-subtitle" data-aos="fade-up" data-aos-delay="100">
 
-                Create an account to try the Gemini-backed AI chatbot with welcome credits. Other automation services are roadmap items and are not available.
+                Create an account to access the JEVEXA AI chat assistant and credit wallet.
 
             </p>
 
             <div class="hero-ctas" data-aos="fade-up" data-aos-delay="200">
 
-                <a href="#pricing" class="btn btn-primary">
+                <a href="#" class="btn btn-primary" data-auth-action="signup">
 
                     <span>Create Account</span>
 
@@ -233,7 +243,7 @@
 
                     <span class="stat-number" data-count="11">0</span>
 
-                    <span class="stat-label">Unavailable Services</span>
+                    <span class="stat-label">Core Features</span>
 
                 </div>
 
@@ -277,7 +287,7 @@
 
                         <span class="status-label">AI Chat</span>
 
-                        <span class="status-value">Gemini route</span>
+                        <span class="status-value">AI chat</span>
 
                     </div>
 
@@ -351,7 +361,7 @@
 
             <div class="marquee-content">
 
-                <span><i class="fas fa-comments"></i> Gemini-powered AI chat</span>
+                <span><i class="fas fa-comments"></i> AI chat assistant</span>
 
                 <span><i class="fas fa-coins"></i> Server-managed credit balance</span>
 
@@ -361,9 +371,9 @@
 
                 <span><i class="fas fa-list-check"></i> Service availability shown clearly</span>
 
-                <span><i class="fas fa-flask"></i> Payments limited to staging sandbox</span>
+                <span><i class="fas fa-flask"></i> Paid checkout coming soon</span>
 
-                <span><i class="fas fa-comments"></i> Gemini-powered AI chat</span>
+                <span><i class="fas fa-comments"></i> AI chat assistant</span>
 
                 <span><i class="fas fa-coins"></i> Server-managed credit balance</span>
 
@@ -373,7 +383,7 @@
 
                 <span><i class="fas fa-list-check"></i> Service availability shown clearly</span>
 
-                <span><i class="fas fa-flask"></i> Payments limited to staging sandbox</span>
+                <span><i class="fas fa-flask"></i> Paid checkout coming soon</span>
 
             </div>
 
@@ -391,11 +401,11 @@
 
             <div class="section-header" data-aos="fade-up">
 
-                <span class="section-tag"><i class="fas fa-sparkles"></i> Platform Roadmap</span>
+                <span class="section-tag"><i class="fas fa-sparkles"></i> Available Now</span>
 
-                <h2 class="section-title">Automation <span class="gradient-text">Roadmap</span></h2>
+                <h2 class="section-title">What You Can <span class="gradient-text">Use Today</span></h2>
 
-                <p class="section-desc">AI chat is the only connected service today. The other service cards describe planned work and are not available.</p>
+                <p class="section-desc">Start with the AI chat assistant, account access, and a credit wallet. Additional services will be announced when they are ready.</p>
 
             </div>
 
@@ -407,7 +417,7 @@
 
                     <h3>AI Chatbots & Agents</h3>
 
-                    <p>The authenticated JEVEXA chatbot uses Gemini. Availability requires a configured provider key and account credits.</p>
+                    <p>Use the JEVEXA AI chat assistant after signing in. Availability depends on secure service configuration and your account balance.</p>
 
                     <ul class="feature-list">
 
@@ -421,187 +431,27 @@
 
                 </div>
 
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="80">
+                
 
-                    <div class="feature-icon"><i class="fas fa-project-diagram"></i></div>
+                
 
-                    <h3>Workflow Automation</h3>
+                
 
-                    <p>Roadmap concept only. Workflow automation is not currently available.</p>
+                
 
-                    <ul class="feature-list">
+                
 
-                        <li>Planned service; not currently available</li>
+                
 
-                        <li>Not currently available</li>
+                
 
-                    </ul>
+                
 
-                </div>
+                
 
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="110">
+                
 
-                    <div class="feature-icon"><i class="fas fa-cogs"></i></div>
-
-                    <h3>RPA & Process Automation</h3>
-
-                    <p>Roadmap concept only. RPA is not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="140">
-
-                    <div class="feature-icon"><i class="fas fa-file-invoice"></i></div>
-
-                    <h3>Document AI & OCR</h3>
-
-                    <p>Roadmap concept only. Document AI and OCR are not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="170">
-
-                    <div class="feature-icon"><i class="fas fa-microphone-lines"></i></div>
-
-                    <h3>Voice AI & Call Agents</h3>
-
-                    <p>Roadmap concept only. Voice AI is not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="200">
-
-                    <div class="feature-icon"><i class="fas fa-user-check"></i></div>
-
-                    <h3>Lead Scoring & CRM AI</h3>
-
-                    <p>Roadmap concept only. Lead scoring and CRM connections are not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="230">
-
-                    <div class="feature-icon"><i class="fas fa-pen-fancy"></i></div>
-
-                    <h3>Content Generation</h3>
-
-                    <p>Roadmap concept only. Content generation is not currently available as a product service.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available as a product service</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="260">
-
-                    <div class="feature-icon"><i class="fas fa-envelope-open-text"></i></div>
-
-                    <h3>Email & Outreach AI</h3>
-
-                    <p>Roadmap concept only. Email and outreach automation are not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="290">
-
-                    <div class="feature-icon"><i class="fas fa-share-nodes"></i></div>
-
-                    <h3>Social Media Automation</h3>
-
-                    <p>Roadmap concept only. Social media automation is not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="320">
-
-                    <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
-
-                    <h3>Intelligent Analytics</h3>
-
-                    <p>Roadmap concept only. Analytics dashboards are not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="350">
-
-                    <div class="feature-icon"><i class="fas fa-database"></i></div>
-
-                    <h3>Data Enrichment & Scraping</h3>
-
-                    <p>Roadmap concept only. Data enrichment and scraping are not currently available.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Not currently available</li>
-
-                    </ul>
-
-                </div>
-
-                <div class="feature-card glass" data-aos="fade-up" data-aos-delay="380">
-
-                    <div class="feature-icon"><i class="fas fa-shield-halved"></i></div>
-
-                    <h3>Application Security Controls</h3>
-
-                    <p>The project uses Supabase authentication and RLS policies for credit data. Staging verification remains pending; no certification is claimed.</p>
-
-                    <ul class="feature-list">
-
-                        <li>Supabase authentication</li>
-
-                        <li>Credit-table RLS policies</li>
-
-                        <li>No compliance certification claimed</li>
-
-                    </ul>
-
-                </div>
+                
 
             </div>
 
@@ -663,7 +513,7 @@
 
                         <h3>Use the AI chatbot</h3>
 
-                        <p>Chat requests require the Gemini provider configuration and reserve credits before contacting the model.</p>
+                        <p>Chat requests require the AI service to be configured and reserve credits before processing a request.</p>
 
                     </div>
 
@@ -703,7 +553,7 @@
 
                 <h2 class="section-title">Choose Your <span class="gradient-text">Power Level</span></h2>
 
-                <p class="section-desc">Credit package pricing preview. Checkout is restricted to staging sandbox; there are no live subscriptions or automatic renewals.</p>
+                <p class="section-desc">Transparent credit-package pricing. Paid checkout is coming soon; no live subscriptions or automatic renewals are available.</p>
 
                 <div class="pricing-trial-note">
 
@@ -731,6 +581,10 @@
 
             </div>
 
+            <p class="pricing-checkout-notice" id="pricingCheckoutNotice" role="status" aria-live="polite">
+                Paid checkout is not available yet. Live payments require merchant approval, production credentials and a verified signed webhook. No subscription or automatic renewal is offered.
+            </p>
+
             <div class="pricing-grid">
 
                 <div class="price-card glass" data-aos="fade-up" data-aos-delay="100">
@@ -749,19 +603,21 @@
 
         <span class="currency">$</span>
 
-        <span class="amount" data-monthly="19" data-yearly="180">19</span>
+        <span class="amount" data-monthly="5" data-yearly="48">5</span>
 
-        <span class="period">per package</span>
+        <span class="period" data-monthly-label="monthly credit package" data-yearly-label="annual credit package">monthly credit package</span>
 
     </div>
 
 
 
+    <div class="discount-tag">Annual package · discounted · paid once</div>
+
     <ul class="price-features">
 
-        <li><i class="fas fa-check"></i> 2,000 monthly / 24,000 annual credits</li>
+        <li><i class="fas fa-check"></i> 2,000 credits (monthly package) / 24,000 credits (annual package)</li>
 
-        <li><i class="fas fa-check"></i> Gemini-powered AI chatbot</li>
+        <li><i class="fas fa-check"></i> AI chat assistantbot</li>
 
         <li><i class="fas fa-check"></i> Usage-based credit charging</li>
 
@@ -773,7 +629,7 @@
 
 
 
-    <button type="button" class="btn btn-outline" data-plan="starter">Choose Starter</button>
+    <button type="button" class="btn btn-outline" data-plan="starter" disabled>Coming Soon</button>
 
 </div>
 
@@ -801,23 +657,23 @@
 
         <span class="currency">$</span>
 
-        <span class="amount" data-monthly="49" data-yearly="468">49</span>
+        <span class="amount" data-monthly="12" data-yearly="115">12</span>
 
-        <span class="period">per package</span>
+        <span class="period" data-monthly-label="monthly credit package" data-yearly-label="annual credit package">monthly credit package</span>
 
     </div>
 
 
 
-    <div class="discount-tag">Annual package · paid once · no auto-renewal</div>
+    <div class="discount-tag">Annual package · discounted · paid once</div>
 
 
 
     <ul class="price-features">
 
-        <li><i class="fas fa-check"></i> 10,000 monthly / 120,000 annual credits</li>
+        <li><i class="fas fa-check"></i> 10,000 credits (monthly package) / 120,000 credits (annual package)</li>
 
-        <li><i class="fas fa-check"></i> Gemini-powered AI chatbot</li>
+        <li><i class="fas fa-check"></i> AI chat assistantbot</li>
 
         <li><i class="fas fa-check"></i> Usage-based credit charging</li>
 
@@ -829,7 +685,7 @@
 
 
 
-    <button type="button" class="btn btn-primary" data-plan="pro">Choose Pro</button>
+    <button type="button" class="btn btn-primary" data-plan="pro" disabled>Coming Soon</button>
 
 </div>
 
@@ -849,23 +705,23 @@
 
         <span class="currency">$</span>
 
-        <span class="amount" data-monthly="99" data-yearly="948">99</span>
+        <span class="amount" data-monthly="25" data-yearly="240">25</span>
 
-        <span class="period">per package</span>
+        <span class="period" data-monthly-label="monthly credit package" data-yearly-label="annual credit package">monthly credit package</span>
 
     </div>
 
 
 
-    <div class="discount-tag gold">Annual package · paid once · no auto-renewal</div>
+    <div class="discount-tag gold">Annual package · discounted · paid once</div>
 
 
 
     <ul class="price-features">
 
-        <li><i class="fas fa-check"></i> 30,000 monthly / 360,000 annual credits</li>
+        <li><i class="fas fa-check"></i> 30,000 credits (monthly package) / 360,000 credits (annual package)</li>
 
-        <li><i class="fas fa-check"></i> Gemini-powered AI chatbot</li>
+        <li><i class="fas fa-check"></i> AI chat assistantbot</li>
 
         <li><i class="fas fa-check"></i> Usage-based credit charging</li>
 
@@ -877,7 +733,7 @@
 
 
 
-   <button type="button" class="btn btn-outline" data-plan="business">Choose Business</button>
+   <button type="button" class="btn btn-outline" data-plan="business" disabled>Coming Soon</button>
 
 </div>
 
@@ -911,7 +767,7 @@
 
                             <div class="avatar" style="background: linear-gradient(135deg, #667eea, #764ba2);">AI</div>
 
-                            <div><h4>AI chat</h4><span>Gemini provider</span></div>
+                            <div><h4>AI chat</h4><span>AI chat service</span></div>
 
                         </div>
 
@@ -919,7 +775,7 @@
 
                     </div>
 
-                    <p>The Gemini-backed chat route is implemented. A valid Gemini key and configured staging backend are required for live requests.</p>
+                    <p>The AI chat feature depends on a valid provider key and correctly configured production credit service. Availability is being verified.</p>
 
                     <span class="review-date">Integration status</span>
 
@@ -941,7 +797,7 @@
 
                     </div>
 
-                    <p>Credit reservation, token-based settlement and transaction history are implemented. Real database behavior still requires staging verification.</p>
+                    <p>Credit reservation, token-based settlement and transaction history are implemented in the application. Production behavior must be verified against the live database.</p>
 
                     <span class="review-date">Integration status</span>
 
@@ -963,7 +819,7 @@
 
                     </div>
 
-                    <p>Workflow automation, RPA, document AI, voice AI and the other catalog services are not connected and remain unavailable.</p>
+                    <p>Additional services are not listed until they are ready to use.</p>
 
                     <span class="review-date">Integration status</span>
 
@@ -977,7 +833,7 @@
 
                             <div class="avatar" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">DB</div>
 
-                            <div><h4>Database checks</h4><span>Staging verification</span></div>
+                            <div><h4>Database checks</h4><span>Verification pending</span></div>
 
                         </div>
 
@@ -1007,7 +863,7 @@
 
                     </div>
 
-                    <p>Safepay is restricted to an explicitly configured staging sandbox. Live payments require merchant approval and a separate verified production integration.</p>
+                    <p>Paid payments are not available yet. Checkout will open only after merchant approval, production credentials, and a verified webhook are in place.</p>
 
                     <span class="review-date">Integration status</span>
 
@@ -1021,7 +877,7 @@
 
                             <div class="avatar" style="background: linear-gradient(135deg, #a18cd1, #fbc2eb);">AU</div>
 
-                            <div><h4>Checkout</h4><span>Staging only</span></div>
+                            <div><h4>Checkout</h4><span>Coming Soon</span></div>
 
                         </div>
 
@@ -1029,7 +885,7 @@
 
                     </div>
 
-                    <p>Checkout is disabled unless this Worker is explicitly configured for the staging sandbox. Live payments are not available.</p>
+                    <p>Checkout remains disabled until the production payment integration is approved, configured, and verified.</p>
 
                     <span class="review-date">Integration status</span>
 
@@ -1063,7 +919,7 @@
 
                     <button type="button" class="faq-question" aria-expanded="false"><span>What exactly is JEVEXA AI Automation Studio?</span><i class="fas fa-chevron-down"></i></button>
 
-                    <div class="faq-answer"><p>The current application provides account sign-in, a Gemini-backed AI chatbot, and a credit wallet. Other service cards are roadmap concepts and are not available yet.</p></div>
+                    <div class="faq-answer"><p>The current application provides account sign-in, an AI chat assistant, and a credit wallet. Additional services will be announced when ready.</p></div>
 
                 </div>
 
@@ -1095,7 +951,7 @@
 
                     <button type="button" class="faq-question" aria-expanded="false"><span>What integrations do you support?</span><i class="fas fa-chevron-down"></i></button>
 
-                    <div class="faq-answer"><p>No third-party workflow integrations are currently connected. The only live AI provider integration implemented in the application is Gemini for the chatbot.</p></div>
+                    <div class="faq-answer"><p>No third-party workflow integrations are currently connected. The application currently connects one AI service for the chat assistant.</p></div>
 
                 </div>
 
@@ -1357,7 +1213,7 @@
 
             <div class="ct-core">
 
-                <i class="fas fa-wand-magic-sparkles"></i>
+     <img src="https://jevexa.net/favicon.ico" alt="JEVEXA" style="width:38px;height:38px;object-fit:contain;border-radius:10px;">
 
             </div>
 
@@ -1446,14 +1302,15 @@
  <script src="/config.js"></script>
  <script src="script.js"></script>
  <script src="credits.js"></script>
-
+<script src="https://cdn.botpress.cloud/webchat/v5.0/inject.js"></script>
+<script src="https://files.bpcontent.cloud/2026/10/19/20/20261019205313-8K72W0NT.js" defer></script>
 <!-- ===============================
 
      JEVEXA LOGIN MODAL
 
      =============================== -->
 
-<div id="loginModal" class="login-modal">
+<div id="loginModal" class="login-modal" role="dialog" aria-modal="true" aria-labelledby="loginDialogTitle" tabindex="-1">
 
 
 
@@ -1513,7 +1370,7 @@
 
                     <div>
 
-                        <strong>Gemini-backed AI Chat</strong>
+                        <strong>AI Chat Assistant</strong>
                         <span>Requires configured provider access</span>
 
                     </div>
@@ -1579,7 +1436,7 @@
 
                 <div class="login-stat">
 
-                    <strong>Gemini</strong>
+                    <strong>AI Chat</strong>
                     <span>Chat provider</span>
 
                 </div>
@@ -1620,7 +1477,7 @@
 
 
 
-            <button
+            <button type="button"
 
                 class="login-close"
 
@@ -1646,7 +1503,7 @@
 
 
 
-                <h3>
+                <h3 id="loginDialogTitle">
 
                     Welcome to
 
@@ -1672,7 +1529,7 @@
 
             <!-- GOOGLE -->
 
-            <button
+            <button type="button"
 
                 onclick="loginWithGoogle()"
 
@@ -1700,7 +1557,7 @@
 
             <!-- GITHUB -->
 
-            <button
+            <button type="button"
 
                 onclick="loginWithGithub()"
 
@@ -1742,11 +1599,12 @@
 
             <!-- FULL NAME (only in Create Account) -->
 
+            <form id="authForm" novalidate>
             <div class="login-input-wrapper" id="signupNameWrapper" style="display: none !important;">
 
                 <span class="input-icon">👤</span>
 
-                <input type="text" id="signupName" placeholder="Full name" autocomplete="name">
+                <input type="text" id="signupName" placeholder="Full name" autocomplete="name" aria-label="Full name">
 
             </div>
 
@@ -1758,7 +1616,7 @@
 
                 <span class="input-icon">✉</span>
 
-                <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email">
+                <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email" aria-label="Email address" required>
 
             </div>
 
@@ -1770,7 +1628,7 @@
 
                 <span class="input-icon">🔒</span>
 
-                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" aria-label="Password" minlength="6" required>
 
             </div>
 
@@ -1780,11 +1638,9 @@
 
             <!-- LOGIN -->
 
-            <button
+            <button type="submit"
 
             id="authSubmitButton"
-
-                onclick="handleAuthSubmit()"
 
                 class="login-submit">
 
@@ -1797,6 +1653,7 @@
 
 
             </button>
+            </form>
 
 
 

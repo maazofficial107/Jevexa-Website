@@ -142,6 +142,7 @@ test("Safepay sandbox configuration is restricted to the verified staging projec
     SUPABASE_URL: "https://qibnzlmgewlwzdrihcrs.supabase.co",
     SUPABASE_ANON_KEY: "staging-publishable-key",
     JEVEXA_ENVIRONMENT: "staging",
+    SUPABASE_SERVICE_ROLE_KEY: "staging-service-role",
     SAFEPAY_API_KEY: "sandbox-public-key",
     SAFEPAY_SECRET_KEY: "sandbox-secret",
     SAFEPAY_WEBHOOK_SECRET: "sandbox-webhook-secret"
@@ -156,6 +157,15 @@ test("Safepay sandbox configuration is restricted to the verified staging projec
   });
   assert.match(await stagingResponse.text(), /"safepaySandboxEnabled":true/);
   assert.match(await productionResponse.text(), /"safepaySandboxEnabled":false/);
+  const missingServiceKeyResponse = await worker.fetch(makeRequest("/config.js"), {
+    SUPABASE_URL: "https://qibnzlmgewlwzdrihcrs.supabase.co",
+    SUPABASE_ANON_KEY: "staging-publishable-key",
+    JEVEXA_ENVIRONMENT: "staging",
+    SAFEPAY_API_KEY: "sandbox-public-key",
+    SAFEPAY_SECRET_KEY: "sandbox-secret",
+    SAFEPAY_WEBHOOK_SECRET: "sandbox-webhook-secret"
+  });
+  assert.match(await missingServiceKeyResponse.text(), /"safepaySandboxEnabled":false/);
 });
 
 test("browser Supabase configuration fails closed if staging settings are missing", async () => {
@@ -168,6 +178,16 @@ test("Wrangler project explicitly targets the production Worker", async () => {
   const config = JSON.parse(await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
   assert.equal(config.name, "jevexa-website");
   assert.deepEqual(config.assets.run_worker_first, ["/api/*", "/config.js"]);
+});
+
+test("local development uses the Worker on port 8788 and ignores local credentials", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const wranglerConfig = JSON.parse(await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
+  const gitignore = await readFile(new URL("../.gitignore", import.meta.url), "utf8");
+  assert.equal(packageJson.scripts.dev, "wrangler dev --persist-to ../.jevexa-wrangler-state");
+  assert.equal(wranglerConfig.dev.port, 8788);
+  assert.match(gitignore, /^\.dev\.vars\*/m);
+  assert.match(gitignore, /^\.env\.\*/m);
 });
 
 test("frontend explains missing Supabase configuration instead of failing silently", async () => {
@@ -225,8 +245,8 @@ test("preloader clears on DOMContentLoaded and has a standalone timeout fallback
 test("missing Supabase setup is reported without aborting page initialization", async () => {
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
   assert.match(script, /window\.JEVEXA_SUPABASE_READY = Boolean\(supabaseClient\)/);
-  assert.match(script, /if \(supabaseClient\) void initializeAuthSession\(\)/);
   assert.match(script, /if \(supabaseClient\) \{\s*supabaseClient\.auth\.onAuthStateChange/);
+  assert.doesNotMatch(script, /initializeAuthSession/);
   assert.doesNotMatch(script, /throw new Error\('Supabase configuration is unavailable/);
 });
 
@@ -284,9 +304,9 @@ test("credit UI starts without a fabricated balance and displays only persisted 
 test("homepage status cards do not advertise fabricated activity or live availability", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /New Account Grant/);
-  assert.match(html, /Implemented Chat Route/);
+  assert.match(html, /Core Features/);
   assert.match(html, /Platform Status[\s\S]*?Preview/);
-  assert.match(html, /AI Chat[\s\S]*?Gemini route/);
+  assert.match(html, /AI Chat[\s\S]*?AI chat/);
   assert.match(html, /Service Catalog[\s\S]*?Limited availability/);
   assert.doesNotMatch(html, /Tasks completed|12842|>Running<|>Online</);
 });
@@ -299,6 +319,24 @@ test("chat uses one authenticated, idempotent credits controller instead of lega
   assert.match(credits, /Idempotency-Key/);
   assert.match(credits, /\/api\/credits\/quote/);
   assert.match(credits, /\/api\/chat/);
+});
+
+
+test("signed-in navigation hides login/signup CTAs and restores them after logout", async () => {
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(script, /function syncAuthNavigation\(user\)[\s\S]*?querySelectorAll\('\[data-auth-action="signup"\], \[data-auth-action="login"\]'\)/);
+  assert.match(script, /link\.hidden = signedIn/);
+  assert.match(script, /else link\.removeAttribute\('tabindex'\)/);
+});
+
+test("both chat widgets remain enabled and Botpress config path is consistent", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(html, /id="chatbot"/);
+  assert.match(html, /cdn\.botpress\.cloud\/webchat\/v5\.0\/inject\.js/);
+  assert.match(html, /20261019205313-8K72W0NT\.js/);
+  assert.match(css, /#chatbot \{ display: block !important; \}/);
+  assert.doesNotMatch(css, /#chatbot \{\s*display: none !important;/);
 });
 
 test("credit schema keeps pricing server-controlled and ledger adjustments idempotent", async () => {
@@ -400,8 +438,9 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.doesNotMatch(publicCopy, /300\+ integrations|SOC2-ready|14-day free trial|Teams cut outreach time by|Most launch first automation in/);
   assert.doesNotMatch(publicCopy, /Full white-label is on|we offer full <strong>RPA|Voice AI & Call Agents<\/strong> can answer/);
   assert.doesNotMatch(html, /class="stars"/);
-  assert.match(html, /AI chat is the only connected service today/);
-  assert.match(html, /Roadmap concept only/);
+  assert.match(html, /Start with the AI chat assistant, account access, and a credit wallet/);
+  assert.doesNotMatch(html, /Roadmap concept only/);
+  assert.doesNotMatch(html, /Gemini-powered|Gemini-backed|Gemini provider/i);
   assert.match(workerSource, /staging sandbox/);
 });
 
@@ -461,6 +500,11 @@ test("successful Gemini usage settles server-priced credits exactly once", async
       return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 3, balance: 97 });
     }
     if (url.hostname === "generativelanguage.googleapis.com") {
+      assert.equal(url.pathname, "/v1beta/models/gemini-3.8-flash:generateContent");
+      const providerBody = JSON.parse(options.body);
+      assert.equal(providerBody.generationConfig.thinkingConfig.thinkingLevel, "low");
+      assert.equal("temperature" in providerBody.generationConfig, false);
+      assert.equal("topP" in providerBody.generationConfig, false);
       return Response.json({
         candidates: [{ content: { parts: [{ text: "Hello from Gemini." }] } }],
         usageMetadata: { totalTokenCount: 1100 }
@@ -625,7 +669,68 @@ test("production pricing UI explains checkout remains unavailable pending paymen
   assert.match(html, /Paid checkout is not available yet/);
   assert.match(html, /merchant approval, production credentials and a verified signed webhook/);
   assert.match(script, /Paid checkout is not available yet\. Live payments require merchant approval, production credentials and a verified signed webhook/);
-  assert.match(script, /safepaySandboxEnabled !== true/);
+  assert.match(script, /sandboxCheckoutAvailable = window\.JEVEXA_SUPABASE_CONFIG\?\.safepaySandboxEnabled === true/);
+  assert.match(html, /data-plan="starter" disabled>Coming Soon/);
+  assert.match(script, /button\.disabled = !sandboxCheckoutAvailable/);
+});
+
+test("displayed package prices and credits match server-owned billing rules", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const workerSource = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const plans = [...workerSource.matchAll(
+    /(\w+): \{ name: "([^"]+)", monthlyPrice: (\d+), yearlyPrice: (\d+), monthlyCredits: (\d+) \}/g
+  )];
+  const amounts = [...html.matchAll(
+    /<span class="amount" data-monthly="(\d+)" data-yearly="(\d+)">(\d+)<\/span>/g
+  )];
+  assert.equal(plans.length, 3);
+  assert.equal(amounts.length, plans.length);
+  plans.forEach(([, planKey, , monthlyPrice, yearlyPrice, monthlyCredits], index) => {
+    assert.equal(Number(amounts[index][1]), Number(monthlyPrice), `${planKey} monthly amount`);
+    assert.equal(Number(amounts[index][2]), Number(yearlyPrice), `${planKey} annual one-time amount`);
+    assert.equal(Number(amounts[index][3]), Number(monthlyPrice), `${planKey} initial displayed amount`);
+    assert.match(html, new RegExp(`${Number(monthlyCredits).toLocaleString()} credits \\(monthly package\\) \\/ ${Number(monthlyCredits * 12).toLocaleString()} credits \\(annual package\\)`));
+    assert.ok(Number.isInteger(Number(monthlyPrice)) && Number.isInteger(Number(yearlyPrice)), `${planKey} prices must not use decimals`);
+  });
+});
+
+test("mobile auth dialog uses dynamic viewport sizing and keyboard-safe spacing", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(html, /id="loginModal"[^>]*role="dialog"[^>]*aria-modal="true"/);
+  assert.match(css, /\.login-modal\s*\{[\s\S]*?height: 100dvh !important/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /\.login-form-area\s*\{[\s\S]*?min-height: 0 !important/);
+});
+
+test("mobile navigation keeps Get Started visible and both auth actions in the menu", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(html, /class="btn btn-nav" data-auth-action="signup"/);
+  assert.match(html, /data-auth-action="login">Login<\/a>/);
+  assert.match(html, /data-auth-action="signup">Get Started<\/a>/);
+  assert.match(html, /aria-controls="navLinks"/);
+  assert.match(html, /class="btn btn-primary" data-auth-action="signup"/);
+  assert.match(css, /\.nav-cta-group \.btn-nav\s*\{[\s\S]*?display:\s*inline-flex/);
+  assert.doesNotMatch(css, /\.nav-cta-group\s*\{\s*display:\s*none/);
+  assert.doesNotMatch(css, /\.btn-nav\s*\{\s*display:\s*none/);
+  assert.match(css, /\.nav-cta-group\[hidden\][\s\S]*?display:\s*none !important/);
+  assert.match(css, /@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*?\.nav-links\s*\{[^}]*transition:\s*none;/);
+  assert.match(css, /\.nav-links\.open\s*\{\s*right:\s*0;\s*visibility:\s*visible;/);
+  assert.match(script, /function openSignup\(\)\s*\{\s*openAuthModal\('signup'\)/);
+  assert.match(script, /openAuthModal\(action\)/);
+});
+
+test("authentication navigation resets login mode and clears guest UI after sign-out", async () => {
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  assert.match(script, /function openLogin\(\)\s*\{\s*if \(isSignupMode\)\s*\{\s*isSignupMode = false;\s*syncAuthModeUI\(\);/);
+  assert.match(script, /function openAuthModal\(mode = 'login'\)\s*\{\s*const targetMode = mode === 'signup';\s*isSignupMode = targetMode;/);
+  assert.match(script, /function syncAuthNavigation\(user\)[\s\S]*?desktopActions\.hidden = signedIn;[\s\S]*?item\.hidden = signedIn;/);
+  assert.match(script, /if \(creditsCount && !signedIn\) creditsCount\.textContent = '—';/);
+  assert.match(script, /function applyAuthState\(user\)[\s\S]*?if \(currentUser\) renderUserAccount\(currentUser\);\s*else removeUserAccountUI\(\);/);
+  assert.match(script, /revision !== authStateRevision \|\| currentUser\?\.id !== user\.id/);
+  assert.doesNotMatch(script, /JEVEXA Protected CTA System/);
 });
 
 test("invalid nonpositive database pricing quotes fail closed", async () => {

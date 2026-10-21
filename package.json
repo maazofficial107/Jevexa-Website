@@ -5,6 +5,7 @@
   "main": "script.js",
   "type": "module",
   "scripts": {
+    "dev": "wrangler dev --persist-to ../.jevexa-wrangler-state",
     "check": "node --check script.js && node --check worker.js && node --check credits.js",
     "test": "npm run check && node --test",
     "build": "wrangler deploy --dry-run",

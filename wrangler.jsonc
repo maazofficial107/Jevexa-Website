@@ -1,0 +1,13 @@
+{
+  "name": "jevexa-website",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-05",
+  "dev": {
+    "port": 8788
+  },
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/config.js"]
+  }
+}

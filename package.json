@@ -1,0 +1,28 @@
+{
+  "name": "jevexa-website",
+  "version": "1.0.0",
+  "description": "Luxury, fully animated, high-converting single-page website for AI Automation Studio.",
+  "main": "script.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --persist-to ../.jevexa-wrangler-state",
+    "check": "node --check script.js && node --check worker.js && node --check credits.js",
+    "test": "npm run check && node --test",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maazofficial107/Jevexa-Website.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/maazofficial107/Jevexa-Website/issues"
+  },
+  "homepage": "https://github.com/maazofficial107/Jevexa-Website#readme",
+  "devDependencies": {
+    "wrangler": "^4.149.0"
+  }
+}

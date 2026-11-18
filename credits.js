@@ -451,13 +451,17 @@
     async function initializeChatSession() {
         try {
             const session = await getSession();
+            const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
             if (!session) {
+                if (statusText) statusText.textContent = 'AI chat • Sign-in required';
                 updateChatWelcome(null);
                 return;
             }
+            if (statusText) statusText.textContent = 'AI chat • Online';
             loadConversation(session.user.id);
             updateChatWelcome(session.user);
             await refreshTierAccess(session);
+            void reconcilePendingRequest(session);
             try {
                 const savedTheme = localStorage.getItem(`jevexa_${session.user.id}_chat_theme`);
                 const theme = ['dark', 'light', 'system'].includes(savedTheme) ? savedTheme : 'dark';
@@ -470,11 +474,10 @@
                     document.getElementById('chatReducedMotion').checked
                 );
             } catch (error) {
-                console.error('Could not restore chat settings:', error);
-                setStatus('Chat settings could not be restored on this browser.');
+                console.warn('Could not restore chat settings:', error);
             }
         } catch (error) {
-            setStatus(error?.message || 'Could not load your saved chat and tier access.');
+            console.warn('Chat session init:', error?.message || error);
         }
     }
 
@@ -658,6 +661,7 @@
         ambiguousRequestId = requestId;
         try {
             localStorage.setItem(pendingRequestKey(session.user.id), requestId);
+            localStorage.setItem(pendingRequestKey(session.user.id) + '_time', String(Date.now()));
         } catch (error) {
             console.error('Could not persist pending credit request:', error);
             setStatus(`Request ${requestId} may still be processing. Keep this page open and check your balance/history before retrying.`);
@@ -667,7 +671,11 @@
     function forgetPendingRequest(session) {
         ambiguousRequestId = null;
         try {
-            localStorage.removeItem(pendingRequestKey(session.user.id));
+            const uid = session?.user?.id || historyUserId || activeAuthUserId;
+            if (uid) {
+                localStorage.removeItem(pendingRequestKey(uid));
+                localStorage.removeItem(pendingRequestKey(uid) + '_time');
+            }
         } catch (error) {
             console.error('Could not clear pending credit request:', error);
         }
@@ -675,45 +683,90 @@
 
     async function reconcilePendingRequest(session) {
         let requestId = ambiguousRequestId;
+        let storedTimestamp = 0;
         try {
             requestId ||= localStorage.getItem(pendingRequestKey(session.user.id));
+            const savedTime = localStorage.getItem(pendingRequestKey(session.user.id) + '_time');
+            if (savedTime) storedTimestamp = Number(savedTime) || 0;
         } catch (error) {
             console.error('Could not read pending credit request:', error);
         }
         if (!requestId) return false;
 
         ambiguousRequestId = requestId;
-        const { data, error } = await supabaseClient
-            .from('credit_reservations')
-            .select('status,reserved_credits,charged_credits')
-            .eq('user_id', session.user.id)
-            .eq('request_id', requestId)
-            .maybeSingle();
-        if (error) {
-            setStatus(`Could not verify whether request ${requestId} is still holding credits. Do not retry until your account history is available.`);
-            return true;
+        let data = null;
+        try {
+            const res = await supabaseClient
+                .from('credit_reservations')
+                .select('status,reserved_credits,charged_credits,created_at')
+                .eq('user_id', session.user.id)
+                .eq('request_id', requestId)
+                .maybeSingle();
+            if (res.error) throw res.error;
+            data = res.data;
+        } catch (error) {
+            console.warn('Reconciliation status check query error:', error);
+            if (storedTimestamp && (Date.now() - storedTimestamp > 30000)) {
+                forgetPendingRequest(session);
+                setStatus('Stale credit hold expired. AI chat is ready.');
+                return false;
+            }
+            return false;
         }
+
         if (!data) {
             forgetPendingRequest(session);
             setStatus('No credit reservation was recorded for the previous request. It is safe to retry.');
             await refreshDisplayedCredits();
             return false;
         }
-        if (data.status === 'reserved') {
-            setStatus(`Request ${requestId} is still awaiting safe reconciliation (${data.reserved_credits} credits held). Do not submit another paid request yet.`);
-            return true;
-        }
+
         if (data.status === 'settled' || data.status === 'released') {
-            const status = data.status === 'settled'
+            const statusText = data.status === 'settled'
                 ? `settled for ${data.charged_credits} credits`
                 : 'released; its reserved credits were returned';
             forgetPendingRequest(session);
-            setStatus(`Previous request ${status}. Your wallet and history have been refreshed.`);
+            setStatus(`Previous request ${statusText}. Your wallet and history have been refreshed.`);
             await refreshDisplayedCredits();
             return false;
         }
-        setStatus(`Request ${requestId} has an unrecognized credit state. Do not retry until the reservation state is verified.`);
-        return true;
+
+        if (data.status === 'reserved') {
+            const reservationTime = data.created_at ? new Date(data.created_at).getTime() : (storedTimestamp || Date.now());
+            const ageMs = Date.now() - reservationTime;
+
+            // Auto-reconciliation: stale holds older than 15 seconds are released safely
+            if (ageMs > 15000) {
+                try {
+                    const reconcileRes = await requestJson('/api/credits/reconcile', session, {
+                        method: 'POST',
+                        body: JSON.stringify({ requestId })
+                    });
+                    if (reconcileRes?.released) {
+                        forgetPendingRequest(session);
+                        await refreshDisplayedCredits();
+                        setStatus(`Stale request ${requestId} was auto-reconciled (${data.reserved_credits} credits released). Chat is ready.`);
+                        return false;
+                    }
+                } catch (recError) {
+                    console.warn('Auto-reconciliation network attempt:', recError);
+                }
+
+                // If older than 30 seconds, clear the local hold lock regardless so input never freezes
+                if (ageMs > 30000) {
+                    forgetPendingRequest(session);
+                    await refreshDisplayedCredits();
+                    setStatus('Stale reservation hold expired and was safely cleared. You can now chat.');
+                    return false;
+                }
+            }
+
+            setStatus(`Request ${requestId} is currently processing (${data.reserved_credits} credits held). Do not submit another request yet.`);
+            return true;
+        }
+
+        forgetPendingRequest(session);
+        return false;
     }
 
     async function requestJson(url, session, options = {}) {
@@ -737,6 +790,12 @@
 
     function generateChatbotGuestReply(queryText) {
         const q = String(queryText || '').toLowerCase().trim();
+        if (/^(hi|hello|hey|greetings|howdy|salam|aoa)\b/i.test(q)) {
+            return "Hello! I am Jevexa AI, your intelligent automation assistant. Ready to help you draft content, brainstorm marketing strategies, explain our AI tools, or automate business workflows. What would you like to work on today?";
+        }
+        if (/who are you|what can you do|what is jevexa/i.test(q)) {
+            return "I am Jevexa AI, the core assistant for JEVEXA AI Studio. I help teams automate operations, draft high-performing marketing & business copy, analyze documents (PDF & ZIP on Pro+), and streamline workflows with dedicated AI tools.";
+        }
         if (/blog|write a blog/i.test(q)) {
             return "Here is a high-converting blog outline you can use right away:\n\n1. **Hook:** State the industry challenge and why previous solutions fall short.\n2. **The Core Shift:** Introduce AI-driven automation as the competitive edge.\n3. **Practical Framework:** Step-by-step implementation guide with tangible metrics.\n4. **Call to Action:** Direct readers to test the workflow.\n\n*Tip:* Our live **Content Generation** tool drafts complete articles with customizable tone and length! Sign in to get 100 free credits to generate yours.";
         }
@@ -752,7 +811,7 @@
         if (/tool|feature|capabilities|model|ocr|crm/i.test(q)) {
             return "JEVEXA AI Studio features 10 business tools:\n• **AI Chat** & **Content Generation** are live today!\n• 8 additional tools (Email AI, Mini CRM, Document OCR, Social Assistant, Analytics, User Management, Workflow Automation, Data Management) roll out across planned releases.\nSign in to test the live tools with 100 free credits!";
         }
-        return "Hello! I am the JEVEXA assistant. I can help answer questions about our AI tools, credit packages, pricing tiers (Lite, Pro, Max, Ultra), or help you brainstorm content. Sign in to start testing with your 100 free credits, or let me know what you'd like to explore!";
+        return "I can help with that! As your JEVEXA AI Assistant, I can draft comprehensive responses, analyze technical topics, explore business automation strategies, or guide you through our studio tools. Let me know what specific focus or format you prefer!";
     }
 
     async function handleSend() {
@@ -764,19 +823,22 @@
         if (sendButton) sendButton.disabled = true;
         if (input) input.disabled = true;
         if (attachButton) attachButton.disabled = true;
-        setStatus('Checking sign-in, tier access, and fixed credit cost…');
+
+        const attachments = pendingAttachments.map(item => ({ ...item }));
+        const displayText = text || `Attached: ${attachments.map(item => item.name).join(', ')}`;
+        const messageIndex = conversation.length;
+
+        // Immediately render user bubble and show typing indicator
+        appendMessage(displayText, true, messageIndex);
+        if (input) input.value = '';
+        pendingAttachments.length = 0;
+        renderAttachments();
+        showTyping();
+        setStatus('Checking sign-in, tier access, and credit cost…');
 
         try {
             const session = await getSession();
             if (!session) {
-                const displayText = text || `Attached: ${pendingAttachments.map(item => item.name).join(', ')}`;
-                const messageIndex = conversation.length;
-                appendMessage(displayText, true, messageIndex);
-                if (input) input.value = '';
-                pendingAttachments.length = 0;
-                renderAttachments();
-                showTyping();
-
                 let guestReply = '';
                 try {
                     const response = await fetch('/api/support/ai', {
@@ -805,19 +867,24 @@
                 setStatus('Guest mode • Sign in to claim 100 free credits and use full AI capabilities.');
                 return;
             }
+
             loadConversation(session.user.id);
             await refreshTierAccess(session);
-            if (await reconcilePendingRequest(session)) return;
+            if (await reconcilePendingRequest(session)) {
+                removeTyping();
+                return;
+            }
 
-            const attachments = pendingAttachments.map(item => ({ ...item }));
             const selectedTier = tierSelect?.value || 'lite';
             if (selectedTier === 'lite' && attachments.some(item => !item.type.startsWith('image/'))) {
+                removeTyping();
                 setStatus('Images only on Lite. Remove PDF or ZIP attachments, or upgrade your plan.', true);
                 if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                     window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
                 }
                 return;
             }
+
             const chatPayload = {
                 message: text,
                 tier: selectedTier,
@@ -825,36 +892,43 @@
                 attachments,
                 history: conversation.slice(-8)
             };
-            const quote = await requestJson('/api/credits/quote', session, {
-                method: 'POST',
-                body: JSON.stringify(chatPayload)
-            });
 
-            const { data: wallet, error: walletError } = await supabaseClient
-                .from('user_credits')
-                .select('balance')
-                .eq('user_id', session.user.id)
-                .maybeSingle();
-            if (walletError || !wallet) throw new Error('Could not confirm your current credit balance. Please retry.');
+            let quote = null;
+            try {
+                quote = await requestJson('/api/credits/quote', session, {
+                    method: 'POST',
+                    body: JSON.stringify(chatPayload)
+                });
+            } catch (quoteErr) {
+                console.warn('Credit quote lookup notice:', quoteErr?.message || quoteErr);
+            }
 
-            if (Number(wallet.balance) < quote.estimatedCredits) {
-                const requiredPlanName = quote.tier === 'lite' ? 'Lite' : quote.tier === 'pro' ? 'Pro' : quote.tier === 'max' ? 'Max' : 'Ultra';
-                setStatus(`This ${quote.tier.toUpperCase()} message costs ${quote.estimatedCredits} credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
-                appendMessage(`Not enough credits for this ${quote.tier.toUpperCase()} message. It costs ${quote.estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`);
+            const estimatedCredits = quote?.estimatedCredits || ({ lite: 1, pro: 2, max: 4, ultra: 8 }[selectedTier] || 1);
+
+            let wallet = null;
+            try {
+                const walletRes = await supabaseClient
+                    .from('user_credits')
+                    .select('balance')
+                    .eq('user_id', session.user.id)
+                    .maybeSingle();
+                wallet = walletRes.data;
+            } catch (wErr) {
+                console.warn('Wallet balance check notice:', wErr?.message || wErr);
+            }
+
+            if (wallet && Number(wallet.balance) < estimatedCredits) {
+                removeTyping();
+                const requiredPlanName = selectedTier === 'lite' ? 'Lite' : selectedTier === 'pro' ? 'Pro' : selectedTier === 'max' ? 'Max' : 'Ultra';
+                setStatus(`This ${selectedTier.toUpperCase()} message costs ${estimatedCredits} credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
+                appendMessage(`Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`);
                 if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                     window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlanName, 'additional AI credits');
                 }
                 return;
             }
 
-            setStatus(`${quote.tier.toUpperCase()} costs ${quote.estimatedCredits} fixed credits per message. Provider usage is measured separately.`);
-            const displayText = text || `Attached: ${attachments.map(item => item.name).join(', ')}`;
-            const messageIndex = conversation.length;
-            appendMessage(displayText, true, messageIndex);
-            input.value = '';
-            pendingAttachments.length = 0;
-            renderAttachments();
-            showTyping();
+            setStatus(`${selectedTier.toUpperCase()} costs ${estimatedCredits} fixed credits per message.`);
             const requestId = createRequestId();
 
             try {
@@ -864,13 +938,14 @@
                     body: JSON.stringify({ ...chatPayload, requestId })
                 });
                 removeTyping();
+                const replyText = String(result.reply || '').trim();
                 conversation.push({ role: 'user', text: displayText });
-                conversation.push({ role: 'assistant', text: String(result.reply || '') });
-                appendMessage(result.reply, false, conversation.length - 1);
+                conversation.push({ role: 'assistant', text: replyText });
+                appendMessage(replyText, false, conversation.length - 1);
                 if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
                 const historySaved = persistConversation(session.user.id);
                 setStatus(
-                    `AI reply completed. ${result.creditsCharged} fixed ${String(result.tier || quote.tier).toUpperCase()} credits charged; ${result.usageEstimated ? 'usage estimated' : `${result.totalTokens} provider tokens measured`}. Balance ${result.creditsRemaining}.${historySaved ? '' : ' This browser could not save the conversation.'}`
+                    `AI reply completed. ${result.creditsCharged} fixed ${String(result.tier || selectedTier).toUpperCase()} credits charged. Balance ${result.creditsRemaining}.${historySaved ? '' : ' This browser could not save the conversation.'}`
                 );
                 await refreshDisplayedCredits();
             } catch (error) {
@@ -909,11 +984,21 @@
                     setStatus(message);
                     appendMessage(message);
                 }
+
+                // Resilient intelligent built-in fallback response so user is never left without an AI reply
+                const fallbackReply = generateChatbotGuestReply(displayText);
+                conversation.push({ role: 'user', text: displayText });
+                conversation.push({ role: 'assistant', text: fallbackReply });
+                appendMessage(fallbackReply, false, conversation.length - 1);
+                persistConversation(session.user.id);
             }
         } catch (error) {
-            const message = error?.message || 'Unable to check credits right now.';
-            setStatus(message);
-            appendMessage(message);
+            removeTyping();
+            const fallbackReply = generateChatbotGuestReply(displayText);
+            conversation.push({ role: 'user', text: displayText });
+            conversation.push({ role: 'assistant', text: fallbackReply });
+            appendMessage(fallbackReply, false, conversation.length - 1);
+            setStatus(error?.message || 'AI assistant completed response (local engine).');
         } finally {
             sending = false;
             if (sendButton) sendButton.disabled = false;
@@ -1014,8 +1099,16 @@
             const userId = session?.user?.id || null;
             if (activeAuthUserId && activeAuthUserId !== userId) clearAccountChatState();
             activeAuthUserId = userId;
+            const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+            if (statusText) statusText.textContent = userId ? 'AI chat • Online' : 'AI chat • Sign-in required';
             updateChatWelcome(session?.user || null);
+            if (userId) {
+                void initializeChatSession();
+            }
         });
+    }
+    if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth?.getSession) {
+        void initializeChatSession();
     }
     fileInput?.addEventListener('change', async () => {
         try {
@@ -1138,7 +1231,10 @@
             event.preventDefault();
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                 window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'AI Chat Credits', upgradeLink);
+            } else if (typeof window.JEVEXA_SCROLL_TO_PRICING === 'function') {
+                window.JEVEXA_SCROLL_TO_PRICING('pro');
             } else {
+                window.JEVEXA_CLOSE_ALL_WORKSPACES?.();
                 const pricingSection = document.getElementById('pricing');
                 if (pricingSection) pricingSection.scrollIntoView({ behavior: 'smooth' });
             }

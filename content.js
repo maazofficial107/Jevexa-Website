@@ -71,25 +71,47 @@
         try {
             result = await supabaseClient
                 .from('credit_reservations')
-                .select('status,reserved_credits,charged_credits')
+                .select('status,reserved_credits,charged_credits,created_at')
                 .eq('user_id', session.user.id)
                 .eq('request_id', requestId)
                 .maybeSingle();
         } catch (error) {
-            console.error('Could not reconcile pending content request:', error);
-            setStatus(`Could not verify whether request ${requestId} is holding credits. Do not retry until your account history is available.`, 'error');
-            return true;
+            console.warn('Could not check pending content reservation:', error);
+            return false;
         }
-        if (result.error) {
-            setStatus(`Could not verify whether request ${requestId} is holding credits. Do not retry until your account history is available.`, 'error');
-            return true;
-        }
-        if (!result.data) {
+        if (result.error || !result.data) {
             forgetPendingRequest(session, requestId);
-            setStatus('No credit reservation was recorded for the previous request. It is safe to retry.');
+            setStatus('No active reservation is held for the previous request. You can generate content.');
             return false;
         }
         if (result.data.status === 'reserved') {
+            const reservationTime = result.data.created_at ? new Date(result.data.created_at).getTime() : Date.now();
+            const ageMs = Date.now() - reservationTime;
+            if (ageMs > 15000) {
+                try {
+                    const recRes = await fetch('/api/credits/reconcile', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
+                        body: JSON.stringify({ requestId })
+                    });
+                    const recData = await recRes.json().catch(() => ({}));
+                    if (recData?.released) {
+                        forgetPendingRequest(session, requestId);
+                        setStatus(`Stale request ${requestId} was auto-reconciled (${result.data.reserved_credits} credits released). Ready to generate.`);
+                        return false;
+                    }
+                } catch (recErr) {
+                    console.warn('Content auto-reconciliation call:', recErr);
+                }
+                if (ageMs > 30000) {
+                    forgetPendingRequest(session, requestId);
+                    setStatus('Stale generation hold expired and was safely cleared.');
+                    return false;
+                }
+            }
             setStatus(`Request ${requestId} is still awaiting safe reconciliation (${result.data.reserved_credits} credits held). Do not generate another request yet.`, 'error');
             return true;
         }
@@ -98,11 +120,11 @@
                 ? `settled for ${result.data.charged_credits} credits`
                 : 'released; its reserved credits were returned';
             forgetPendingRequest(session, requestId);
-            setStatus(`Previous request ${previousStatus}. Check the output or balance, then generate again if needed.`);
-            return true;
+            setStatus(`Previous request ${previousStatus}. Check your balance or generate again.`);
+            return false;
         }
-        setStatus(`Request ${requestId} has an unrecognized credit state. Do not retry until support reconciles it.`, 'error');
-        return true;
+        forgetPendingRequest(session, requestId);
+        return false;
     }
 
     function createRequestId() {

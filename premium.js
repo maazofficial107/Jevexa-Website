@@ -45,7 +45,7 @@
         document.addEventListener('mouseleave', () => glow.classList.remove('visible'));
     }
     if (finePointer && motionOK()) {
-        $('.tilt-card').forEach(card => {
+        $$('.tilt-card').forEach(card => {
             let raf = null;
             let r = null;
             card.addEventListener('pointerenter', () => {
@@ -67,7 +67,7 @@
                 card.style.transform = '';
             }, { passive: true });
         });
-        $('.btn-magnetic').forEach(btn => {
+        $$('.btn-magnetic').forEach(btn => {
             let r = null;
             let raf = null;
             btn.addEventListener('pointerenter', () => {

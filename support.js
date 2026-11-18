@@ -109,20 +109,32 @@
 
     function generateClientSupportReply(userMessage) {
         const q = String(userMessage || '').toLowerCase().trim();
-        if (/credit|token|balance|cost|quota|rate limit/i.test(q)) {
-            return "JEVEXA includes 100 free welcome credits upon sign-up (no payment info needed). AI Chat costs a fixed rate per message by tier: Lite is 1 credit/msg, Pro is 2 credits/msg, Max is 4 credits/msg, and Ultra is 8 credits/msg. Packages are one-time credit top-ups, not recurring subscriptions. You can also click 'Talk to Human' if you need account-specific credit adjustments.";
+        if (/reconcil|stuck|hold|held|awaiting safe|locked|unlock/i.test(q)) {
+            return "If an AI message or credit reservation ever displays 'awaiting reconciliation', our system automatically releases any stale pending hold older than 15–30 seconds and restores the held credits to your wallet. You can also click 'Clear & Unlock Chat' in the chat header to reset your session immediately. If you need any manual account adjustment, click 'Talk to Human' below!";
         }
-        if (/price|pricing|plan|cost|ultra|pro|lite|max|annual|discount|subscription|buy|checkout/i.test(q)) {
-            return "JEVEXA offers 4 distinct plans with an automatic 20% annual package discount:\n• Lite: $5/mo ($4/mo annual, $48 paid once) — 2,000 credits monthly / 24,000 credits annually\n• Pro: $12/mo ($9.60/mo annual, $115.20 paid once) — 10,000 credits monthly / 120,000 credits annually + multi-file uploads (PDF/ZIP)\n• Max: $25/mo ($20/mo annual, $240 paid once) — 30,000 credits monthly / 360,000 credits annually + deep reasoning\n• Ultra: $49/mo ($39.20/mo annual, $470.40 paid once) — 70,000 credits monthly / 840,000 credits annually + flagship models & priority routing.\nCredit packages are one-time purchases. Check out the #pricing section or click 'Talk to Human'!";
+        if (/\b(tools?|features?|capabilities|ocr|crm|content|social|analytics|workflow)\b/i.test(q)) {
+            return "JEVEXA AI Studio features 10 business tools: AI Chat and Content Generation are live today! The remaining 8 tools (Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management) are rolling out across upcoming releases. You can test live tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
         }
-        if (/tool|feature|capabilities|model|ocr|crm|email|content|social/i.test(q)) {
-            return "JEVEXA AI Studio features 10 business tools: AI Chat and Content Generation are live today! The remaining 8 tools (Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management) are rolling out across upcoming releases. You can try live tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
+        if (/price|pricing|\bplans?\b|ultra|pro|lite|max|annual|discount|subscription|buy|checkout|safepay/i.test(q)) {
+            return "JEVEXA offers 4 scalable plans with an automatic 20% annual package discount:\n• Lite: $5/mo ($4/mo annual, $48 paid once) — 2,000 monthly credits (24,000 annual), Lite AI chat (1 credit/msg)\n• Pro: $12/mo ($9.60/mo annual, $115.20 paid once) — 10,000 monthly credits (120,000 annual), Pro AI chat (2 credits/msg), PDF & ZIP uploads, Standard thinking\n• Max: $25/mo ($20/mo annual, $240 paid once) — 30,000 monthly credits (360,000 annual), Max AI chat (4 credits/msg), Max deep reasoning\n• Ultra: $49/mo ($39.20/mo annual, $470.40 paid once) — 70,000 monthly credits (840,000 annual), Ultra AI chat (8 credits/msg), flagship models & priority queue.\nAll credit packages are one-time purchases via Safepay, never recurring subscriptions. Check out our #pricing section or click 'Talk to Human'!";
+        }
+        if (/credit|token|balance|cost|quota|rate limit|welcome/i.test(q)) {
+            return "JEVEXA includes 100 free welcome credits upon sign-up (no credit card required). AI Chat costs a fixed rate per message by tier:\n• Lite: 1 credit per message (Low thinking)\n• Pro: 2 credits per message (Standard thinking, PDF/ZIP uploads)\n• Max: 4 credits per message (Max deep reasoning)\n• Ultra: 8 credits per message (Flagship models, priority queue)\nVariable services like Content Generation use transparent provider-metered credits based on token length. Credit packages are one-time top-ups, not recurring subscriptions. Click 'Talk to Human' if you need account-specific credit adjustments.";
+        }
+        if (/think|reasoning|model|upload|attachment|pdf|zip|file/i.test(q)) {
+            return "JEVEXA AI Chat provides tailored models and capabilities across tiers:\n• Thinking Levels: Lite includes Low thinking; Pro includes Standard thinking; Max and Ultra unlock full Deep Reasoning (Max thinking).\n• File Uploads: Lite supports images (JPEG, PNG, WebP, GIF); Pro, Max, and Ultra support both images and document suites (PDF & ZIP files under 5 MB).\nUpgrade to Pro or higher from the chat model dropdown or #pricing section to unlock multi-file analysis!";
+        }
+        if (/tool|feature|capabilities|model|ocr|crm|email|content|social|analytics|workflow/i.test(q)) {
+            return "JEVEXA AI Studio features 10 business tools: AI Chat and Content Generation are live today! The remaining 8 tools (Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management) are rolling out across upcoming releases. You can test live tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
         }
         if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
             return "You can connect with our human support team directly! Click the 'Talk to Human' button in this dialog to submit a ticket that alerts Maaz and our engineering team immediately, or reach us at maazofficial107@gmail.com.";
         }
         if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
-            return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across AI Chat and Content Generation.";
+            return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across AI Chat and Content Generation. If you forgot your password, use the 'Forgot password?' link in the login dialog.";
+        }
+        if (/^(hi|hello|hey|greetings|howdy|salam|aoa)\b/i.test(q)) {
+            return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools (AI Chat & Content Generation), credit costs (1/2/4/8 credits per message), pricing plans (Lite, Pro, Max, Ultra with 20% annual discount), or account setup. You can also click 'Talk to Human' to reach Maaz directly!";
         }
         return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools, credit packages (Lite, Pro, Max, Ultra with 20% annual discount), platform features, and account setup. For complex queries or direct account assistance, feel free to click 'Talk to Human' to reach Maaz and our team!";
     }

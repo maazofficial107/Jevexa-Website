@@ -1476,7 +1476,7 @@
 
                 <div class="chatbot-info">
                     <h4 id="chatbotTitle">Jevexa AI</h4>
-                    <span class="status">AI chat • Sign-in required</span>
+                    <span class="status" id="chatbotStatusText">AI chat • Sign-in required</span>
                 </div>
                 <button class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
             </div>
@@ -1573,7 +1573,7 @@
      JEVEXA account features could not load because this Worker is missing its environment-specific public Supabase configuration. Please try again later.
  </div>
  <script>
-     if (location.port === '8788' || location.hostname === 'jevexa.net' || location.hostname === 'www.jevexa.net') {
+     if (location.port === '8788' || location.hostname === 'jevexa.net' || location.hostname === 'www.jevexa.net' || location.hostname.endsWith('.workers.dev')) {
          document.write('<script src="/config.js"><\/script>');
      }
  </script>

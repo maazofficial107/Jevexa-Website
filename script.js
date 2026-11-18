@@ -63,11 +63,17 @@ window.JEVEXA_SAFE_INTERACTION = {
     }
 };
 
+let userInteracted = false;
+window.addEventListener('pointerdown', () => { userInteracted = true; }, { once: true, passive: true });
+window.addEventListener('keydown', () => { userInteracted = true; }, { once: true, passive: true });
+
 window.addEventListener('error', event => {
-    if (event.error) reportInteractionError(event.error, 'Something went wrong. Please refresh and try again.');
+    if (userInteracted && event.error) reportInteractionError(event.error, 'Something went wrong. Please refresh and try again.');
+    else console.warn('Unhandled runtime error:', event.error || event.message);
 });
 window.addEventListener('unhandledrejection', event => {
-    reportInteractionError(event.reason, 'Something went wrong. Please try that action again.');
+    if (userInteracted && event.reason) reportInteractionError(event.reason, 'Something went wrong. Please try that action again.');
+    else console.warn('Unhandled promise rejection:', event.reason);
 });
 window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
     const action = event.target instanceof Element
@@ -86,6 +92,88 @@ window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
         ? event.target.closest('[data-jevexa-action]') || document
         : document
 });
+
+function closeAllWorkspacesAndModals() {
+    if (typeof closeChatbot === 'function') {
+        closeChatbot();
+    } else {
+        const chatWin = document.getElementById('chatbotWindow');
+        if (chatWin) {
+            chatWin.classList.remove('open', 'chat-history-open');
+            chatWin.setAttribute('aria-hidden', 'true');
+        }
+        const chatToggle = document.getElementById('chatbotToggle');
+        if (chatToggle) {
+            chatToggle.classList.remove('hidden');
+            chatToggle.setAttribute('aria-hidden', 'false');
+            chatToggle.setAttribute('aria-expanded', 'false');
+            chatToggle.setAttribute('aria-label', 'Open Jevexa AI');
+        }
+        document.body.classList.remove('chat-modal-open');
+    }
+    const chatSidebar = document.getElementById('chatSidebar');
+    if (chatSidebar) chatSidebar.classList.remove('open');
+
+    const upgradeModal = document.getElementById('upgradeModal');
+    if (upgradeModal) {
+        upgradeModal.classList.remove('is-open');
+        upgradeModal.hidden = true;
+    }
+
+    const supportModal = document.getElementById('supportModal');
+    if (supportModal) supportModal.hidden = true;
+
+    if (typeof closeLogin === 'function') {
+        closeLogin();
+    } else {
+        const loginModal = document.getElementById('loginModal');
+        if (loginModal) loginModal.classList.remove('open');
+    }
+
+    const accountBackdrop = document.getElementById('jevexaAccountBackdrop');
+    if (accountBackdrop) accountBackdrop.style.display = 'none';
+
+    if (typeof closeMobileMenu === 'function') closeMobileMenu();
+
+    document.body.classList.remove('chat-modal-open', 'login-open', 'modal-open', 'menu-open');
+    document.documentElement.classList.remove('login-open', 'menu-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('top');
+    document.documentElement.style.removeProperty('overflow');
+}
+window.JEVEXA_CLOSE_ALL_WORKSPACES = closeAllWorkspacesAndModals;
+
+function navigateToPricingAndHighlight(plan) {
+    closeAllWorkspacesAndModals();
+    const pricingSection = document.getElementById('pricing');
+    if (!pricingSection) return;
+    pricingSection.scrollIntoView({ behavior: 'smooth' });
+
+    const normalized = String(plan || 'pro').toLowerCase().trim();
+    const planKeyMap = {
+        free: 'starter',
+        welcome: 'starter',
+        lite: 'starter',
+        starter: 'starter',
+        pro: 'pro',
+        max: 'business',
+        business: 'business',
+        ultra: 'ultra'
+    };
+    const planKey = planKeyMap[normalized] || 'pro';
+    setTimeout(() => {
+        const card = document.querySelector(`.price-card[data-pricing-plan="${planKey}"]`);
+        if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.remove('pricing-card-highlight');
+            void card.offsetWidth;
+            card.classList.add('pricing-card-highlight');
+            setTimeout(() => card.classList.remove('pricing-card-highlight'), 2600);
+            card.querySelector('button')?.focus({ preventScroll: true });
+        }
+    }, 350);
+}
+window.JEVEXA_SCROLL_TO_PRICING = navigateToPricingAndHighlight;
 
 function openUpgradeModal(plan, feature, returnFocusElement = document.activeElement) {
     const modal = document.getElementById('upgradeModal');
@@ -134,26 +222,10 @@ function initializeUpgradeModal() {
         document.getElementById('upgradeModalPlans'),
         'click',
         (event) => {
+            event.preventDefault();
             const requiredPlan = (modal.dataset.requiredPlan || 'pro').toLowerCase();
             close();
-            const pricingSection = document.getElementById('pricing');
-            if (pricingSection) {
-                event.preventDefault();
-                pricingSection.scrollIntoView({ behavior: 'smooth' });
-                const planKeyMap = { lite: 'starter', starter: 'starter', pro: 'pro', max: 'business', business: 'business', ultra: 'ultra' };
-                const planKey = planKeyMap[requiredPlan] || 'pro';
-                const card = document.querySelector(`.price-card[data-pricing-plan="${planKey}"]`);
-                if (card) {
-                    setTimeout(() => {
-                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        card.classList.remove('pricing-card-highlight');
-                        void card.offsetWidth;
-                        card.classList.add('pricing-card-highlight');
-                        setTimeout(() => card.classList.remove('pricing-card-highlight'), 2600);
-                        card.querySelector('button')?.focus({ preventScroll: true });
-                    }, 400);
-                }
-            }
+            navigateToPricingAndHighlight(requiredPlan);
         }
     );
     window.JEVEXA_SAFE_INTERACTION.bind(modal, 'click', event => {
@@ -183,6 +255,19 @@ if (document.readyState === 'loading') {
 } else {
     initializeUpgradeModal();
 }
+
+window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
+    const link = event.target instanceof Element ? event.target.closest('a[href="#pricing"]') : null;
+    if (!link) return;
+    if (link.closest('#chatbotWindow, #upgradeModal, #supportModal, #jevexaAccountBackdrop') || document.body.classList.contains('chat-modal-open')) {
+        event.preventDefault();
+        const plan = link.dataset.plan || link.getAttribute('data-pricing-plan') || 'pro';
+        navigateToPricingAndHighlight(plan);
+    }
+}, {
+    matches: event => event.target instanceof Element && Boolean(event.target.closest('a[href="#pricing"]')),
+    getKey: event => event.target instanceof Element ? event.target.closest('a[href="#pricing"]') || document : document
+});
 
 // ===============================
 
@@ -1559,6 +1644,8 @@ function syncAuthNavigation(user) {
     if (creditsCount && !signedIn) creditsCount.textContent = '—';
     const chatSignInPrompt = document.getElementById('chatSignInPrompt');
     if (chatSignInPrompt) chatSignInPrompt.hidden = signedIn;
+    const chatStatusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+    if (chatStatusText) chatStatusText.textContent = signedIn ? 'AI chat • Online' : 'AI chat • Sign-in required';
     closeMobileMenu();
 }
 

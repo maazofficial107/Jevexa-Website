@@ -1915,3 +1915,99 @@ test("60fps performance optimizations: GPU transforms, passive scroll listeners,
   assert.match(script, /window\.addEventListener\('scroll',[\s\S]*?\{ passive:\s*true \}\)/);
   assert.match(script, /if \(!ticking\) \{\s*ticking = true;/);
 });
+
+test("upgrade click closes active workspace, drawers and modals and scrolls to pricing", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+
+  assert.match(script, /function closeAllWorkspacesAndModals\(\)/);
+  assert.match(script, /window\.JEVEXA_CLOSE_ALL_WORKSPACES = closeAllWorkspacesAndModals/);
+  assert.match(script, /function navigateToPricingAndHighlight\(plan\)/);
+  assert.match(script, /window\.JEVEXA_SCROLL_TO_PRICING = navigateToPricingAndHighlight/);
+  assert.match(script, /navigateToPricingAndHighlight\(requiredPlan\)/);
+  assert.match(script, /chat-modal-open/);
+  assert.match(credits, /window\.JEVEXA_SCROLL_TO_PRICING/);
+  assert.match(html, /id="upgradeModalPlans"/);
+});
+
+test("stale reconciliation lock auto-recovery, endpoint routing and resilient chat response", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const content = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  assert.match(workerJs, /url\.pathname === "\/api\/credits\/reconcile"/);
+  assert.match(workerJs, /url\.pathname === "\/api\/ai\/chat"/);
+  assert.match(credits, /ageMs > 15000/);
+  assert.match(credits, /\/api\/credits\/reconcile/);
+  assert.match(content, /ageMs > 15000/);
+  assert.match(content, /\/api\/credits\/reconcile/);
+  assert.match(credits, /AI chat • Online/);
+  assert.match(html, /id="chatbotStatusText"/);
+  assert.match(credits, /showTyping\(\)/);
+  assert.match(credits, /appendMessage\(displayText, true/);
+  assert.match(credits, /generateChatbotGuestReply\(displayText\)/);
+
+  // Test /api/credits/reconcile route with mock
+  const mock = mockFetch((url, options) => {
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_release") {
+      assert.equal(JSON.parse(options.body).p_request_id, "b53a11ac-3a9f-4bfb-a758-27159cb16144");
+      return Response.json({ ok: true, balance: 100 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  });
+
+  try {
+    const res = await worker.fetch(makeRequest("/api/credits/reconcile", {
+      body: { requestId: "b53a11ac-3a9f-4bfb-a758-27159cb16144" }
+    }), env);
+    const data = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(data.ok, true);
+    assert.equal(data.released, true);
+    assert.equal(data.status, "released");
+  } finally {
+    mock.restore();
+  }
+});
+
+test("support AI accurately answers full studio FAQs (plans, credits, tools, reconciliation)", async () => {
+  const missingKey = { ...env };
+  delete missingKey.OPENROUTER_API_KEY;
+
+  const queries = [
+    { q: "What are the pricing tiers and plans?", expect: [/Lite/i, /Pro/i, /Max/i, /Ultra/i, /20%/] },
+    { q: "How much does Ultra cost annually?", expect: [/Ultra/i, /20%/] },
+    { q: "What does chat cost per message on Lite and Pro?", expect: [/Lite/i, /Pro/i, /1 credit/i, /2 credits/i] },
+    { q: "What tools are live today versus planned?", expect: [/AI Chat/i, /Content Generation/i, /live today/i] },
+    { q: "How do I fix awaiting safe reconciliation lock?", expect: [/awaiting reconciliation|reconcil|hold/i, /release/i] },
+    { q: "Who can I contact for human support?", expect: [/Talk to Human/i, /Maaz/i] }
+  ];
+
+  for (const { q, expect } of queries) {
+    const res = await worker.fetch(makeRequest("/api/support/ai", {
+      body: { message: q },
+      headers: { "CF-Connecting-IP": "192.0.2.30" }
+    }), missingKey);
+    const data = await res.json();
+    assert.equal(res.status, 200);
+    for (const pattern of expect) {
+      assert.match(data.reply, pattern, `Query "${q}" should match ${pattern}`);
+    }
+  }
+});
+
+test("zero startup error toasts and safe DOM query iterations", async () => {
+  const premiumJs = await readFile(new URL("../premium.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  assert.match(premiumJs, /\$\$\('\.tilt-card'\)\.forEach/);
+  assert.match(premiumJs, /\$\$\('\.btn-magnetic'\)\.forEach/);
+  assert.doesNotMatch(premiumJs, /(?<!\$)\$\('\.tilt-card'\)\.forEach/);
+  assert.doesNotMatch(premiumJs, /(?<!\$)\$\('\.btn-magnetic'\)\.forEach/);
+
+  assert.match(scriptJs, /userInteracted/);
+  assert.match(html, /location\.hostname\.endsWith\('\.workers\.dev'\)/);
+});

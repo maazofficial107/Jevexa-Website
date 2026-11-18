@@ -1,0 +1,2010 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>JEVEXA | AI Automation Studio — AI Chatbots, Workflows &amp; Intelligent Agents</title>
+
+    <meta name="description" content="JEVEXA — 10 AI tools for your business: AI chatbots, content generation, email outreach, mini CRM, document OCR and more. Start free with 100 credits.">
+    <meta name="keywords" content="JEVEXA, AI automation, AI chatbots, workflow automation, RPA, voice AI, document AI, AI agents, business automation, AI studio">
+    <meta name="author" content="JEVEXA AI Automation Studio">
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+    <meta name="theme-color" content="#0a0a1f">
+    <link rel="canonical" href="https://jevexa.net/">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="JEVEXA AI Automation Studio">
+    <meta property="og:title" content="JEVEXA | AI Automation Studio — Automate Your Future">
+    <meta property="og:description" content="JEVEXA — 10 AI tools for your business: AI chatbots, content generation, email outreach, mini CRM, document OCR and more. Start free with 100 credits.">
+    <meta property="og:url" content="https://jevexa.net/">
+    <meta property="og:image" content="https://jevexa.net/assets/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="JEVEXA | AI Automation Studio — Automate Your Future">
+    <meta name="twitter:description" content="JEVEXA — 10 AI tools for your business: AI chatbots, content generation, email outreach, mini CRM, document OCR and more. Start free with 100 credits.">
+    <meta name="twitter:image" content="https://jevexa.net/assets/og-image.png">
+
+    <!-- Icons -->
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <link rel="stylesheet" href="styles.css">
+
+    <link rel="stylesheet" href="premium.css">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        { "@type": "Organization", "@id": "https://jevexa.net/#organization", "name": "JEVEXA AI Automation Studio", "url": "https://jevexa.net/", "logo": "https://jevexa.net/assets/icon-512.png", "email": "hello@jevexa.net", "description": "A catalog of 10 AI tools for businesses, starting with AI chat." },
+        { "@type": "WebSite", "@id": "https://jevexa.net/#website", "url": "https://jevexa.net/", "name": "JEVEXA AI Automation Studio", "publisher": { "@id": "https://jevexa.net/#organization" }, "inLanguage": "en" },
+        { "@type": "SoftwareApplication", "name": "JEVEXA AI Automation Studio", "operatingSystem": "Web", "applicationCategory": "BusinessApplication", "url": "https://jevexa.net/", "description": "Premium AI chat, credit wallet, and workflow automation tools for businesses.", "offers": [ { "@type": "Offer", "name": "Lite", "price": "5", "priceCurrency": "USD" }, { "@type": "Offer", "name": "Pro", "price": "12", "priceCurrency": "USD" }, { "@type": "Offer", "name": "Max", "price": "25", "priceCurrency": "USD" }, { "@type": "Offer", "name": "Ultra", "price": "49", "priceCurrency": "USD" } ] }
+      ]
+    }
+    </script>
+
+</head>
+
+<body>
+
+    <div id="scrollProgress" class="scroll-progress" aria-hidden="true"></div>
+    <div id="cursorGlow" class="cursor-glow" aria-hidden="true"></div>
+
+    <!-- Animated Background -->
+
+    <div class="mesh-bg">
+
+        <div class="mesh-blob blob-1"></div>
+
+        <div class="mesh-blob blob-2"></div>
+
+        <div class="mesh-blob blob-3"></div>
+
+    </div>
+
+    <canvas id="particles-canvas"></canvas>
+
+
+
+    <!-- Preloader -->
+
+    <div id="preloader">
+
+        <div class="loader">
+
+            <div class="loader-core">
+
+                <div class="loader-ring r1"></div>
+
+                <div class="loader-ring r2"></div>
+
+                <div class="loader-ring r3"></div>
+
+                <div class="loader-logo">J</div>
+
+            </div>
+
+            <div class="loader-text">
+
+                <span>J</span><span>E</span><span>V</span><span>E</span><span>X</span><span>A</span>
+
+            </div>
+
+            <div class="loader-bar"><div class="loader-progress"></div></div>
+
+        </div>
+
+    </div>
+
+    <script id="preloader-fallback">
+        (() => {
+            let finished = false;
+            const finish = () => {
+                if (finished) return;
+                finished = true;
+                document.getElementById('preloader')?.classList.add('hidden');
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', finish, { once: true });
+            } else {
+                finish();
+            }
+            window.setTimeout(finish, 8000);
+        })();
+    </script>
+
+    <!-- Navigation -->
+
+    <nav class="navbar" id="navbar">
+
+        <div class="nav-container">
+
+            <a href="#home" class="logo">
+
+                <span class="logo-icon"><i class="fas fa-robot"></i></span>
+
+                <div class="logo-texts">
+
+                    <span class="logo-text">JEVEXA</span>
+
+                    <span class="logo-sub">AI STUDIO</span>
+
+                </div>
+
+            </a>
+
+            <ul class="nav-links" id="navLinks">
+
+                <li><a href="#home" class="nav-link active">Home</a></li>
+
+                <li><a href="#features" class="nav-link">Features</a></li>
+
+                <li><a href="#how" class="nav-link">Process</a></li>
+
+                <li><a href="#pricing" class="nav-link">Pricing</a></li>
+
+                <li><a href="#reviews" class="nav-link">Availability</a></li>
+
+                <li><a href="#faq" class="nav-link">FAQ</a></li>
+
+                <li><a href="#contact" class="nav-link">Contact</a></li>
+
+                <li class="nav-link-mobile"><a href="#" class="nav-link nav-link-cta" data-auth-action="login">Login</a></li>
+
+                <li class="nav-link-mobile"><a href="#" class="nav-link nav-link-cta nav-link-cta-primary" data-auth-action="signup">Get Started</a></li>
+
+            </ul>
+
+            <div class="nav-actions">
+
+                <div id="creditsBadge" class="credits-badge" style="display:none;" role="status" aria-live="polite" aria-label="Credit balance">
+
+    <span class="credits-lightning">ϟ</span>
+
+    <strong id="creditsCount">—</strong>
+
+    <span>Credits Remaining</span>
+
+</div>
+
+                <div class="nav-cta-group">
+
+                    <a href="#" class="btn btn-nav-login" data-auth-action="login">Login</a>
+
+                    <a href="#" class="btn btn-nav" data-auth-action="signup">
+
+                        <span>Get Started</span>
+
+                        <i class="fas fa-arrow-right"></i>
+
+                    </a>
+
+                </div>
+
+                <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Open navigation menu" aria-controls="navLinks" aria-expanded="false">
+
+                    <span></span><span></span><span></span>
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </nav>
+
+
+
+    <!-- Hero -->
+
+    <section id="home" class="hero">
+
+        <div class="hero-glow"></div>
+
+        <div class="hero-content">
+
+            <div class="hero-badge" data-aos="fade-down">
+
+                <span class="badge-pulse"></span>
+
+                <i class="fas fa-bolt"></i> 10 AI Tools • One Credit Wallet
+
+            </div>
+
+            <h1 class="hero-title" data-aos="fade-up">
+
+                Automate Your <span class="gradient-text">Future</span><br>
+
+                with <span class="gradient-text">JEVEXA</span>
+
+            </h1>
+
+            <p class="hero-subtitle" data-aos="fade-up" data-aos-delay="100">
+                Explore AI-powered automation
+                <span class="hero-sub-static">— AI Chat and Content Generation are live; 8 more tools are on the roadmap.</span>
+            </p>
+
+            <div class="hero-ctas" data-aos="fade-up" data-aos-delay="200">
+
+                <a href="#" class="btn btn-primary btn-magnetic" data-auth-action="signup">
+
+                    <span>Create Account</span>
+
+                    <i class="fas fa-rocket"></i>
+
+                </a>
+
+                <a href="#features" class="btn btn-secondary btn-magnetic">
+
+                    <i class="fas fa-play-circle"></i>
+
+                    <span>Explore Features</span>
+
+                </a>
+
+            </div>
+
+            <div class="hero-stats" data-aos="fade-up" data-aos-delay="300">
+
+                <div class="stat glass">
+
+                    <span class="stat-number" data-count="100">0</span>
+
+                    <span class="stat-label">New Account Grant</span>
+
+                </div>
+
+                <div class="stat glass">
+
+                    <span class="stat-number" data-count="2">0</span>
+
+                    <span class="stat-label">Live AI Tools</span>
+
+                </div>
+
+                <div class="stat glass">
+
+                    <span class="stat-number" data-count="10">0</span>
+
+                    <span class="stat-label">AI Tools</span>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="hero-visual" data-aos="zoom-in" data-aos-delay="150">
+
+            <div class="ai-core-container">
+
+                <div class="hero-feature-stage" id="heroFeatureOrbit" aria-label="JEVEXA Studio features">
+                    <article class="hero-orbit-card" data-hero-feature-card aria-live="polite" aria-atomic="true" aria-label="AI Chat: Live">
+                        <i class="fas fa-comments" aria-hidden="true"></i>
+                        <span class="hero-orbit-copy">
+                            <strong class="hero-orbit-title">AI Chat</strong>
+                            <span class="hero-orbit-state">Live</span>
+                        </span>
+                    </article>
+                    <article class="hero-orbit-card" data-hero-feature-card aria-live="polite" aria-atomic="true" aria-label="Document AI &amp; OCR: Planned">
+                        <i class="fas fa-file-lines" aria-hidden="true"></i>
+                        <span class="hero-orbit-copy">
+                            <strong class="hero-orbit-title">Document AI &amp; OCR</strong>
+                            <span class="hero-orbit-state">Planned</span>
+                        </span>
+                    </article>
+                    <article class="hero-orbit-card" data-hero-feature-card aria-live="polite" aria-atomic="true" aria-label="Workflow Automation: Planned">
+                        <i class="fas fa-diagram-project" aria-hidden="true"></i>
+                        <span class="hero-orbit-copy">
+                            <strong class="hero-orbit-title">Workflow Automation</strong>
+                            <span class="hero-orbit-state">Planned</span>
+                        </span>
+                    </article>
+                </div>
+
+                <!-- Main Orb -->
+
+                <div class="ai-orb">
+
+                    <div class="orb-glow-outer"></div>
+
+                    <div class="orb-orbit orbit-1"></div>
+
+                    <div class="orb-orbit orbit-2"></div>
+
+                    <div class="orb-orbit orbit-3"></div>
+
+                    <div class="orb-sphere">
+
+                        <div class="sphere-core"></div>
+
+                        <div class="sphere-highlight"></div>
+
+                        <div class="sphere-star"></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="scroll-indicator">
+
+            <div class="mouse"><div class="wheel"></div></div>
+
+            <span>Scroll to explore</span>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Trust Marquee -->
+
+    <div class="trust-marquee">
+
+        <div class="marquee-track">
+
+            <div class="marquee-content">
+                <span><i class="fas fa-comments"></i> AI Chatbots</span>
+                <span><i class="fas fa-pen-nib"></i> Content Generation</span>
+                <span><i class="fas fa-envelope-open-text"></i> Email &amp; Outreach AI</span>
+                <span><i class="fas fa-address-book"></i> Mini CRM</span>
+                <span><i class="fas fa-file-lines"></i> Document AI &amp; OCR</span>
+                <span><i class="fas fa-hashtag"></i> Social Media Assistant</span>
+                <span><i class="fas fa-chart-line"></i> Business Analytics</span>
+                <span><i class="fas fa-users-gear"></i> User &amp; Admin Management</span>
+                <span><i class="fas fa-diagram-project"></i> Workflow Automation</span>
+                <span><i class="fas fa-database"></i> Data Management</span>
+            </div>
+            <div class="marquee-content marquee-duplicate" aria-hidden="true">
+                <span><i class="fas fa-comments"></i> AI Chatbots</span>
+                <span><i class="fas fa-pen-nib"></i> Content Generation</span>
+                <span><i class="fas fa-envelope-open-text"></i> Email &amp; Outreach AI</span>
+                <span><i class="fas fa-address-book"></i> Mini CRM</span>
+                <span><i class="fas fa-file-lines"></i> Document AI &amp; OCR</span>
+                <span><i class="fas fa-hashtag"></i> Social Media Assistant</span>
+                <span><i class="fas fa-chart-line"></i> Business Analytics</span>
+                <span><i class="fas fa-users-gear"></i> User &amp; Admin Management</span>
+                <span><i class="fas fa-diagram-project"></i> Workflow Automation</span>
+                <span><i class="fas fa-database"></i> Data Management</span>
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- Features -->
+
+    <section id="features" class="features">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-sparkles"></i> AI Tool Suite</span>
+
+                <h2 class="section-title">10 AI Tools for Your <span class="gradient-text">Business</span></h2>
+
+                <p class="section-desc">Explore 10 AI tools for business. AI Chat and Content Generation are live today; the other eight tools are coming soon.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-stage-heading">
+                    <h3>Release 1</h3>
+                    <p>Everyday tools for chatting, writing, outreach, contacts, and documents.</p>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="50">
+                    <span class="feature-number">01</span>
+                    <span class="service-chip live"><i class="fas fa-circle"></i> Live</span>
+                    <div class="feature-icon"><i class="fas fa-comments"></i></div>
+                    <h3>AI Chat</h3>
+                    <p>Ask questions and get help from the JEVEXA AI chat assistant.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Chat from your browser</li>
+                        <li><i class="fas fa-check"></i> 100 welcome credits for new accounts</li>
+                        <li><i class="fas fa-check"></i> Credit usage history in your account</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="90">
+                    <span class="feature-number">02</span>
+                    <span class="service-chip live"><i class="fas fa-circle"></i> Live</span>
+                    <div class="feature-icon"><i class="fas fa-pen-nib"></i></div>
+                    <h3>Content Generation</h3>
+                    <p>Create clear drafts for everyday business needs with a credit-based AI writing tool.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Social posts and product copy</li>
+                        <li><i class="fas fa-check"></i> Email and website drafts</li>
+                        <li><i class="fas fa-check"></i> Designed for non-technical users</li>
+                    </ul>
+                    <a class="content-tool-link" href="#contentTool">Try Content Generation <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="130">
+                    <span class="feature-number">03</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-envelope-open-text"></i></div>
+                    <h3>Email &amp; Outreach AI</h3>
+                    <p>Prepare thoughtful messages for customers and prospects.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Draft outreach emails</li>
+                        <li><i class="fas fa-check"></i> Personalize messages for your audience</li>
+                        <li><i class="fas fa-check"></i> Keep follow-ups organized</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="170">
+                    <span class="feature-number">04</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-address-book"></i></div>
+                    <h3>Mini CRM</h3>
+                    <p>Keep customer notes and follow-ups together in one simple place.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Organize customer details</li>
+                        <li><i class="fas fa-check"></i> Track leads and next steps</li>
+                        <li><i class="fas fa-check"></i> Designed for everyday business workflows</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="210">
+                    <span class="feature-number">05</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-file-lines"></i></div>
+                    <h3>Document AI &amp; OCR</h3>
+                    <p>Extract text from images and documents right in your browser.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Image-to-text processing on your device</li>
+                        <li><i class="fas fa-check"></i> Copy extracted text into your workflow</li>
+                        <li><i class="fas fa-check"></i> No upload required</li>
+                    </ul>
+                </div>
+
+                <div class="feature-stage-heading">
+                    <h3>Release 2</h3>
+                    <p>Tools for social content, business insights, and workspace administration.</p>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="250">
+                    <span class="feature-number">06</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-hashtag"></i></div>
+                    <h3>Social Media Assistant</h3>
+                    <p>Make planning social content feel simpler.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Draft captions and post ideas</li>
+                        <li><i class="fas fa-check"></i> Repurpose content for social channels</li>
+                        <li><i class="fas fa-check"></i> Plan a consistent posting calendar</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="290">
+                    <span class="feature-number">07</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+                    <h3>Business Analytics</h3>
+                    <p>Make business information easier to understand.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Review useful business trends</li>
+                        <li><i class="fas fa-check"></i> Explore simple charts and summaries</li>
+                        <li><i class="fas fa-check"></i> Turn data into clear next steps</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="330">
+                    <span class="feature-number">08</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-users-gear"></i></div>
+                    <h3>User &amp; Admin Management</h3>
+                    <p>Keep people and workspace settings organized.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Manage workspace access</li>
+                        <li><i class="fas fa-check"></i> Review account activity</li>
+                        <li><i class="fas fa-check"></i> Organize team settings</li>
+                    </ul>
+                </div>
+
+                <div class="feature-stage-heading">
+                    <h3>Release 3</h3>
+                    <p>Tools for workflows and business information management.</p>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="370">
+                    <span class="feature-number">09</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-diagram-project"></i></div>
+                    <h3>Workflow Automation</h3>
+                    <p>Plan repeatable steps for the work you do every day.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Connect everyday tasks into workflows</li>
+                        <li><i class="fas fa-check"></i> Reduce manual handoffs</li>
+                        <li><i class="fas fa-check"></i> Start with simple, guided setup</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card glass tilt-card" data-aos="fade-up" data-aos-delay="410">
+                    <span class="feature-number">10</span>
+                    <span class="service-chip soon"><i class="fas fa-clock"></i> Coming Soon</span>
+                    <div class="feature-icon"><i class="fas fa-database"></i></div>
+                    <h3>Data Management</h3>
+                    <p>Keep business information clear, useful, and organized.</p>
+                    <ul class="feature-list">
+                        <li><i class="fas fa-check"></i> Organize business records</li>
+                        <li><i class="fas fa-check"></i> Import, update, and export information</li>
+                        <li><i class="fas fa-check"></i> Prepare cleaner data for your tools</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section id="contentTool" class="content-tool-section" aria-labelledby="contentToolTitle">
+        <div class="container">
+            <div class="section-header" data-aos="fade-up">
+                <span class="section-tag"><i class="fas fa-pen-nib"></i> Live AI Tool</span>
+                <h2 class="section-title" id="contentToolTitle">Create Business <span class="gradient-text">Content</span></h2>
+                <p class="section-desc">Sign in to generate a blog post, social caption, email, product description, or short social post. Usage is charged in credits based on measured tokens.</p>
+            </div>
+            <div class="content-tool-panel glass">
+                <form id="contentForm" class="content-tool-form">
+                    <div class="form-group">
+                        <label for="contentTopic">What should we write about?</label>
+                        <textarea id="contentTopic" name="topic" rows="5" maxlength="1000" required aria-describedby="contentTopicHelp" placeholder="Describe the product, audience, key points, or idea."></textarea>
+                        <small id="contentTopicHelp">Enter a topic or brief of up to 1,000 characters. Do not include sensitive information.</small>
+                    </div>
+                    <div class="content-tool-controls">
+                        <div class="form-group">
+                            <label for="contentType">Content type</label>
+                            <select id="contentType" name="type" required>
+                                <option value="blog">Blog post</option>
+                                <option value="caption">Social caption</option>
+                                <option value="email">Email draft</option>
+                                <option value="product">Product description</option>
+                                <option value="social">Short social post</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="contentTone">Tone</label>
+                            <select id="contentTone" name="tone" required>
+                                <option value="professional">Professional</option>
+                                <option value="friendly">Friendly</option>
+                                <option value="casual">Casual</option>
+                                <option value="persuasive">Persuasive</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="contentLength">Length</label>
+                            <select id="contentLength" name="length" required>
+                                <option value="short">Short</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="long">Long</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="contentGenerate" type="submit" class="btn btn-primary">
+                        <span>Generate content</span>
+                        <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                    </button>
+                    <p id="contentStatus" role="status" aria-live="polite"></p>
+                </form>
+                <div class="content-tool-output">
+                    <div class="content-output-header">
+                        <h3>Generated content</h3>
+                        <div class="content-output-actions">
+                            <button id="contentCopy" type="button" class="btn btn-outline" disabled>Copy</button>
+                            <button id="contentDownload" type="button" class="btn btn-outline" disabled>Download</button>
+                        </div>
+                    </div>
+                    <pre id="contentOutput" tabindex="0" aria-label="Generated content output"></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- How It Works -->
+
+    <section id="how" class="how-it-works">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-route"></i> Current App</span>
+
+                <h2 class="section-title">How to Try JEVEXA <span class="gradient-text">AI Tools</span></h2>
+
+            </div>
+
+            <div class="steps">
+
+                <div class="step glass tilt-card" data-aos="fade-up" data-aos-delay="100">
+
+                    <div class="step-number">01</div>
+
+                    <div class="step-content">
+
+                        <h3>Create an account</h3>
+
+                        <p>Register with your name, email, and password. Email confirmation may be required by the configured Supabase project.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="step glass tilt-card" data-aos="fade-up" data-aos-delay="200">
+
+                    <div class="step-number">02</div>
+
+                    <div class="step-content">
+
+                        <h3>Confirm your account</h3>
+
+                        <p>Sign in after registration. The configured database trigger is intended to grant 100 welcome credits.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="step glass tilt-card" data-aos="fade-up" data-aos-delay="300">
+
+                    <div class="step-number">03</div>
+
+                    <div class="step-content">
+
+                        <h3>Use AI Chat or Content Generation</h3>
+
+                        <p>Both tools require sign-in and reserve credits before processing a request.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="step glass tilt-card" data-aos="fade-up" data-aos-delay="400">
+
+                    <div class="step-number">04</div>
+
+                    <div class="step-content">
+
+                        <h3>Review credit usage</h3>
+
+                        <p>Account settings show your available balance and transaction history. The other eight AI tools will roll out across three releases.</p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Pricing -->
+
+    <section id="pricing" class="pricing">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-gem"></i> Transparent Pricing</span>
+
+                <h2 class="section-title">Choose Your <span class="gradient-text">Power Level</span></h2>
+
+                <p class="section-desc">Choose an AI chat tier and add credits when checkout becomes available. Packages are one-time purchases, not subscriptions.</p>
+
+                <div class="pricing-trial-note">
+                    <strong>Start free with 100 credits</strong>
+                    <span>100 welcome credits included. No payment info needed to start.</span>
+                </div>
+
+            </div>
+
+            <div class="pricing-toggle" data-aos="fade-up">
+
+                <span class="toggle-label">Monthly</span>
+
+                <label class="switch">
+
+                    <input type="checkbox" id="billingToggle" aria-label="Show annual package pricing">
+
+                    <span class="slider"></span>
+
+                </label>
+
+                <span class="toggle-label">Annually <span class="save-badge">20% OFF</span></span>
+
+            </div>
+
+            <p class="pricing-checkout-notice" id="pricingCheckoutNotice" role="status" aria-live="polite">
+                Paid checkout is not available yet. Live payments require merchant approval, production credentials and a verified signed webhook. No subscription or automatic renewal is offered.
+            </p>
+
+            <div class="pricing-grid">
+
+                <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="100" data-pricing-plan="starter">
+
+    <div class="price-header">
+
+        <h3>Lite</h3>
+
+        <p class="price-desc">For students &amp; solo starters · formerly Starter</p>
+
+    </div>
+
+
+
+    <div class="price-amount">
+
+        <span class="old-price" data-original-monthly hidden></span>
+
+        <span class="currency">$</span>
+
+        <span class="amount" data-plan-amount>—</span>
+
+        <span class="period" data-plan-period>monthly credit package</span>
+        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+
+    </div>
+
+    <p class="annual-price-note" data-annual-price hidden></p>
+
+    <div class="discount-tag" data-annual-discount>Annual package · paid once</div>
+
+    <ul class="price-features">
+
+        <li><i class="fas fa-check"></i> 2,000 credits monthly / 24,000 credits annually</li>
+        <li><i class="fas fa-check"></i> AI chat access</li>
+        <li><i class="fas fa-check"></i> Lite AI chat · 1 credit per message</li>
+        <li><i class="fas fa-check"></i> Image uploads · Low thinking level</li>
+        <li><i class="fas fa-check"></i> Content Generation</li>
+        <li><i class="fas fa-clock"></i> Email &amp; Outreach AI (at launch)</li>
+        <li><i class="fas fa-clock"></i> Mini CRM (at launch)</li>
+        <li><i class="fas fa-clock"></i> Document AI &amp; OCR (at launch)</li>
+        <li><i class="fas fa-headset"></i> Public human support tickets</li>
+
+    </ul>
+
+
+
+    <button type="button" class="btn btn-outline btn-magnetic" data-plan="starter" disabled>Coming Soon</button>
+
+</div>
+
+                <div class="price-card glass popular tilt-card" data-aos="fade-up" data-aos-delay="200" data-pricing-plan="pro">
+
+    <div class="popular-badge">
+
+        <i class="fas fa-crown"></i> Most Popular
+
+    </div>
+
+
+
+    <div class="price-header">
+
+        <h3>Pro</h3>
+
+        <p class="price-desc">For freelancers &amp; small shops</p>
+
+    </div>
+
+
+
+    <div class="price-amount">
+
+        <span class="old-price" data-original-monthly hidden></span>
+
+        <span class="currency">$</span>
+
+        <span class="amount" data-plan-amount>—</span>
+
+        <span class="period" data-plan-period>monthly credit package</span>
+        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+
+    </div>
+
+    <p class="annual-price-note" data-annual-price hidden></p>
+
+    <div class="discount-tag" data-annual-discount>Annual package · paid once</div>
+
+
+
+    <ul class="price-features">
+
+        <li><i class="fas fa-check"></i> 10,000 credits monthly / 120,000 credits annually</li>
+        <li><i class="fas fa-check"></i> Everything in Lite</li>
+        <li><i class="fas fa-check"></i> Pro AI chat · 2 credits per message</li>
+        <li><i class="fas fa-check"></i> Images, PDF and ZIP uploads under 5 MB</li>
+        <li><i class="fas fa-check"></i> Low and Standard thinking levels</li>
+        <li><i class="fas fa-clock"></i> All 10 AI tools as they launch</li>
+        <li><i class="fas fa-clock"></i> Social Media Assistant and Business Analytics (at launch)</li>
+        <li><i class="fas fa-envelope"></i> Priority email support (at launch)</li>
+
+    </ul>
+
+
+
+    <button type="button" class="btn btn-primary btn-magnetic" data-plan="pro" disabled>Coming Soon</button>
+
+</div>
+
+                <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="300" data-pricing-plan="business">
+
+    <div class="price-header">
+
+        <h3>Max</h3>
+
+        <p class="price-desc">For growing small businesses · formerly Business</p>
+
+    </div>
+
+
+
+    <div class="price-amount">
+
+        <span class="old-price" data-original-monthly hidden></span>
+
+        <span class="currency">$</span>
+
+        <span class="amount" data-plan-amount>—</span>
+
+        <span class="period" data-plan-period>monthly credit package</span>
+        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+
+    </div>
+
+    <p class="annual-price-note" data-annual-price hidden></p>
+
+    <div class="discount-tag gold" data-annual-discount>Annual package · paid once</div>
+
+
+
+    <ul class="price-features">
+
+        <li><i class="fas fa-check"></i> 30,000 credits monthly / 360,000 credits annually</li>
+        <li><i class="fas fa-check"></i> Everything in Pro</li>
+        <li><i class="fas fa-check"></i> Max AI chat · 4 credits per message</li>
+        <li><i class="fas fa-check"></i> Images, PDF and ZIP uploads under 5 MB</li>
+        <li><i class="fas fa-check"></i> Max thinking level</li>
+        <li><i class="fas fa-clock"></i> Data Management (at launch)</li>
+        <li><i class="fas fa-clock"></i> User &amp; Admin Management (at launch)</li>
+        <li><i class="fas fa-envelope"></i> Direct founder support (at launch)</li>
+
+    </ul>
+
+
+
+   <button type="button" class="btn btn-outline btn-magnetic" data-plan="business" disabled>Coming Soon</button>
+
+</div>
+
+                <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="400" data-pricing-plan="ultra">
+
+    <div class="price-header">
+        <h3>Ultra</h3>
+        <p class="price-desc">For teams who need maximum chat access</p>
+    </div>
+
+    <div class="price-amount">
+        <span class="currency">$</span>
+        <span class="amount" data-plan-amount>—</span>
+        <span class="period" data-plan-period>credit package</span>
+    </div>
+
+    <div class="discount-tag">Ultra tier access · checkout coming soon</div>
+    <ul class="price-features">
+        <li><i class="fas fa-check"></i> Ultra AI chat · 8 credits per message</li>
+        <li><i class="fas fa-check"></i> Images, PDF and ZIP uploads under 5 MB</li>
+        <li><i class="fas fa-check"></i> All thinking levels</li>
+        <li><i class="fas fa-check"></i> Extended response limit</li>
+        <li><i class="fas fa-clock"></i> Credit allocation announced before checkout</li>
+    </ul>
+
+    <button type="button" class="btn btn-outline btn-magnetic" disabled>Coming Soon</button>
+
+</div>
+
+            <p class="pricing-terms">Existing checkout is unavailable. Credit packages are one-time purchases, not subscriptions. AI chat uses fixed credits per message by tier; other variable AI services use measured provider usage.</p>
+        </div>
+    </section>
+
+
+
+    <!-- Reviews -->
+
+    <section id="reviews" class="reviews">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-circle-info"></i> Availability</span>
+
+                <h2 class="section-title">Current Platform <span class="gradient-text">Status</span></h2>
+
+            </div>
+
+            <div class="reviews-grid">
+
+                <div class="review-card glass tilt-card" data-aos="fade-up" data-aos-delay="50">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #667eea, #764ba2);">AI</div>
+
+                            <div><h3>AI chat</h3><span>AI chat service</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-circle-info"></i> Status</div>
+
+                    </div>
+
+                    <p>AI Chat and Content Generation are connected AI tools. Both require a working account, service configuration, and available credits.</p>
+
+                    <span class="review-date">Live tool</span>
+
+                </div>
+
+                <div class="review-card glass tilt-card" data-aos="fade-up" data-aos-delay="100">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #f093fb, #f5576c);">CR</div>
+
+                            <div><h3>Credit wallet</h3><span>Application capability</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-circle-info"></i> Status</div>
+
+                    </div>
+
+                    <p>Credit reservation, token-based settlement and transaction history are implemented in the application. Production behavior must be verified against the live database.</p>
+
+                    <span class="review-date">Integration status</span>
+
+                </div>
+
+                <div class="review-card glass tilt-card" data-aos="fade-up" data-aos-delay="150">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">PL</div>
+
+                            <div><h3>Other AI tools</h3><span>Roadmap status</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-circle-info"></i> Status</div>
+
+                    </div>
+
+                    <p>The other eight tools will roll out across three releases.</p>
+
+                    <span class="review-date">Coming soon</span>
+
+                </div>
+
+                <div class="review-card glass tilt-card" data-aos="fade-up" data-aos-delay="200">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">DB</div>
+
+                            <div><h3>Database checks</h3><span>Verification pending</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-circle-info"></i> Status</div>
+
+                    </div>
+
+                    <p>Supabase authentication and row-level security are used by the application. No compliance certification or security audit is claimed here.</p>
+
+                    <span class="review-date">Integration status</span>
+
+                </div>
+
+                <div class="review-card glass tilt-card" data-aos="fade-up" data-aos-delay="250">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #fa709a, #fee140);">PY</div>
+
+                            <div><h3>Payments</h3><span>Safepay availability</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-circle-info"></i> Status</div>
+
+                    </div>
+
+                    <p>Paid payments are not available yet. Checkout will open only after merchant approval, production credentials, and a verified webhook are in place.</p>
+
+                    <span class="review-date">Integration status</span>
+
+                </div>
+
+                <div class="review-card glass tilt-card" data-aos="fade-up" data-aos-delay="300">
+
+                    <div class="review-header">
+
+                        <div class="reviewer">
+
+                            <div class="avatar" style="background: linear-gradient(135deg, #a18cd1, #fbc2eb);">AU</div>
+
+                            <div><h3>Checkout</h3><span>Coming Soon</span></div>
+
+                        </div>
+
+                        <div class="verified"><i class="fas fa-circle-info"></i> Status</div>
+
+                    </div>
+
+                    <p>Checkout remains disabled until the production payment integration is approved, configured, and verified.</p>
+
+                    <span class="review-date">Integration status</span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- FAQ -->
+
+    <section id="faq" class="faq">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-circle-question"></i> Got Questions?</span>
+
+                <h2 class="section-title">Frequently Asked <span class="gradient-text">Questions</span></h2>
+
+            </div>
+
+            <div class="faq-list">
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>What exactly is JEVEXA AI Automation Studio?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>JEVEXA AI Automation Studio brings 10 AI tools for your business into one place — AI Chatbots, content generation, email outreach, mini CRM, document OCR and more.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Do I need coding skills to use JEVEXA?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>No coding is needed to use AI Chat or Content Generation. The other eight tools are planned across three releases.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Is there a free trial?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>New accounts receive 100 welcome credits to try AI chat. This is a one-time credit grant, not a subscription trial.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>How secure is my data?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>JEVEXA uses Supabase for account access and credit data. Do not submit sensitive information; security and privacy details are available on request.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Which tools are available today?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>AI Chat and Content Generation are live now; the other eight tools roll out in three releases.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>Can I white-label the solution?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>White-label options are not available today.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>How long does it take to launch the first automation?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>There is no launch date to share yet. Each upcoming tool will be marked available when it is ready to use.</p></div>
+
+                </div>
+
+                <div class="faq-item glass" data-aos="fade-up">
+
+                    <button type="button" class="faq-question" aria-expanded="false"><span>What kind of support do you offer?</span><i class="fas fa-chevron-down"></i></button>
+
+                    <div class="faq-answer"><p>Use JEVEXA Support to chat with the AI assistant or submit a human support ticket. Priority paid-plan support is not available until checkout launches.</p></div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Contact -->
+
+    <section id="contact" class="contact">
+
+        <div class="container">
+
+            <div class="section-header" data-aos="fade-up">
+
+                <span class="section-tag"><i class="fas fa-paper-plane"></i> Let's Talk</span>
+
+                <h2 class="section-title">Ready to <span class="gradient-text">Automate</span>?</h2>
+
+                <p class="section-desc">Tell us about your goals. We will respond as soon as we can.</p>
+
+            </div>
+
+            <div class="contact-wrapper glass" data-aos="fade-up">
+
+                <form id="contactForm" class="contact-form">
+
+                    <div class="form-row">
+
+                        <div class="form-group">
+
+                            <label for="contactName">Full Name</label>
+
+                            <input id="contactName" type="text" name="name" required autocomplete="name" placeholder="John Doe">
+
+                        </div>
+
+                        <div class="form-group">
+
+                            <label for="contactEmail">Work Email</label>
+
+                            <input id="contactEmail" type="email" name="email" required autocomplete="email" placeholder="john@company.com">
+
+                        </div>
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="contactCompany">Company</label>
+
+                        <input id="contactCompany" type="text" name="company" autocomplete="organization" placeholder="Your Company">
+
+                    </div>
+
+                    <div class="form-group">
+
+                        <label for="contactMessage">What do you want to automate?</label>
+
+                        <textarea id="contactMessage" name="message" rows="4" required placeholder="Tell us about your use case..."></textarea>
+
+                    </div>
+
+                    <div class="form-group hp-field" aria-hidden="true"><label for="contactWebsite">Website</label><input id="contactWebsite" type="text" name="website" tabindex="-1" autocomplete="off"></div>
+
+                    <button type="submit" class="btn btn-primary full-width">
+
+                        <span>Send Message</span>
+
+                        <i class="fas fa-paper-plane"></i>
+
+                    </button>
+
+                </form>
+
+                <div class="contact-info">
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-envelope"></i></div>
+
+                        <div><h4>Email</h4><p>hello@jevexa.net</p></div>
+
+                    </div>
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-clock"></i></div>
+
+                        <div><h4>Response Time</h4><p>Not guaranteed</p></div>
+
+                    </div>
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-globe"></i></div>
+
+                        <div><h4>Service availability</h4><p>See current platform status</p></div>
+
+                    </div>
+
+                    <div class="info-item">
+
+                        <div class="info-icon"><i class="fas fa-shield-halved"></i></div>
+
+                        <div><h4>Security</h4><p>Account access is protected by Supabase Auth and RLS</p></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- Footer -->
+
+    <footer class="footer">
+
+        <div class="container">
+
+            <div class="footer-top">
+
+                <div class="footer-brand">
+
+                    <a href="#home" class="logo">
+
+                        <span class="logo-icon"><i class="fas fa-robot"></i></span>
+
+                        <div class="logo-texts">
+
+                            <span class="logo-text">JEVEXA</span>
+
+                            <span class="logo-sub">AI STUDIO</span>
+
+                        </div>
+
+                    </a>
+
+                    <p>Premium AI Automation Studio. Build once. Scale forever.</p>
+
+                    <form id="newsletterForm" class="newsletter-form" novalidate>
+                        <label for="newsletterEmail" class="newsletter-label">Get automation tips & product updates</label>
+                        <div class="newsletter-row"><input id="newsletterEmail" type="email" placeholder="you@company.com" autocomplete="email" required aria-label="Email for newsletter"><button type="submit" class="btn btn-primary" aria-label="Subscribe"><i class="fas fa-arrow-right"></i></button></div>
+                        <p class="newsletter-note">No spam. Unsubscribe anytime.</p>
+                    </form>
+
+                </div>
+
+                <div class="footer-links">
+
+                    <div>
+
+                        <h4>Product</h4>
+
+                        <a href="#features">Features</a>
+
+                        <a href="#pricing">Pricing</a>
+
+                        <a href="#how">Process</a>
+
+                        <a href="#faq">FAQ</a>
+
+                    </div>
+
+                    <div>
+
+                        <h4>Company</h4>
+
+                        <a href="#reviews">Availability</a>
+
+                        <a href="#contact">Contact</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Careers">Careers</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Blog">Blog</a>
+
+                    </div>
+
+                    <div>
+
+                        <h4>Legal</h4>
+
+                        <a href="#" class="coming-soon-link" data-page="Privacy">Privacy</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Terms">Terms</a>
+
+                        <a href="#" class="coming-soon-link" data-page="Security">Security</a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="footer-bottom">
+
+                <p>© <span id="year">2026</span> JEVEXA AI Automation Studio. All rights reserved.</p>
+
+                <div class="socials">
+
+                    <a href="#" class="social coming-soon-link" data-page="Facebook" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="Instagram" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="Twitter" aria-label="Twitter"><i class="fab fa-x-twitter"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="LinkedIn" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+
+                    <a href="#" class="social coming-soon-link" data-page="YouTube" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </footer>
+
+
+
+    <div id="toast" class="toast"></div>
+
+
+
+    <!-- Luxury Premium Chatbot -->
+
+    <div class="chatbot" id="chatbot">
+
+        <button class="chatbot-toggle" id="chatbotToggle" aria-label="Open Jevexa AI" aria-expanded="false" aria-controls="chatbotWindow">
+
+            <div class="ct-glow"></div>
+
+            <div class="ct-ring"></div>
+
+            <div class="ct-core">
+
+                <img src="assets/logo.svg" alt="JEVEXA AI" width="38" height="38" style="border-radius:10px;">
+
+            </div>
+
+            <span class="ct-badge">AI</span>
+            <span class="chatbot-toggle-label">Jevexa AI</span>
+        </button>
+        <div class="chatbot-window" id="chatbotWindow" role="dialog" aria-modal="true" aria-labelledby="chatbotTitle" aria-hidden="true">
+            <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat history and settings">
+                <button type="button" class="chat-new-button" id="chatNewConversation">＋ New Chat</button>
+                <label class="chat-history-search">
+                    <span class="visually-hidden">Search chats</span>
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="text" id="chatHistorySearch" placeholder="Search chats...">
+                </label>
+                <div class="chat-history-heading">Recent chats</div>
+                <div class="chat-history-list" id="chatHistoryList" role="list"></div>
+                <p class="chat-history-empty" id="chatHistoryEmpty" role="status" hidden></p>
+                <details class="chat-settings" id="chatSettings">
+                    <summary>⚙ Settings</summary>
+                    <input type="hidden" id="chatTheme" value="dark">
+                    <div class="chat-select chat-setting-select" data-chat-select="theme">
+                        <span class="chat-select-label" id="chatThemeLabel">Theme</span>
+                        <button type="button" class="chat-select-trigger" id="chatThemeTrigger" role="combobox" aria-labelledby="chatThemeLabel chatThemeValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatThemeOptions">
+                            <span class="chat-select-value" id="chatThemeValue">Dark</span>
+                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <div class="chat-select-menu" id="chatThemeOptions" role="listbox" aria-labelledby="chatThemeLabel" hidden>
+                            <div class="chat-select-option" role="option" tabindex="-1" data-value="dark" data-label="Dark" aria-selected="true"><span>Dark</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
+                            <div class="chat-select-option" role="option" tabindex="-1" data-value="light" data-label="Light" aria-selected="false"><span>Light</span><span class="chat-option-state" aria-hidden="true"></span></div>
+                            <div class="chat-select-option" role="option" tabindex="-1" data-value="system" data-label="System" aria-selected="false"><span>System</span><span class="chat-option-state" aria-hidden="true"></span></div>
+                        </div>
+                    </div>
+                    <label class="chat-motion-setting"><input type="checkbox" id="chatReducedMotion"> Reduced motion</label>
+                    <button type="button" id="chatClearAll">Clear all chats</button>
+                </details>
+                <button type="button" class="chat-sidebar-close" id="chatSidebarClose" aria-label="Close chat history">×</button>
+            </aside>
+            <main class="chat-main">
+            <div class="chatbot-header">
+                <button type="button" class="chat-sidebar-toggle" id="chatSidebarToggle" aria-label="Toggle chat history">☰</button>
+                <div class="chatbot-avatar">
+                    <div class="avatar-ring"></div>
+                    <i class="fas fa-wand-magic-sparkles"></i>
+
+                    <span class="status-dot"></span>
+
+                </div>
+
+                <div class="chatbot-info">
+                    <h4 id="chatbotTitle">Jevexa AI</h4>
+                    <span class="status">AI chat • Sign-in required</span>
+                </div>
+                <button class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="chat-empty-state" id="chatEmptyState">
+                <div class="chat-empty-mark"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i></div>
+                <h2 id="chatWelcomeTitle">👋 Welcome! Ready to automate?</h2>
+                <p>Choose a quick start or ask Jevexa AI anything.</p>
+                <div class="chat-welcome-chips" id="chatWelcomeChips" aria-label="Quick-start prompts">
+                    <button type="button" class="chat-welcome-chip">Write a blog post</button>
+                    <button type="button" class="chat-welcome-chip">Draft an email</button>
+                    <button type="button" class="chat-welcome-chip">Explain credits</button>
+                </div>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+
+                <div class="message bot" data-chat-welcome>
+
+                    <div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div>
+
+                    <div class="msg-content">
+
+                        <p>Hey! 👋 I'm the JEVEXA assistant. I can explain account credits, the connected AI chatbot, and current feature availability. What would you like to know?</p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="chat-signin-prompt" id="chatSignInPrompt" aria-live="polite">
+                <span>Sign in to chat — your first 100 credits are free</span>
+                <button type="button" id="chatSignInButton">Sign in</button>
+            </div>
+
+            <div class="chat-tier-controls">
+                <input type="hidden" id="chatTier" value="lite">
+                <div class="chat-select" data-chat-select="tier">
+                    <span class="chat-select-label" id="chatTierLabel">Model</span>
+                    <button type="button" class="chat-select-trigger" id="chatTierTrigger" role="combobox" aria-labelledby="chatTierLabel chatTierValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatTierOptions">
+                        <span class="chat-select-value" id="chatTierValue">Jevexa Lite</span>
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div class="chat-select-menu" id="chatTierOptions" role="listbox" aria-labelledby="chatTierLabel" hidden>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="lite" data-label="Jevexa Lite" aria-selected="true"><span>Jevexa Lite</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="pro" data-label="Jevexa Pro" data-locked="true" aria-label="Jevexa Pro, locked. Select to learn about upgrades." aria-selected="false"><span>Jevexa Pro</span><span class="chat-option-state" aria-hidden="true">🔒</span></div>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="max" data-label="Jevexa Max" data-locked="true" aria-label="Jevexa Max, locked. Select to learn about upgrades." aria-selected="false"><span>Jevexa Max</span><span class="chat-option-state" aria-hidden="true">🔒</span></div>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="ultra" data-label="Jevexa Ultra" data-locked="true" aria-label="Jevexa Ultra, locked. Select to learn about upgrades." aria-selected="false"><span>Jevexa Ultra</span><span class="chat-option-state" aria-hidden="true">🔒</span></div>
+                    </div>
+                </div>
+                <input type="hidden" id="chatThinking" value="low">
+                <div class="chat-select" data-chat-select="thinking">
+                    <span class="chat-select-label" id="chatThinkingLabel">Thinking</span>
+                    <button type="button" class="chat-select-trigger" id="chatThinkingTrigger" role="combobox" aria-labelledby="chatThinkingLabel chatThinkingValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatThinkingOptions">
+                        <span class="chat-select-value" id="chatThinkingValue">Low</span>
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div class="chat-select-menu" id="chatThinkingOptions" role="listbox" aria-labelledby="chatThinkingLabel" hidden>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="low" data-label="Low" aria-selected="true"><span>Low</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="standard" data-label="Standard" data-locked="true" aria-label="Standard thinking, locked. Select to learn about upgrades." aria-selected="false"><span>Standard</span><span class="chat-option-state" aria-hidden="true">🔒</span></div>
+                        <div class="chat-select-option" role="option" tabindex="-1" data-value="max" data-label="Max" data-locked="true" aria-label="Max thinking, locked. Select to learn about upgrades." aria-selected="false"><span>Max</span><span class="chat-option-state" aria-hidden="true">🔒</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-attachment-list" id="chatAttachmentList" aria-live="polite" hidden></div>
+
+            <div class="chat-input-area">
+
+                <input type="file" id="chatFileInput" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,application/zip,.jpg,.jpeg,.png,.webp,.gif,.pdf,.zip" multiple hidden>
+                <button type="button" id="chatAttachButton" class="chat-attach" aria-label="Attach an image, PDF, or ZIP file"><i class="fas fa-paperclip" aria-hidden="true"></i></button>
+                <textarea id="chatInput" rows="1" placeholder="Ask Jevexa AI anything..." autocomplete="off" aria-label="Message Jevexa AI"></textarea>
+
+                <button id="chatSend" class="chat-send" aria-label="Send message"><i class="fas fa-paper-plane"></i></button>
+
+            </div>
+
+            <div class="chat-credit-notice">
+                <span id="chatCreditStatus" role="status" aria-live="polite">⚡ Lite • 1 credit/msg</span>
+                <a id="chatCreditUpgrade" href="#pricing" hidden>View plans</a>
+            </div>
+            </main>
+        </div>
+
+    </div>
+
+ <script async src="https://unpkg.com/aos@2.3.1/dist/aos.js" onload="window.JEVEXA_INIT_AOS?.()"></script>
+
+ <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+ <div id="staticPreviewNotice" class="app-config-error" role="status" aria-live="polite" hidden>
+     Static preview: sign-in, credits, AI chat, and content generation are disabled. Use the configured JEVEXA Worker for account features.
+ </div>
+ <div id="appConfigError" class="app-config-error" role="alert" aria-live="assertive" hidden>
+     JEVEXA account features could not load because this Worker is missing its environment-specific public Supabase configuration. Please try again later.
+ </div>
+ <script>
+     if (location.port === '8788' || location.hostname === 'jevexa.net' || location.hostname === 'www.jevexa.net') {
+         document.write('<script src="/config.js"><\/script>');
+     }
+ </script>
+ <script src="script.js"></script>
+ <script src="credits.js"></script>
+ <script src="content.js"></script>
+ <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top"><i class="fas fa-arrow-up"></i></button>
+<!-- ===============================
+
+     JEVEXA LOGIN MODAL
+
+     =============================== -->
+
+<div id="loginModal" class="login-modal" role="dialog" aria-modal="true" aria-labelledby="loginDialogTitle" tabindex="-1">
+
+
+
+    <div class="login-box">
+
+
+
+        <!-- LEFT SIDE -->
+
+        <div class="login-visual">
+
+
+
+            <div class="login-brand">
+
+                <div class="login-brand-icon">✦</div>
+
+                <div>
+
+                    <strong>JEVEXA</strong>
+
+                    <span>AI AUTOMATION STUDIO</span>
+
+                </div>
+
+            </div>
+
+
+
+            <h2>
+
+                Welcome to
+
+                <span>JEVEXA</span>
+
+            </h2>
+
+
+
+            <p class="login-visual-text">
+
+                10 AI tools for your business. One credit wallet. Start free with 100 credits.
+
+            </p>
+
+
+
+            <div class="login-features">
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">⚡</div>
+
+                    <div>
+
+                        <strong>AI Chat Assistant</strong>
+                        <span>Requires configured provider access</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">✦</div>
+
+                    <div>
+
+                        <strong>Credit Wallet</strong>
+                        <span>Check balance and transaction history</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">▥</div>
+
+                    <div>
+
+                        <strong>Account Credits</strong>
+                        <span>Review balance and usage</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="login-feature">
+
+                    <div class="feature-icon">◎</div>
+
+                    <div>
+
+                        <strong>Supabase Sign-in</strong>
+                        <span>Account access for connected features</span>
+
+                    </div>
+
+                </div>
+
+
+
+            </div>
+
+
+
+            <!-- Current product status -->
+
+            <div class="login-stats">
+
+
+
+                <div class="login-stat">
+
+                    <strong>10</strong>
+                    <span>AI tools planned</span>
+
+                </div>
+
+
+
+                <div class="login-stat">
+
+                    <strong>2</strong>
+                    <span>Live AI tools</span>
+
+                </div>
+
+
+
+                <div class="login-stat">
+
+                    <strong>8</strong>
+                    <span>Coming Soon</span>
+
+                </div>
+
+
+
+            </div>
+
+
+
+        </div>
+
+
+
+
+
+        <!-- RIGHT SIDE -->
+
+        <div class="login-form-area">
+
+
+
+            <button type="button"
+
+                class="login-close"
+
+                data-jevexa-action="close-login"
+
+                aria-label="Close login">
+
+                ×
+
+            </button>
+
+
+
+            <div class="login-welcome">
+
+
+
+                <div class="login-badge">
+
+                    ✨ Welcome to JEVEXA
+
+                </div>
+
+
+
+                <h3 id="loginDialogTitle">
+
+                    Welcome to
+
+                    <span>JEVEXA</span>
+
+                </h3>
+
+
+
+                <p>
+
+                    Sign in to use AI chat and check your credits.
+
+                </p>
+
+
+
+            </div>
+
+
+
+
+
+            <!-- GOOGLE -->
+
+            <button type="button"
+
+                data-jevexa-action="login-google"
+
+                class="social-login">
+
+
+
+                <span class="social-icon google-icon">G</span>
+
+
+
+                <span>Continue with Google</span>
+
+
+
+                <span class="social-arrow">→</span>
+
+
+
+            </button>
+
+
+
+
+
+            <!-- GITHUB -->
+
+            <button type="button"
+
+                data-jevexa-action="login-github"
+
+                class="social-login">
+
+
+
+                <span class="social-icon github-icon">●</span>
+
+
+
+                <span>Continue with GitHub</span>
+
+
+
+                <span class="social-arrow">→</span>
+
+
+
+            </button>
+
+
+
+
+
+            <!-- DIVIDER -->
+
+            <div class="login-divider">
+
+                <span></span>
+
+                <small>OR</small>
+
+                <span></span>
+
+            </div>
+
+
+
+            <!-- FULL NAME (only in Create Account) -->
+
+            <form id="authForm" novalidate>
+            <div class="login-input-wrapper" id="signupNameWrapper" style="display: none !important;">
+
+                <span class="input-icon">👤</span>
+
+                <input type="text" id="signupName" placeholder="Full name" autocomplete="name" aria-label="Full name">
+
+            </div>
+
+
+
+            <!-- EMAIL -->
+
+            <div class="login-input-wrapper">
+
+                <span class="input-icon">✉</span>
+
+                <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email" aria-label="Email address" required>
+
+            </div>
+
+
+
+            <!-- PASSWORD -->
+
+            <div class="login-input-wrapper">
+
+                <span class="input-icon">🔒</span>
+
+                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" aria-label="Password" minlength="6" required>
+
+                <button type="button" id="passwordToggle" class="password-toggle" aria-label="Show password" aria-pressed="false"><i class="fas fa-eye"></i></button>
+
+            </div>
+
+            <div class="login-options"><a href="#" id="forgotPasswordLink" class="forgot-link">Forgot password?</a></div>
+
+
+
+
+
+            <!-- LOGIN -->
+
+            <button type="submit"
+
+            id="authSubmitButton"
+
+                class="login-submit">
+
+
+
+                Login to JEVEXA
+
+                <span>→</span>
+
+
+
+            </button>
+            </form>
+
+
+
+
+
+            <!-- CREATE ACCOUNT -->
+
+            <div class="login-footer" id="authFooter">
+
+    <span id="authFooterText">Don't have an account?</span>
+
+    <a href="#" id="authModeToggle" data-jevexa-action="toggle-auth-mode">
+
+        Create Account →
+
+    </a>
+
+</div>
+
+
+
+        </div>
+
+
+
+    </div>
+
+
+
+</div>
+
+<script src="premium.js"></script>
+<div id="upgradeModal" class="upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="upgradeModalTitle" aria-describedby="upgradeModalMessage" hidden>
+    <div class="upgrade-modal-card">
+        <button type="button" class="upgrade-modal-close" id="upgradeModalClose" aria-label="Close upgrade dialog">×</button>
+        <span class="upgrade-modal-eyebrow" id="upgradeModalPlan">JEVEXA PRO</span>
+        <h2 id="upgradeModalTitle">Unlock this feature</h2>
+        <p id="upgradeModalMessage">Choose a plan to unlock this feature.</p>
+        <div class="upgrade-modal-actions">
+            <button type="button" class="upgrade-modal-secondary" id="upgradeModalCloseSecondary" aria-label="Not now">Not now</button>
+            <a class="upgrade-modal-primary" id="upgradeModalPlans" href="#pricing">Upgrade Plan</a>
+        </div>
+    </div>
+</div>
+<div id="supportModal" class="support-modal" role="dialog" aria-modal="true" aria-labelledby="supportModalTitle" hidden>
+    <div class="support-modal-card">
+        <button type="button" class="support-modal-close" id="supportModalClose" aria-label="Close support dialog"><i class="fas fa-times" aria-hidden="true"></i></button>
+        <span class="support-eyebrow"><i class="fas fa-headset" aria-hidden="true"></i> JEVEXA HUMAN SUPPORT</span>
+        <h2 id="supportModalTitle">How can we help?</h2>
+        <section id="supportAiPhase" class="support-ai-phase" aria-label="AI support assistant">
+            <div class="support-ai-messages" id="supportAiMessages" aria-live="polite">
+                <p class="support-ai-message">Hi! I can help with pricing, credits, and how to use JEVEXA. I’m an AI assistant; choose Talk to Human for anything complex.</p>
+            </div>
+            <form id="supportAiForm" class="support-ai-input">
+                <label class="visually-hidden" for="supportAiInput">Ask support AI</label>
+                <input id="supportAiInput" maxlength="1200" placeholder="Ask a support question…" required>
+                <button type="submit" id="supportAiSend" aria-label="Send support question"><i class="fas fa-paper-plane" aria-hidden="true"></i></button>
+            </form>
+        </section>
+        <button type="button" class="support-human-button" id="supportHumanButton">👤 Talk to Human Agent</button>
+        <p id="supportConnecting" class="support-connecting" role="status" hidden><span class="support-spinner" aria-hidden="true"></span> Connecting to Maaz…</p>
+        <form id="supportTicketForm" hidden>
+            <label for="supportName">Name</label>
+            <input id="supportName" name="name" maxlength="120" autocomplete="name" required>
+            <label for="supportEmail">Email</label>
+            <input id="supportEmail" name="email" type="email" maxlength="254" autocomplete="email" required>
+            <label for="supportMessage">Message</label>
+            <textarea id="supportMessage" name="message" rows="5" maxlength="5000" required></textarea>
+            <button type="submit" class="btn btn-primary" id="supportTicketSubmit">Send &amp; Notify Maaz</button>
+            <p id="supportTicketStatus" role="status" aria-live="polite"></p>
+        </form>
+        <p id="supportSuccess" class="support-success" role="status" hidden>✅ Sent! Reply in 2–4 hrs.</p>
+    </div>
+</div>
+<script src="support.js"></script>
+<button id="jevexaSupportBtn" class="jevexa-support-btn" type="button" aria-label="Contact JEVEXA support">
+    <span class="support-icon"><i class="fas fa-headset" aria-hidden="true"></i></span>
+    <span class="support-label">Support</span>
+</button>
+</body>
+
+</html>

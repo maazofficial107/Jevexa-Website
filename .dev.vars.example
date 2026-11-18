@@ -1,0 +1,21 @@
+# Local development only; do not commit real .dev.vars values.
+OPENROUTER_API_KEY=
+# Optional server-side model overrides; omit to use the Worker defaults.
+OPENROUTER_MODEL_LITE=
+OPENROUTER_MODEL_PRO=
+OPENROUTER_MODEL_MAX=
+OPENROUTER_MODEL_ULTRA=
+RESEND_API_KEY=
+CONTACT_FROM_EMAIL=
+CONTACT_TO_EMAIL=
+
+SUPABASE_URL=https://YOUR-STAGING-PROJECT-REF.supabase.co
+# Use the publishable key (or legacy anon key) from this same Supabase project.
+SUPABASE_ANON_KEY=YOUR_STAGING_PUBLISHABLE_OR_LEGACY_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY=
+JEVEXA_ENVIRONMENT=staging
+JEVEXA_ADMIN_EMAIL=
+SAFEPAY_API_KEY=
+SAFEPAY_SECRET_KEY=
+SAFEPAY_WEBHOOK_SECRET=
+# Safepay API is intentionally sandbox-only in this package.

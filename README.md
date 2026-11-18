@@ -48,7 +48,7 @@ Release 3 — Operations tools:
 Facebook • Instagram • X (Twitter) • LinkedIn • YouTube • Discord
 
 ### Other
-- Planned credit packages: Lite $5 monthly / $48 annual, Pro $12 / $115.20, Max $25 / $240 (annual packages are 20% off and paid once), Ultra $49; checkout is Coming Soon
+- Planned credit packages: Lite $5 monthly / $48 annual, Pro $12 / $115.20, Max $25 / $240, Ultra $49 / $470.40 (all annual packages are 20% off and paid once); checkout is Coming Soon
 - 8 FAQ • Contact form • current platform availability status (no review claims)
 - Fully responsive
 
@@ -76,7 +76,7 @@ Before starting, configure `.dev.vars` from `.dev.vars.example` with a **matchin
 - Open Wrangler at `http://127.0.0.1:8788` with staging config and confirm the Worker config warning remains visible if required values are missing.
 - Confirm the feature section contains exactly 10 cards: two Live tools and eight Coming Soon tools, grouped into three releases.
 - Check the feature grid at desktop (3 columns), tablet (2 columns), and mobile (1 column).
-- Verify the monthly/annual toggle shows the original monthly rate, the 20%-discounted monthly equivalent, and the one-time annual total; Ultra allocation is not yet announced. Checkout remains unavailable.
+- Verify the monthly/annual toggle shows the original monthly rate, the 20%-discounted monthly equivalent, and the one-time annual total for all plans (Lite, Pro, Max, and Ultra). Checkout remains unavailable.
 - Verify the FAQ accordion and mobile menu work without account configuration.
 - Check reduced-motion behavior, background animation pause when the tab is hidden, and no particle canvas on mobile.
 - On a configured staging account, verify sign-in, the 100-credit welcome grant, tier-gated chat and attachments, support AI, human support ticket submission/email notification, content generation, and credit usage history.

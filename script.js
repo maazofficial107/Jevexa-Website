@@ -97,6 +97,7 @@ function openUpgradeModal(plan, feature, returnFocusElement = document.activeEle
     const message = document.getElementById('upgradeModalMessage');
     const planLabel = document.getElementById('upgradeModalPlan');
     modal.returnFocusElement = returnFocusElement;
+    modal.dataset.requiredPlan = (plan || 'pro').toLowerCase();
     if (title) title.textContent = `Unlock ${feature}`;
     if (message) message.textContent = `Upgrade to Jevexa ${plan} to unlock this feature and get more from your AI workspace.`;
     if (planLabel) planLabel.textContent = `JEVEXA ${plan.toUpperCase()}`;
@@ -133,11 +134,25 @@ function initializeUpgradeModal() {
         document.getElementById('upgradeModalPlans'),
         'click',
         (event) => {
+            const requiredPlan = (modal.dataset.requiredPlan || 'pro').toLowerCase();
             close();
             const pricingSection = document.getElementById('pricing');
             if (pricingSection) {
                 event.preventDefault();
                 pricingSection.scrollIntoView({ behavior: 'smooth' });
+                const planKeyMap = { lite: 'starter', starter: 'starter', pro: 'pro', max: 'business', business: 'business', ultra: 'ultra' };
+                const planKey = planKeyMap[requiredPlan] || 'pro';
+                const card = document.querySelector(`.price-card[data-pricing-plan="${planKey}"]`);
+                if (card) {
+                    setTimeout(() => {
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        card.classList.remove('pricing-card-highlight');
+                        void card.offsetWidth;
+                        card.classList.add('pricing-card-highlight');
+                        setTimeout(() => card.classList.remove('pricing-card-highlight'), 2600);
+                        card.querySelector('button')?.focus({ preventScroll: true });
+                    }, 400);
+                }
             }
         }
     );
@@ -1794,128 +1809,30 @@ let ticking = false;
 
 
 window.addEventListener('scroll', () => {
-
-
-
     if (!ticking) {
-
-
-
-        requestAnimationFrame(() => {
-
-
-
-            if (navbar) {
-
-
-
-                if (window.scrollY > 50) navbar.classList.add('scrolled');
-
-
-
-                else navbar.classList.remove('scrolled');
-
-
-
-            }
-
-
-
-
-
-
-
-            let current = '';
-
-
-
-
-
-
-
-            scrollSections.forEach(section => {
-
-
-
-                if (window.scrollY >= section.offsetTop - 120) {
-
-
-
-                    current = section.getAttribute('id');
-
-
-
-                }
-
-
-
-            });
-
-
-
-
-
-
-
-            navLinks.forEach(link => {
-
-
-
-                link.classList.remove('active');
-
-
-
-
-
-
-
-                if (link.getAttribute('href') === `#${current}`) {
-
-
-
-                    link.classList.add('active');
-
-
-
-                }
-
-
-
-            });
-
-
-
-
-
-
-
-            ticking = false;
-
-
-
-        });
-
-
-
-
-
-
-
         ticking = true;
-
-
-
+        requestAnimationFrame(() => {
+            if (navbar) {
+                if (window.scrollY > 50) navbar.classList.add('scrolled');
+                else navbar.classList.remove('scrolled');
+            }
+            let current = '';
+            const scrollY = window.scrollY;
+            scrollSections.forEach(section => {
+                if (scrollY >= section.offsetTop - 120) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+            ticking = false;
+        });
     }
-
-
-
 }, { passive: true });
-
-
-
-
-
-
 
 // Mobile Menu
 
@@ -2322,7 +2239,7 @@ const PRICING_CONFIG = Object.freeze({
         starter: Object.freeze({ monthlyPrice: 5, annualEligible: true }),
         pro: Object.freeze({ monthlyPrice: 12, annualEligible: true }),
         business: Object.freeze({ monthlyPrice: 25, annualEligible: true }),
-        ultra: Object.freeze({ monthlyPrice: 49, annualEligible: false })
+        ultra: Object.freeze({ monthlyPrice: 49, annualEligible: true })
     })
 });
 
@@ -3602,7 +3519,8 @@ if (
 const JEVEXA_PLANS = {
     starter: { name: 'Lite' },
     pro: { name: 'Pro' },
-    business: { name: 'Max' }
+    business: { name: 'Max' },
+    ultra: { name: 'Ultra' }
 };
 // ============================================================
 // JEVEXA CONSOLIDATED SETTINGS + PRICING CONTROLLER

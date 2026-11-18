@@ -1053,7 +1053,7 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(html, /data-original-monthly/);
   assert.match(html, /data-annual-price/);
   assert.match(html, /Credit packages are one-time purchases, not subscriptions/);
-  assert.match(script, /monthlyPrice: 49, annualEligible: false/);
+  assert.match(script, /monthlyPrice: 49, annualEligible: true/);
   assert.match(html, /Start free with 100 credits/);
   assert.match(html, /src="assets\/logo\.svg" alt="JEVEXA AI"/);
   assert.match(html, /staticPreviewNotice/);
@@ -1514,7 +1514,7 @@ test("displayed package prices and credits match server-owned billing rules", as
   const frontendPlans = [...script.matchAll(
     /(\w+): Object\.freeze\(\{ monthlyPrice: (\d+), annualEligible: (true|false) \}\)/g
   )];
-  assert.equal(plans.length, 3);
+  assert.equal(plans.length, 4);
   assert.equal(frontendPlans.length, 4);
   assert.match(script, /annualDiscountRate: 0\.2/);
   assert.match(script, /plan\.monthlyPrice \* \(1 - PRICING_CONFIG\.annualDiscountRate\)/);
@@ -1850,4 +1850,68 @@ test("staging SQL verifier has one post-rollback result and no intermediate resu
   assert.match(afterRollback, /'PASS'\s+as release_and_duplicate_protection/i);
   assert.match(afterRollback, /'PASS'\s+as ledger_immutability/i);
   assert.doesNotMatch(sql, /^\s*select\s+set_config/gim);
+});
+
+test("support AI returns fast contextual response even when OpenRouter is unconfigured or rejects", async () => {
+  const missingKey = { ...env };
+  delete missingKey.OPENROUTER_API_KEY;
+
+  const resPricing = await worker.fetch(makeRequest("/api/support/ai", {
+    body: { message: "Tell me about the Ultra plan and pricing" },
+    headers: { "CF-Connecting-IP": "192.0.2.20" }
+  }), missingKey);
+  const dataPricing = await resPricing.json();
+  assert.equal(resPricing.status, 200);
+  assert.match(dataPricing.reply, /Ultra/i);
+  assert.match(dataPricing.reply, /20%/);
+
+  const resCredits = await worker.fetch(makeRequest("/api/support/ai", {
+    body: { message: "How do welcome credits work?" },
+    headers: { "CF-Connecting-IP": "192.0.2.21" }
+  }), missingKey);
+  const dataCredits = await resCredits.json();
+  assert.equal(resCredits.status, 200);
+  assert.match(dataCredits.reply, /100/);
+  assert.match(dataCredits.reply, /credit/i);
+});
+
+test("Ultra plan includes 20% annual discount and progressive feature hierarchy", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-badge-20-off/);
+  assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-original-monthly/);
+  assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-price/);
+  assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-discount/);
+  assert.match(html, /70,000 credits monthly \/ 840,000 credits annually/);
+  assert.match(html, /Ultra AI chat · 8 credits per message/);
+  assert.match(html, /Everything in Max/);
+  assert.match(script, /ultra:\s*Object\.freeze\(\{\s*monthlyPrice:\s*49,\s*annualEligible:\s*true\s*\}\)/);
+  assert.match(script, /ultra:\s*\{\s*name:\s*'Ultra'\s*\}/);
+});
+
+test("gated features trigger upgrade modal and pre-highlight required plan in pricing", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../premium.css", import.meta.url), "utf8");
+
+  assert.match(script, /openUpgradeModal\(requiredPlan,/);
+  assert.match(script, /pricingSection\.scrollIntoView\(\{\s*behavior:\s*'smooth'\s*\}\)/);
+  assert.match(script, /card\.classList\.add\('pricing-card-highlight'\)/);
+  assert.match(css, /\.pricing-card-highlight/);
+  assert.match(html, /id="upgradeModal"/);
+});
+
+test("60fps performance optimizations: GPU transforms, passive scroll listeners, and cached rects", async () => {
+  const premiumJs = await readFile(new URL("../premium.js", import.meta.url), "utf8");
+  const premiumCss = await readFile(new URL("../premium.css", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  assert.match(premiumJs, /card\.addEventListener\('pointerenter'/);
+  assert.match(premiumJs, /btn\.addEventListener\('pointerenter'/);
+  assert.match(premiumCss, /transform:\s*translateX\(-180%\)\s*skewX\(-18deg\)/);
+  assert.match(premiumCss, /will-change:\s*transform/);
+  assert.match(premiumCss, /\.integrations-track\s*\{[\s\S]*?will-change:\s*transform/);
+  assert.match(script, /window\.addEventListener\('scroll',[\s\S]*?\{ passive:\s*true \}\)/);
+  assert.match(script, /if \(!ticking\) \{\s*ticking = true;/);
 });

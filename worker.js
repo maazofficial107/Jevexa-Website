@@ -1224,10 +1224,34 @@ function allowSupportAiRequest(request) {
   return true;
 }
 
+function generateContextualSupportResponse(message, history = []) {
+  const q = String(message || "").toLowerCase().trim();
+
+  if (/credit|token|balance|cost|quota|rate limit/i.test(q)) {
+    return "JEVEXA includes 100 free welcome credits upon sign-up (no payment info needed). AI Chat costs a fixed rate per message by tier: Lite is 1 credit/msg, Pro is 2 credits/msg, Max is 4 credits/msg, and Ultra is 8 credits/msg. Variable services like Content Generation use provider-metered credits. Packages are one-time credit top-ups, not recurring subscriptions. You can also click 'Talk to Human' if you need account-specific credit adjustments.";
+  }
+
+  if (/price|pricing|plan|cost|ultra|pro|lite|max|annual|discount|subscription|buy|checkout/i.test(q)) {
+    return "JEVEXA offers 4 distinct plans with an automatic 20% annual package discount:\n• Lite: $5/mo ($4/mo annual, $48 paid once) — 2,000 credits monthly / 24,000 credits annually\n• Pro: $12/mo ($9.60/mo annual, $115.20 paid once) — 10,000 credits monthly / 120,000 credits annually + multi-file uploads (PDF/ZIP)\n• Max: $25/mo ($20/mo annual, $240 paid once) — 30,000 credits monthly / 360,000 credits annually + deep reasoning\n• Ultra: $49/mo ($39.20/mo annual, $470.40 paid once) — 70,000 credits monthly / 840,000 credits annually + flagship models & priority routing.\nCredit packages are one-time purchases, not subscriptions. Check out the #pricing section or click 'Talk to Human'!";
+  }
+
+  if (/tool|feature|capabilities|model|ocr|crm|email|content|social/i.test(q)) {
+    return "JEVEXA AI Studio features 10 business tools: AI Chat and Content Generation are live today! The remaining 8 tools (Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management) are rolling out across upcoming releases. You can try live tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
+  }
+
+  if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
+    return "You can connect with our human support team directly! Click the 'Talk to Human' button in this dialog to submit a ticket that alerts Maaz and our engineering team immediately, or reach us at maazofficial107@gmail.com.";
+  }
+
+  if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
+    return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across AI Chat and Content Generation. If you forgot your password, use the 'Forgot password?' link in the login dialog.";
+  }
+
+  return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools, credit packages (Lite, Pro, Max, Ultra with 20% annual discount), platform features, and account setup. For complex queries or direct account assistance, feel free to click 'Talk to Human' to reach Maaz and our team!";
+}
+
 async function handleSupportAi(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
-  const apiKey = String(env.OPENROUTER_API_KEY || "").trim();
-  if (!apiKey) return json({ error: "AI support is temporarily unavailable. Please use the human support form." }, 503);
   if (!allowSupportAiRequest(request)) {
     return json({ error: "Support AI is rate limited. Please wait 60 seconds and try again." }, 429);
   }
@@ -1244,6 +1268,12 @@ async function handleSupportAi(request, env) {
       && item.content.length <= 1200
     ).map(item => ({ role: item.role, content: item.content.trim() }))
     : [];
+
+  const apiKey = String(env.OPENROUTER_API_KEY || "").trim();
+  if (!apiKey) {
+    return json({ reply: generateContextualSupportResponse(message, history) });
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12_000);
   try {
@@ -1272,26 +1302,20 @@ async function handleSupportAi(request, env) {
     });
     const data = await readJsonResponse(response);
     if (!response.ok) {
-      console.error("Support AI provider rejected request:", response.status);
-      return json({
-        error: response.status === 429
-          ? "Support AI is busy. Please wait 60 seconds or talk to a human agent."
-          : "Support AI is temporarily unavailable. Please talk to a human agent."
-      }, response.status === 429 ? 429 : 503);
+      console.warn("Support AI provider rejected request, serving contextual fallback:", response.status);
+      return json({ reply: generateContextualSupportResponse(message, history) });
     }
     const reply = typeof data?.choices?.[0]?.message?.content === "string"
       ? data.choices[0].message.content.trim()
       : "";
-    if (!reply) return json({ error: "Support AI could not answer. Please talk to a human agent." }, 503);
+    if (!reply) {
+      return json({ reply: generateContextualSupportResponse(message, history) });
+    }
     return json({ reply });
   } catch (error) {
     const timedOut = error?.name === "AbortError";
-    console.error("Support AI request failed:", timedOut ? "timeout" : error?.message || "network");
-    return json({
-      error: timedOut
-        ? "Support AI timed out. Please try again or talk to a human agent."
-        : "Support AI could not connect. Please try again or talk to a human agent."
-    }, timedOut ? 504 : 502);
+    console.warn("Support AI request failed, serving contextual fallback:", timedOut ? "timeout" : error?.message || "network");
+    return json({ reply: generateContextualSupportResponse(message, history) });
   } finally {
     clearTimeout(timeoutId);
   }
@@ -1303,7 +1327,8 @@ const ANNUAL_PACKAGE_DISCOUNT = 0.2;
 const BILLING_PLANS = Object.freeze({
   starter: { name: "Lite", monthlyPrice: 5, monthlyCredits: 2000 },
   pro: { name: "Pro", monthlyPrice: 12, monthlyCredits: 10000 },
-  business: { name: "Max", monthlyPrice: 25, monthlyCredits: 30000 }
+  business: { name: "Max", monthlyPrice: 25, monthlyCredits: 30000 },
+  ultra: { name: "Ultra", monthlyPrice: 49, monthlyCredits: 70000 }
 });
 
 function getAnnualPackagePrice(plan) {

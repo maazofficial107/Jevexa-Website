@@ -45,29 +45,49 @@
         document.addEventListener('mouseleave', () => glow.classList.remove('visible'));
     }
     if (finePointer && motionOK()) {
-        $$('.tilt-card').forEach(card => {
+        $('.tilt-card').forEach(card => {
             let raf = null;
+            let r = null;
+            card.addEventListener('pointerenter', () => {
+                r = card.getBoundingClientRect();
+            }, { passive: true });
             card.addEventListener('pointermove', (e) => {
                 if (e.pointerType !== 'mouse' || raf) return;
                 raf = requestAnimationFrame(() => {
-                    const r = card.getBoundingClientRect();
+                    if (!r) r = card.getBoundingClientRect();
                     const px = (e.clientX - r.left) / r.width - 0.5;
                     const py = (e.clientY - r.top) / r.height - 0.5;
                     card.style.transform = 'perspective(900px) rotateX(' + (-py * 5).toFixed(2) + 'deg) rotateY(' + (px * 5).toFixed(2) + 'deg) translateY(-4px)';
                     raf = null;
                 });
             }, { passive: true });
-            card.addEventListener('pointerleave', () => { card.style.transform = ''; });
-        });
-        $$('.btn-magnetic').forEach(btn => {
-            btn.addEventListener('pointermove', (e) => {
-                if (e.pointerType !== 'mouse') return;
-                const r = btn.getBoundingClientRect();
-                const dx = (e.clientX - r.left - r.width / 2) * 0.12;
-                const dy = (e.clientY - r.top - r.height / 2) * 0.25;
-                btn.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+            card.addEventListener('pointerleave', () => {
+                r = null;
+                if (raf) { cancelAnimationFrame(raf); raf = null; }
+                card.style.transform = '';
             }, { passive: true });
-            btn.addEventListener('pointerleave', () => { btn.style.transform = ''; });
+        });
+        $('.btn-magnetic').forEach(btn => {
+            let r = null;
+            let raf = null;
+            btn.addEventListener('pointerenter', () => {
+                r = btn.getBoundingClientRect();
+            }, { passive: true });
+            btn.addEventListener('pointermove', (e) => {
+                if (e.pointerType !== 'mouse' || raf) return;
+                raf = requestAnimationFrame(() => {
+                    if (!r) r = btn.getBoundingClientRect();
+                    const dx = (e.clientX - r.left - r.width / 2) * 0.12;
+                    const dy = (e.clientY - r.top - r.height / 2) * 0.25;
+                    btn.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+                    raf = null;
+                });
+            }, { passive: true });
+            btn.addEventListener('pointerleave', () => {
+                r = null;
+                if (raf) { cancelAnimationFrame(raf); raf = null; }
+                btn.style.transform = '';
+            }, { passive: true });
         });
     }
     bindSafe(document, 'click', (e) => {

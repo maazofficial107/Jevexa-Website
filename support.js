@@ -107,6 +107,26 @@
         }
     });
 
+    function generateClientSupportReply(userMessage) {
+        const q = String(userMessage || '').toLowerCase().trim();
+        if (/credit|token|balance|cost|quota|rate limit/i.test(q)) {
+            return "JEVEXA includes 100 free welcome credits upon sign-up (no payment info needed). AI Chat costs a fixed rate per message by tier: Lite is 1 credit/msg, Pro is 2 credits/msg, Max is 4 credits/msg, and Ultra is 8 credits/msg. Packages are one-time credit top-ups, not recurring subscriptions. You can also click 'Talk to Human' if you need account-specific credit adjustments.";
+        }
+        if (/price|pricing|plan|cost|ultra|pro|lite|max|annual|discount|subscription|buy|checkout/i.test(q)) {
+            return "JEVEXA offers 4 distinct plans with an automatic 20% annual package discount:\n• Lite: $5/mo ($4/mo annual, $48 paid once) — 2,000 credits monthly / 24,000 credits annually\n• Pro: $12/mo ($9.60/mo annual, $115.20 paid once) — 10,000 credits monthly / 120,000 credits annually + multi-file uploads (PDF/ZIP)\n• Max: $25/mo ($20/mo annual, $240 paid once) — 30,000 credits monthly / 360,000 credits annually + deep reasoning\n• Ultra: $49/mo ($39.20/mo annual, $470.40 paid once) — 70,000 credits monthly / 840,000 credits annually + flagship models & priority routing.\nCredit packages are one-time purchases. Check out the #pricing section or click 'Talk to Human'!";
+        }
+        if (/tool|feature|capabilities|model|ocr|crm|email|content|social/i.test(q)) {
+            return "JEVEXA AI Studio features 10 business tools: AI Chat and Content Generation are live today! The remaining 8 tools (Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management) are rolling out across upcoming releases. You can try live tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
+        }
+        if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
+            return "You can connect with our human support team directly! Click the 'Talk to Human' button in this dialog to submit a ticket that alerts Maaz and our engineering team immediately, or reach us at maazofficial107@gmail.com.";
+        }
+        if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
+            return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across AI Chat and Content Generation.";
+        }
+        return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools, credit packages (Lite, Pro, Max, Ultra with 20% annual discount), platform features, and account setup. For complex queries or direct account assistance, feel free to click 'Talk to Human' to reach Maaz and our team!";
+    }
+
     bindSafe(aiForm, 'submit', async event => {
         event.preventDefault();
         const message = aiInput.value.trim();
@@ -130,18 +150,19 @@
             });
             const result = await response.json().catch(() => ({}));
             typing.remove();
-            if (!response.ok || typeof result.reply !== 'string' || !result.reply.trim()) {
-                throw new Error(result.error || 'Support AI is temporarily unavailable. Please talk to a human agent.');
-            }
-            addAiMessage(result.reply);
-            aiHistory.push({ role: 'user', content: message }, { role: 'assistant', content: result.reply });
+            const reply = (typeof result?.reply === 'string' && result.reply.trim())
+                ? result.reply.trim()
+                : generateClientSupportReply(message);
+            addAiMessage(reply);
+            aiHistory.push({ role: 'user', content: message }, { role: 'assistant', content: reply });
             if (aiHistory.length > 12) aiHistory.splice(0, aiHistory.length - 12);
         } catch (error) {
             typing.remove();
-            console.error('Support AI request failed:', error);
-            addAiMessage(error?.name === 'AbortError'
-                ? 'Support AI took too long to respond. Please talk to a human agent.'
-                : error?.message || 'Support AI could not connect. Please talk to a human agent.');
+            console.warn('Support AI request failed, serving fallback:', error);
+            const fallback = generateClientSupportReply(message);
+            addAiMessage(fallback);
+            aiHistory.push({ role: 'user', content: message }, { role: 'assistant', content: fallback });
+            if (aiHistory.length > 12) aiHistory.splice(0, aiHistory.length - 12);
         } finally {
             if (timeoutId !== null) window.clearTimeout(timeoutId);
             aiBusy = false;

@@ -13,8 +13,10 @@ section[id] { scroll-margin-top: 92px; }
 .service-chip.live { color: #6ee7b7; border-color: rgba(52,211,153,.4); background: rgba(52,211,153,.10); }
 .service-chip.live i { color: #34d399; animation: pxPulseDot 1.6s ease-in-out infinite; }
 @keyframes pxPulseDot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.8); } }
-.feature-card::after, .price-card::after, .review-card::after, .step::after { content: ""; position: absolute; top: 0; left: -80%; width: 55%; height: 100%; background: linear-gradient(105deg, transparent, rgba(255,255,255,.07), transparent); transform: skewX(-18deg); transition: left .7s ease; pointer-events: none; }
-.feature-card:hover::after, .price-card:hover::after, .review-card:hover::after, .step:hover::after { left: 130%; }
+.feature-card::after, .price-card::after, .review-card::after, .step::after { content: ""; position: absolute; top: 0; left: 0; width: 55%; height: 100%; background: linear-gradient(105deg, transparent, rgba(255,255,255,.07), transparent); transform: translateX(-180%) skewX(-18deg); transition: transform .7s cubic-bezier(.2,.8,.2,1); pointer-events: none; will-change: transform; }
+.feature-card:hover::after, .price-card:hover::after, .review-card:hover::after, .step:hover::after { transform: translateX(320%) skewX(-18deg); }
+.price-card.pricing-card-highlight { box-shadow: 0 0 0 2px var(--px-primary), 0 0 35px rgba(139, 92, 246, .6) !important; transform: translateY(-6px) scale(1.02) !important; transition: box-shadow .4s ease, transform .4s ease !important; }
+.integrations-track { will-change: transform; transform: translateZ(0); }
 .feature-card .feature-icon { transition: transform .45s cubic-bezier(.2,.8,.2,1), box-shadow .45s ease; }
 .feature-card:hover .feature-icon { transform: translateY(-4px) scale(1.08) rotate(-4deg); box-shadow: 0 12px 34px rgba(139,92,246,.45); }
 .section-cta { margin-top: 46px; padding: 26px 30px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; gap: 22px; flex-wrap: wrap; border: 1px solid var(--px-border); }

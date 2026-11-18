@@ -518,7 +518,10 @@
             const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
             const paidFileTypes = ['application/pdf', 'application/zip', 'application/x-zip-compressed'];
             if (tier === 'lite' && !imageTypes.includes(type)) {
-                setStatus('Images only on Lite. Upgrade to attach PDF or ZIP files.');
+                setStatus('Images only on Lite. Upgrade to attach PDF or ZIP files.', true);
+                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
+                }
                 return;
             }
             if (imageTypes.includes(type) || (tier !== 'lite' && paidFileTypes.includes(type))) {
@@ -732,6 +735,26 @@
         return payload;
     }
 
+    function generateChatbotGuestReply(queryText) {
+        const q = String(queryText || '').toLowerCase().trim();
+        if (/blog|write a blog/i.test(q)) {
+            return "Here is a high-converting blog outline you can use right away:\n\n1. **Hook:** State the industry challenge and why previous solutions fall short.\n2. **The Core Shift:** Introduce AI-driven automation as the competitive edge.\n3. **Practical Framework:** Step-by-step implementation guide with tangible metrics.\n4. **Call to Action:** Direct readers to test the workflow.\n\n*Tip:* Our live **Content Generation** tool drafts complete articles with customizable tone and length! Sign in to get 100 free credits to generate yours.";
+        }
+        if (/draft an email|email/i.test(q)) {
+            return "Here is a professional outreach email template:\n\n**Subject:** Streamlining your AI workflow at [Company Name]\n\nHi [First Name],\n\nI noticed your team is scaling operations and thought you might be interested in automating repetitive content and customer queries.\n\nAt JEVEXA, our AI tools help teams save 15+ hours weekly with intelligent chat, automated drafting, and workflow integrations. Would you be open to a quick 5-minute look this week?\n\nBest regards,\n[Your Name]\n\n*Tip:* You can generate personalized email sequences using our Content Generation tool with your 100 free credits!";
+        }
+        if (/credit|token|balance|cost|quota/i.test(q)) {
+            return "JEVEXA credits power all studio tools:\n• **100 Free Welcome Credits:** Included immediately upon sign-up (no card required).\n• **Fixed Per-Message Rates:** Lite is 1 credit/msg, Pro is 2 credits/msg, Max is 4 credits/msg, and Ultra is 8 credits/msg.\n• **Content Generation:** Measured transparently by provider usage.\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount**!";
+        }
+        if (/price|pricing|plan|ultra|pro|lite|max|annual|discount/i.test(q)) {
+            return "JEVEXA offers 4 scalable tiers with 20% annual discount:\n• **Lite:** $5/mo ($4/mo annual) — 2,000 monthly credits, Lite AI Chat (1 credit/msg)\n• **Pro:** $12/mo ($9.60/mo annual) — 10,000 monthly credits, Pro AI Chat (2 credits/msg), PDF & ZIP uploads\n• **Max:** $25/mo ($20/mo annual) — 30,000 monthly credits, Max AI Chat (4 credits/msg), full reasoning depth\n• **Ultra:** $49/mo ($39.20/mo annual) — 70,000 monthly credits, Ultra AI Chat (8 credits/msg), flagship models & priority queue.\nAll annual packages are discounted by 20% and paid once!";
+        }
+        if (/tool|feature|capabilities|model|ocr|crm/i.test(q)) {
+            return "JEVEXA AI Studio features 10 business tools:\n• **AI Chat** & **Content Generation** are live today!\n• 8 additional tools (Email AI, Mini CRM, Document OCR, Social Assistant, Analytics, User Management, Workflow Automation, Data Management) roll out across planned releases.\nSign in to test the live tools with 100 free credits!";
+        }
+        return "Hello! I am the JEVEXA assistant. I can help answer questions about our AI tools, credit packages, pricing tiers (Lite, Pro, Max, Ultra), or help you brainstorm content. Sign in to start testing with your 100 free credits, or let me know what you'd like to explore!";
+    }
+
     async function handleSend() {
         if (sending) return;
         const text = input?.value.trim();
@@ -746,8 +769,40 @@
         try {
             const session = await getSession();
             if (!session) {
-                setStatus('Please sign in to use the AI chatbot.');
-                openLogin();
+                const displayText = text || `Attached: ${pendingAttachments.map(item => item.name).join(', ')}`;
+                const messageIndex = conversation.length;
+                appendMessage(displayText, true, messageIndex);
+                if (input) input.value = '';
+                pendingAttachments.length = 0;
+                renderAttachments();
+                showTyping();
+
+                let guestReply = '';
+                try {
+                    const response = await fetch('/api/support/ai', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: displayText, history: conversation.slice(-4) })
+                    });
+                    const resJson = await response.json().catch(() => ({}));
+                    if (typeof resJson?.reply === 'string' && resJson.reply.trim()) {
+                        guestReply = resJson.reply.trim();
+                    }
+                } catch { /* fallback to client generator */ }
+
+                if (!guestReply) {
+                    guestReply = generateChatbotGuestReply(displayText);
+                }
+
+                removeTyping();
+                conversation.push({ role: 'user', text: displayText });
+                conversation.push({ role: 'assistant', text: guestReply });
+                appendMessage(
+                    `${guestReply}\n\n*⚡ Sign in to claim 100 free credits and unlock live AI generation, or explore our [Pricing](#pricing) tiers.*`,
+                    false,
+                    conversation.length - 1
+                );
+                setStatus('Guest mode • Sign in to claim 100 free credits and use full AI capabilities.');
                 return;
             }
             loadConversation(session.user.id);
@@ -757,7 +812,10 @@
             const attachments = pendingAttachments.map(item => ({ ...item }));
             const selectedTier = tierSelect?.value || 'lite';
             if (selectedTier === 'lite' && attachments.some(item => !item.type.startsWith('image/'))) {
-                setStatus('Images only on Lite. Remove PDF or ZIP attachments, or upgrade your plan.');
+                setStatus('Images only on Lite. Remove PDF or ZIP attachments, or upgrade your plan.', true);
+                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
+                }
                 return;
             }
             const chatPayload = {
@@ -780,8 +838,12 @@
             if (walletError || !wallet) throw new Error('Could not confirm your current credit balance. Please retry.');
 
             if (Number(wallet.balance) < quote.estimatedCredits) {
+                const requiredPlanName = quote.tier === 'lite' ? 'Lite' : quote.tier === 'pro' ? 'Pro' : quote.tier === 'max' ? 'Max' : 'Ultra';
                 setStatus(`This ${quote.tier.toUpperCase()} message costs ${quote.estimatedCredits} credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
-                appendMessage(`Not enough credits for this ${quote.tier.toUpperCase()} message. It costs ${quote.estimatedCredits} credits; your balance is ${wallet.balance}.`);
+                appendMessage(`Not enough credits for this ${quote.tier.toUpperCase()} message. It costs ${quote.estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`);
+                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlanName, 'additional AI credits');
+                }
                 return;
             }
 

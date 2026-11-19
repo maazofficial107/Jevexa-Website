@@ -560,6 +560,7 @@
     async function refreshDisplayedCredits() {
         try {
             await window.JEVEXA_SETTINGS?.refreshCredits?.();
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
         } catch (error) {
             console.error('Credit balance refresh failed:', error);
         }
@@ -945,6 +946,11 @@
                 appendMessage(replyText, false, conversation.length - 1);
                 if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
                 const historySaved = persistConversation(session.user.id);
+                if (Number.isInteger(result.creditsRemaining)) {
+                    const countEl = document.getElementById('creditsCount');
+                    if (countEl) countEl.textContent = String(result.creditsRemaining);
+                    window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+                }
                 setStatus(
                     `AI reply completed. ${result.creditsCharged} fixed ${String(result.tier || selectedTier).toUpperCase()} credits charged. Balance ${result.creditsRemaining}.${historySaved ? '' : ' This browser could not save the conversation.'}`
                 );
@@ -974,32 +980,26 @@
                     appendMessage(message);
                 } else if (error.status === 503) {
                     setStatus(warmingMessage);
-                    appendMessage(warmingMessage);
+                    const message = error.message && error.message !== 'Credit service is not configured.'
+                        ? error.message
+                        : warmingMessage;
+                    appendMessage(message);
                 } else if (error.status === 429) {
                     setStatus('Rate limited. Wait 60 seconds before sending another message.');
                     appendMessage('Rate limited. Wait 60 seconds before sending another message.');
                 } else {
-                    const message = error.status >= 500
+                    const message = error.message || (error.status >= 500
                         ? 'The AI assistant could not complete that request. Please try again shortly.'
-                        : error.message;
-                    setStatus(message);
+                        : 'An error occurred.');
+                    setStatus(message, true);
                     appendMessage(message);
                 }
-
-                // Resilient intelligent built-in fallback response so user is never left without an AI reply
-                const fallbackReply = generateChatbotGuestReply(displayText);
-                conversation.push({ role: 'user', text: displayText });
-                conversation.push({ role: 'assistant', text: fallbackReply });
-                appendMessage(fallbackReply, false, conversation.length - 1);
-                persistConversation(session.user.id);
             }
         } catch (error) {
             removeTyping();
-            const fallbackReply = generateChatbotGuestReply(displayText);
-            conversation.push({ role: 'user', text: displayText });
-            conversation.push({ role: 'assistant', text: fallbackReply });
-            appendMessage(fallbackReply, false, conversation.length - 1);
-            setStatus(error?.message || 'AI assistant completed response (local engine).');
+            const message = error?.message || 'The AI assistant encountered an error. Please try again shortly.';
+            setStatus(message, true);
+            appendMessage(message);
         } finally {
             sending = false;
             if (sendButton) sendButton.disabled = false;

@@ -1411,6 +1411,7 @@ function openSettingsView(user) {
       statusNode.textContent = 'Balance loaded from your account.';
       const headerCount = document.getElementById('creditsCount');
       if (headerCount) headerCount.textContent = String(data.balance);
+      window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
     }
 
     function render(section) {
@@ -1687,6 +1688,7 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
     if (!user) {
         creditsBadge.style.display = 'none';
         if (creditsCount) creditsCount.textContent = '—';
+        window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
         return;
     }
 
@@ -1694,6 +1696,7 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
     if (!creditsCount) return;
 
     creditsCount.textContent = '—';
+    window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
     let data;
     try {
         const result = await supabaseClient
@@ -1707,6 +1710,7 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
         if (revision !== authStateRevision || currentUser?.id !== user.id) return;
         console.error('Credits fetch error:', error);
         creditsCount.textContent = '—';
+        window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
         return;
     }
 
@@ -1716,10 +1720,12 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
         // Missing row is a backend provisioning issue, not proof the user has zero credits.
         creditsCount.textContent = '—';
         console.warn('No user_credits row found. Run supabase/jevexa_saas_setup.sql.');
+        window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
         return;
     }
 
     creditsCount.textContent = String(data.balance);
+    window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 }
 
 function initHeroFeatureOrbit() {
@@ -3768,6 +3774,7 @@ const JEVEXA_PLANS = {
                 if (balance) balance.textContent = String(data.balance);
                 if (allowance) allowance.textContent = String(data.monthly_allowance ?? '—');
                 if (status) status.textContent = 'Balance loaded from your account.';
+                window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
             } else {
                 const balance = document.getElementById('settingsBalance');
                 const status = document.getElementById('settingsCreditStatus');
@@ -3993,7 +4000,8 @@ const JEVEXA_PLANS = {
     // Synchronize workspace credit badges
     function syncWorkspaceCredits() {
         const countEl = document.getElementById('creditsCount');
-        const count = countEl && countEl.textContent.trim() !== '—' ? countEl.textContent.trim() : (currentUser ? '…' : '—');
+        const raw = countEl ? countEl.textContent.trim() : '';
+        const count = raw && raw !== '—' && raw !== '…' && raw !== '...' ? raw : (currentUser ? '…' : '—');
         document.querySelectorAll('.workspace-credits-val').forEach(el => {
             el.textContent = count;
         });

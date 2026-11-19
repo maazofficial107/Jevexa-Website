@@ -242,10 +242,16 @@
             forgetPendingRequest(session, requestId);
             copyButton.disabled = false;
             downloadButton.disabled = false;
+            if (Number.isInteger(payload.creditsRemaining)) {
+                const countEl = document.getElementById('creditsCount');
+                if (countEl) countEl.textContent = String(payload.creditsRemaining);
+                window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+            }
             let balanceMessage = '';
             if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {
                 try {
                     await window.JEVEXA_SETTINGS.refreshCredits();
+                    window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                 } catch {
                     balanceMessage = ' Your displayed balance could not be refreshed.';
                 }

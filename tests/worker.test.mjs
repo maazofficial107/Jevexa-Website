@@ -2179,17 +2179,17 @@ const geminiEnv = {
   GEMINI_API_KEY: "test-gemini-key"
 };
 
-test("chat uses Gemini primary model gemini-3.8-flash and settles credits", async () => {
+test("chat uses Gemini primary model gemini-3.5-flash-lite and settles credits", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      assert.match(url.pathname, /gemini-3\.8-flash:generateContent/);
+      assert.match(url.pathname, /gemini-3\.5-flash-lite:generateContent/);
       assert.equal(options.headers["x-goog-api-key"], "test-gemini-key");
       const reqBody = JSON.parse(options.body);
       assert.equal(reqBody.generationConfig.maxOutputTokens, 550);
       return Response.json({
         candidates: [{
           content: {
-            parts: [{ text: "Hello from Gemini 3.8 Flash!" }],
+            parts: [{ text: "Hello from Gemini 3.5 Flash Lite!" }],
             role: "model"
           },
           finishReason: "STOP"
@@ -2226,7 +2226,7 @@ test("chat uses Gemini primary model gemini-3.8-flash and settles credits", asyn
     const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), geminiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.reply, "Hello from Gemini 3.8 Flash!");
+    assert.equal(data.reply, "Hello from Gemini 3.5 Flash Lite!");
     assert.equal(data.creditsCharged, 1);
     assert.equal(data.creditsRemaining, 99);
     assert.equal(data.totalTokens, 25);
@@ -2236,17 +2236,17 @@ test("chat uses Gemini primary model gemini-3.8-flash and settles credits", asyn
   }
 });
 
-test("chat automatically falls back to gemini-3.5-flash-lite on transient 503 or 429", async () => {
+test("chat automatically falls back to gemini-3.5-flash on transient 503 or 429", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      if (url.pathname.includes("gemini-3.8-flash")) {
+      if (url.pathname.includes("gemini-3.5-flash-lite")) {
         return Response.json({ error: { code: 503, message: "High demand spike" } }, { status: 503 });
       }
-      if (url.pathname.includes("gemini-3.5-flash-lite")) {
+      if (url.pathname.includes("gemini-3.5-flash")) {
         return Response.json({
           candidates: [{
             content: {
-              parts: [{ text: "Fallback response from Gemini 3.5 Flash Lite!" }],
+              parts: [{ text: "Fallback response from Gemini 3.5 Flash!" }],
               role: "model"
             },
             finishReason: "STOP"
@@ -2282,12 +2282,12 @@ test("chat automatically falls back to gemini-3.5-flash-lite on transient 503 or
     const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Testing fallback", tier: "lite" } }), geminiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.reply, "Fallback response from Gemini 3.5 Flash Lite!");
-    // Both 3.8-flash and 3.5-flash-lite were called
+    assert.equal(data.reply, "Fallback response from Gemini 3.5 Flash!");
+    // Both 3.5-flash-lite and 3.5-flash were called
     const geminiCalls = mock.calls.filter(c => c.url.hostname === "generativelanguage.googleapis.com");
     assert.equal(geminiCalls.length, 2);
-    assert.match(geminiCalls[0].url.pathname, /gemini-3\.8-flash/);
-    assert.match(geminiCalls[1].url.pathname, /gemini-3\.5-flash-lite/);
+    assert.match(geminiCalls[0].url.pathname, /gemini-3\.5-flash-lite/);
+    assert.match(geminiCalls[1].url.pathname, /gemini-3\.5-flash/);
   } finally {
     mock.restore();
   }
@@ -2364,7 +2364,7 @@ test("chat handles Gemini safety filter by releasing reservation and returning 4
 test("content generation uses Gemini primary model and settles credits", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      assert.match(url.pathname, /gemini-3\.8-flash:generateContent/);
+      assert.match(url.pathname, /gemini-3\.5-flash-lite:generateContent/);
       const reqBody = JSON.parse(options.body);
       assert.equal(reqBody.generationConfig.maxOutputTokens, 700);
       assert.equal(reqBody.generationConfig.temperature, 0.7);
@@ -2415,16 +2415,16 @@ test("content generation uses Gemini primary model and settles credits", async (
   }
 });
 
-test("content generation falls back to gemini-3.5-flash-lite on transient failure", async () => {
+test("content generation falls back to gemini-3.5-flash on transient failure", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      if (url.pathname.includes("gemini-3.8-flash")) {
+      if (url.pathname.includes("gemini-3.5-flash-lite")) {
         return Response.json({ error: { code: 503, message: "Unavailable" } }, { status: 503 });
       }
       return Response.json({
         candidates: [{
           content: {
-            parts: [{ text: "Fallback generated content from Gemini 3.5 Flash Lite" }],
+            parts: [{ text: "Fallback generated content from Gemini 3.5 Flash" }],
             role: "model"
           },
           finishReason: "STOP"
@@ -2455,7 +2455,7 @@ test("content generation falls back to gemini-3.5-flash-lite on transient failur
     const response = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.content, "Fallback generated content from Gemini 3.5 Flash Lite");
+    assert.equal(data.content, "Fallback generated content from Gemini 3.5 Flash");
   } finally {
     mock.restore();
   }

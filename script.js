@@ -4012,15 +4012,26 @@ const JEVEXA_PLANS = {
             if (titleEl) titleEl.textContent = toolName ? `🔒 ${toolName}` : '🔒 Coming Soon';
             if (descEl) descEl.textContent = message;
             comingSoonModal.hidden = false;
+            comingSoonModal.removeAttribute('hidden');
+            comingSoonModal.classList.add('is-open', 'open');
+            comingSoonModal.style.setProperty('display', 'flex', 'important');
             comingSoonModal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('coming-soon-open');
         }
     }
 
     function closeComingSoonModal() {
         if (!comingSoonModal) return;
+        comingSoonModal.classList.remove('is-open', 'open');
         comingSoonModal.setAttribute('aria-hidden', 'true');
+        comingSoonModal.setAttribute('hidden', '');
         comingSoonModal.hidden = true;
+        comingSoonModal.style.setProperty('display', 'none', 'important');
+        document.body.classList.remove('coming-soon-open');
     }
+
+    window.closeComingSoonModal = closeComingSoonModal;
+    window.showComingSoonPopup = showComingSoonPopup;
 
     // Workspaces Control
     function openChatWorkspace(pushState = true) {
@@ -4135,6 +4146,7 @@ const JEVEXA_PLANS = {
         openContent: () => openContentWorkspace(true),
         closeWorkspaces: returnToStudio,
         showComingSoon: showComingSoonPopup,
+        closeComingSoon: closeComingSoonModal,
         tools: toolsConfig
     };
 
@@ -4205,20 +4217,62 @@ const JEVEXA_PLANS = {
     bindAction(document.getElementById('comingSoonCloseBtn'), 'click', closeComingSoonModal);
     bindAction(document.getElementById('comingSoonConfirmBtn'), 'click', closeComingSoonModal);
     bindAction(document.getElementById('comingSoonBackdrop'), 'click', closeComingSoonModal);
-    bindAction(document.getElementById('comingSoonExploreBtn'), 'click', () => {
+    bindAction(document.getElementById('comingSoonExploreBtn'), 'click', (event) => {
+        if (event) event.preventDefault();
         closeComingSoonModal();
         returnToStudio();
+        const roadmapTab = document.querySelector('.launcher-tab[data-tool-filter="coming_soon"]');
+        if (roadmapTab) {
+            roadmapTab.click();
+        }
+        const featuresSec = document.getElementById('features') || document.querySelector('.hero-tools-launcher');
+        if (featuresSec) {
+            featuresSec.scrollIntoView({ behavior: 'smooth' });
+        }
+    });
+
+    // Outer modal container click fallback
+    if (comingSoonModal) {
+        bindAction(comingSoonModal, 'click', (event) => {
+            if (event.target === comingSoonModal) {
+                closeComingSoonModal();
+            }
+        });
+    }
+
+    // Delegated safe click handler on document to guarantee dismissibility
+    bindAction(document, 'click', (event) => {
+        const target = event.target;
+        if (!target || !(target instanceof Element)) return;
+
+        if (target.closest('#comingSoonCloseBtn, #comingSoonConfirmBtn, [data-action="close-coming-soon"], .coming-soon-close')) {
+            closeComingSoonModal();
+        } else if (target.closest('#comingSoonExploreBtn, [data-action="explore-roadmap"]')) {
+            if (event) event.preventDefault();
+            closeComingSoonModal();
+            returnToStudio();
+            const roadmapTab = document.querySelector('.launcher-tab[data-tool-filter="coming_soon"]');
+            if (roadmapTab) {
+                roadmapTab.click();
+            }
+            const featuresSec = document.getElementById('features') || document.querySelector('.hero-tools-launcher');
+            if (featuresSec) {
+                featuresSec.scrollIntoView({ behavior: 'smooth' });
+            }
+        } else if (target.id === 'comingSoonBackdrop' || target === comingSoonModal || target.classList?.contains('coming-soon-backdrop')) {
+            closeComingSoonModal();
+        }
     });
 
     // Keyboard ESC handler
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
-            if (contentWorkspace?.classList.contains('open') || chatbotWindow?.classList.contains('open')) {
-                event.preventDefault();
-                returnToStudio();
-            } else if (comingSoonModal && !comingSoonModal.hidden) {
+            if (comingSoonModal && (!comingSoonModal.hidden || comingSoonModal.classList.contains('is-open') || comingSoonModal.classList.contains('open') || comingSoonModal.style.display === 'flex')) {
                 event.preventDefault();
                 closeComingSoonModal();
+            } else if (contentWorkspace?.classList.contains('open') || chatbotWindow?.classList.contains('open')) {
+                event.preventDefault();
+                returnToStudio();
             }
         }
     });

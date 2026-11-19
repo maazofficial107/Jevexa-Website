@@ -1645,9 +1645,9 @@
 
     <!-- Glassmorphic Coming Soon Modal -->
     <div id="comingSoonModal" class="coming-soon-modal" role="dialog" aria-modal="true" aria-labelledby="comingSoonToolTitle" aria-hidden="true" hidden>
-        <div class="coming-soon-backdrop" id="comingSoonBackdrop"></div>
+        <div class="coming-soon-backdrop" id="comingSoonBackdrop" data-action="close-coming-soon" aria-label="Close modal backdrop"></div>
         <div class="coming-soon-card glassmorphic">
-            <button type="button" class="coming-soon-close" id="comingSoonCloseBtn" aria-label="Close modal">×</button>
+            <button type="button" class="coming-soon-close" id="comingSoonCloseBtn" data-action="close-coming-soon" aria-label="Close modal">×</button>
             <div class="coming-soon-icon-ring">
                 <i class="fas fa-lock"></i>
             </div>
@@ -1658,8 +1658,8 @@
                 <span class="cs-pill"><i class="fas fa-bolt"></i> Shared Credit Wallet Ready</span>
             </div>
             <div class="coming-soon-actions">
-                <button type="button" class="btn btn-primary" id="comingSoonConfirmBtn">Got it</button>
-                <a href="#features" class="btn btn-secondary" id="comingSoonExploreBtn">View Roadmap</a>
+                <button type="button" class="btn btn-primary" id="comingSoonConfirmBtn" data-action="close-coming-soon">Got it</button>
+                <a href="#features" class="btn btn-secondary" id="comingSoonExploreBtn" data-action="explore-roadmap">View Roadmap</a>
             </div>
         </div>
     </div>

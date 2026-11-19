@@ -9201,7 +9201,8 @@ body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
 }
 
 body.workspace-open,
-body.chat-modal-open {
+body.chat-modal-open,
+body.coming-soon-open {
     overflow: hidden !important;
 }
 
@@ -9228,23 +9229,46 @@ body.chat-modal-open {
     position: fixed;
     inset: 0;
     z-index: 100000;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+
+.coming-soon-modal.is-open,
+.coming-soon-modal.open {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+.coming-soon-modal[hidden] {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 .coming-soon-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(6, 7, 20, 0.82);
+    background: rgba(6, 7, 20, 0.85);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
+    z-index: 1;
+    cursor: pointer;
+    pointer-events: auto;
 }
 
 .coming-soon-card {
     position: relative;
-    z-index: 2;
+    z-index: 10;
+    pointer-events: auto;
     width: 100%;
     max-width: 460px;
     padding: 36px 32px 30px;
@@ -9278,6 +9302,8 @@ body.chat-modal-open {
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
+    z-index: 20;
+    pointer-events: auto;
 }
 
 .coming-soon-close:hover {
@@ -9340,6 +9366,15 @@ body.chat-modal-open {
     display: flex;
     gap: 12px;
     justify-content: center;
+    position: relative;
+    z-index: 20;
+}
+
+.coming-soon-actions .btn {
+    position: relative;
+    z-index: 20;
+    cursor: pointer;
+    pointer-events: auto;
 }
 
 /* 6. Responsive Breakpoints */

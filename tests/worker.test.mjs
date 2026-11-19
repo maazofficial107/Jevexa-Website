@@ -2097,3 +2097,67 @@ test("bottom-left floating widget is cleanly removed without breaking required s
   assert.match(css, /#chatbot\s*\{\s*display: block !important;\s*\}/);
   assert.doesNotMatch(css, /(?:#chatbot|\.chatbot)[^{]*\{[^}]*display:\s*none\s*!important/);
 });
+
+test("coming soon modal is dismissible via close button, got it button, roadmap button, backdrop, and escape key", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. HTML semantics and accessibility audit
+  assert.match(html, /id="comingSoonModal"[^>]*role="dialog"[^>]*aria-modal="true"/);
+  assert.match(html, /id="comingSoonBackdrop"[^>]*data-action="close-coming-soon"/);
+  assert.match(html, /id="comingSoonCloseBtn"[^>]*data-action="close-coming-soon"/);
+  assert.match(html, /id="comingSoonConfirmBtn"[^>]*data-action="close-coming-soon"/);
+  assert.match(html, /id="comingSoonExploreBtn"[^>]*data-action="explore-roadmap"/);
+  assert.match(html, /<a[^>]*id="comingSoonExploreBtn"[^>]*href="#features"|<a[^>]*href="#features"[^>]*id="comingSoonExploreBtn"/);
+
+  // 2. CSS visibility, display, pointer-events, and stacking audit
+  // Default / hidden state
+  assert.match(css, /\.coming-soon-modal\s*\{[\s\S]*?display:\s*none;[\s\S]*?opacity:\s*0;[\s\S]*?visibility:\s*hidden;[\s\S]*?pointer-events:\s*none;/);
+  // Open state
+  assert.match(css, /\.coming-soon-modal\.is-open,\s*\.coming-soon-modal\.open\s*\{[\s\S]*?display:\s*flex\s*!important;[\s\S]*?opacity:\s*1\s*!important;[\s\S]*?visibility:\s*visible\s*!important;[\s\S]*?pointer-events:\s*auto\s*!important;/);
+  // Hidden attribute override
+  assert.match(css, /\.coming-soon-modal\[hidden\]\s*\{[\s\S]*?display:\s*none\s*!important;[\s\S]*?pointer-events:\s*none\s*!important;/);
+  // Backdrop clickable
+  assert.match(css, /\.coming-soon-backdrop\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?cursor:\s*pointer;[\s\S]*?pointer-events:\s*auto;/);
+  // Card & close button stacking
+  assert.match(css, /\.coming-soon-card\s*\{[\s\S]*?z-index:\s*10;[\s\S]*?pointer-events:\s*auto;/);
+  assert.match(css, /\.coming-soon-close\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?z-index:\s*20;[\s\S]*?pointer-events:\s*auto;/);
+  assert.match(css, /\.coming-soon-actions\s*\.btn\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?pointer-events:\s*auto;/);
+  // Body scroll lock
+  assert.match(css, /body\.coming-soon-open[\s\S]*?overflow:\s*hidden\s*!important;/);
+
+  // 3. Script implementation verification
+  assert.match(script, /function showComingSoonPopup\(toolName\)/);
+  assert.match(script, /function closeComingSoonModal\(\)/);
+  assert.match(script, /window\.closeComingSoonModal\s*=\s*closeComingSoonModal/);
+
+  // Opening removes hidden, adds is-open and body scroll lock
+  assert.match(script, /comingSoonModal\.classList\.add\('is-open',\s*'open'\)/);
+  assert.match(script, /document\.body\.classList\.add\('coming-soon-open'\)/);
+  assert.match(script, /comingSoonModal\.style\.setProperty\('display',\s*'flex',\s*'important'\)/);
+
+  // Closing removes is-open/open, sets display none !important, sets hidden, unlocks body scroll
+  assert.match(script, /comingSoonModal\.classList\.remove\('is-open',\s*'open'\)/);
+  assert.match(script, /comingSoonModal\.setAttribute\('aria-hidden',\s*'true'\)/);
+  assert.match(script, /comingSoonModal\.hidden\s*=\s*true/);
+  assert.match(script, /comingSoonModal\.style\.setProperty\('display',\s*'none',\s*'important'\)/);
+  assert.match(script, /document\.body\.classList\.remove\('coming-soon-open'\)/);
+
+  // Direct element event bindings
+  assert.match(script, /bindAction\(document\.getElementById\('comingSoonCloseBtn'\),\s*'click',\s*closeComingSoonModal\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('comingSoonConfirmBtn'\),\s*'click',\s*closeComingSoonModal\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('comingSoonBackdrop'\),\s*'click',\s*closeComingSoonModal\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('comingSoonExploreBtn'\),\s*'click'/);
+
+  // Document delegated event handlers for guaranteed dismissal
+  assert.match(script, /target\.closest\('#comingSoonCloseBtn,\s*#comingSoonConfirmBtn,\s*\[data-action="close-coming-soon"\],\s*\.coming-soon-close'\)/);
+  assert.match(script, /target\.closest\('#comingSoonExploreBtn,\s*\[data-action="explore-roadmap"\]'\)/);
+
+  // Roadmap action activates filter tab and scrolls to #features
+  assert.match(script, /document\.querySelector\('\.launcher-tab\[data-tool-filter="coming_soon"\]'\)/);
+  assert.match(script, /scrollIntoView\(\{\s*behavior:\s*'smooth'\s*\}\)/);
+
+  // Escape key handler
+  assert.match(script, /if\s*\(event\.key\s*===\s*'Escape'\)\s*\{[\s\S]*?closeComingSoonModal\(\)/);
+});

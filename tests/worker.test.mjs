@@ -2173,3 +2173,424 @@ test("coming soon modal is dismissible via close button, got it button, roadmap 
   // Escape key handler
   assert.match(script, /if\s*\(event\.key\s*===\s*'Escape'\)\s*\{[\s\S]*?closeComingSoonModal\(\)/);
 });
+
+const geminiEnv = {
+  ...env,
+  GEMINI_API_KEY: "test-gemini-key"
+};
+
+test("chat uses Gemini primary model gemini-3.8-flash and settles credits", async () => {
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      assert.match(url.pathname, /gemini-3\.8-flash:generateContent/);
+      assert.equal(options.headers["x-goog-api-key"], "test-gemini-key");
+      const reqBody = JSON.parse(options.body);
+      assert.equal(reqBody.generationConfig.maxOutputTokens, 550);
+      return Response.json({
+        candidates: [{
+          content: {
+            parts: [{ text: "Hello from Gemini 3.8 Flash!" }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: {
+          promptTokenCount: 15,
+          candidatesTokenCount: 10,
+          totalTokenCount: 25
+        }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 99
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      const settleBody = JSON.parse(options.body);
+      assert.equal(settleBody.p_usage_tokens, 25);
+      return Response.json({
+        ok: true,
+        status: "settled",
+        charged_credits: 1,
+        balance: 99
+      });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), geminiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.reply, "Hello from Gemini 3.8 Flash!");
+    assert.equal(data.creditsCharged, 1);
+    assert.equal(data.creditsRemaining, 99);
+    assert.equal(data.totalTokens, 25);
+    assert.equal(mock.calls.some(c => c.url.hostname === "generativelanguage.googleapis.com"), true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("chat automatically falls back to gemini-3.5-flash-lite on transient 503 or 429", async () => {
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      if (url.pathname.includes("gemini-3.8-flash")) {
+        return Response.json({ error: { code: 503, message: "High demand spike" } }, { status: 503 });
+      }
+      if (url.pathname.includes("gemini-3.5-flash-lite")) {
+        return Response.json({
+          candidates: [{
+            content: {
+              parts: [{ text: "Fallback response from Gemini 3.5 Flash Lite!" }],
+              role: "model"
+            },
+            finishReason: "STOP"
+          }],
+          usageMetadata: {
+            promptTokenCount: 20,
+            candidatesTokenCount: 15,
+            totalTokenCount: 35
+          }
+        });
+      }
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 99
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({
+        ok: true,
+        status: "settled",
+        charged_credits: 1,
+        balance: 99
+      });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Testing fallback", tier: "lite" } }), geminiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.reply, "Fallback response from Gemini 3.5 Flash Lite!");
+    // Both 3.8-flash and 3.5-flash-lite were called
+    const geminiCalls = mock.calls.filter(c => c.url.hostname === "generativelanguage.googleapis.com");
+    assert.equal(geminiCalls.length, 2);
+    assert.match(geminiCalls[0].url.pathname, /gemini-3\.8-flash/);
+    assert.match(geminiCalls[1].url.pathname, /gemini-3\.5-flash-lite/);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("chat releases reservation on definitive Gemini 429 rate limit", async () => {
+  let released = false;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({ error: { code: 429, message: "Resource exhausted" } }, { status: 429 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 99
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_release") {
+      released = true;
+      return Response.json({ ok: true, status: "released", balance: 100 });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Testing rate limit", tier: "lite" } }), geminiEnv);
+    assert.equal(response.status, 429);
+    assert.equal(released, true);
+    const data = await response.json();
+    assert.match(data.error, /busy right now/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("chat handles Gemini safety filter by releasing reservation and returning 400", async () => {
+  let released = false;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          finishReason: "SAFETY"
+        }]
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 99
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_release") {
+      released = true;
+      return Response.json({ ok: true, status: "released", balance: 100 });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "unsafe content", tier: "lite" } }), geminiEnv);
+    assert.equal(response.status, 400);
+    assert.equal(released, true);
+    const data = await response.json();
+    assert.match(data.error, /safety guidelines/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("content generation uses Gemini primary model and settles credits", async () => {
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      assert.match(url.pathname, /gemini-3\.8-flash:generateContent/);
+      const reqBody = JSON.parse(options.body);
+      assert.equal(reqBody.generationConfig.maxOutputTokens, 700);
+      assert.equal(reqBody.generationConfig.temperature, 0.7);
+      return Response.json({
+        candidates: [{
+          content: {
+            parts: [{ text: "### High-Converting Headline\n\nGenerated article body in professional tone." }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: {
+          promptTokenCount: 50,
+          candidatesTokenCount: 150,
+          totalTokenCount: 200
+        }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 2,
+        balance: 98
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({
+        ok: true,
+        status: "settled",
+        charged_credits: 2,
+        balance: 98
+      });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.match(data.content, /High-Converting Headline/);
+    assert.equal(data.creditsCharged, 2);
+    assert.equal(data.creditsRemaining, 98);
+    assert.equal(mock.calls.some(c => c.url.hostname === "generativelanguage.googleapis.com"), true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("content generation falls back to gemini-3.5-flash-lite on transient failure", async () => {
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      if (url.pathname.includes("gemini-3.8-flash")) {
+        return Response.json({ error: { code: 503, message: "Unavailable" } }, { status: 503 });
+      }
+      return Response.json({
+        candidates: [{
+          content: {
+            parts: [{ text: "Fallback generated content from Gemini 3.5 Flash Lite" }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { totalTokenCount: 120 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 2,
+        balance: 98
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({
+        ok: true,
+        status: "settled",
+        charged_credits: 2,
+        balance: 98
+      });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.content, "Fallback generated content from Gemini 3.5 Flash Lite");
+  } finally {
+    mock.restore();
+  }
+});
+
+test("support AI uses Gemini when GEMINI_API_KEY is configured", async () => {
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: {
+            parts: [{ text: "Welcome to Jevexa! We offer 100 free credits upon signup." }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }]
+      });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(new Request("https://jevexa.test/api/support/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "What are your credit options?" })
+    }), geminiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.match(data.reply, /100 free credits/i);
+    assert.equal(mock.calls.some(c => c.url.hostname === "generativelanguage.googleapis.com"), true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("chat formats multi-turn history and inline attachments for Gemini correctly", async () => {
+  let capturedBody;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      capturedBody = JSON.parse(options.body);
+      return Response.json({
+        candidates: [{
+          content: {
+            parts: [{ text: "Received attachment and history." }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { totalTokenCount: 50 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 2,
+        balance: 98
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({
+        ok: true,
+        status: "settled",
+        charged_credits: 2,
+        balance: 98
+      });
+    }
+  }, null, "pro");
+
+  const sampleImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const chatBody = {
+    message: "Analyze this image",
+    tier: "pro",
+    history: [
+      { role: "user", text: "Turn 1 user" },
+      { role: "assistant", text: "Turn 1 assistant" }
+    ],
+    attachments: [
+      {
+        name: "test.png",
+        type: "image/png",
+        data: `data:image/png;base64,${sampleImageBase64}`
+      }
+    ]
+  };
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: chatBody }), geminiEnv);
+    assert.equal(response.status, 200);
+    assert.ok(capturedBody);
+    // Verify contents has user -> model -> user turns
+    assert.equal(capturedBody.contents.length, 3);
+    assert.equal(capturedBody.contents[0].role, "user");
+    assert.equal(capturedBody.contents[1].role, "model");
+    assert.equal(capturedBody.contents[2].role, "user");
+    // Verify inlineData for image
+    const userParts = capturedBody.contents[2].parts;
+    const inlinePart = userParts.find(p => p.inlineData);
+    assert.ok(inlinePart);
+    assert.equal(inlinePart.inlineData.mimeType, "image/png");
+    assert.equal(inlinePart.inlineData.data, sampleImageBase64);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("content generation releases reservation on definitive Gemini 429 rate limit", async () => {
+  let released = false;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({ error: { code: 429, message: "Resource exhausted" } }, { status: 429 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 2,
+        balance: 98
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_release") {
+      released = true;
+      return Response.json({ ok: true, status: "released", balance: 100 });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
+    assert.equal(response.status, 429);
+    assert.equal(released, true);
+    const data = await response.json();
+    assert.match(data.error, /busy right now/i);
+  } finally {
+    mock.restore();
+  }
+});

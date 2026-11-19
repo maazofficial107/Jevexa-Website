@@ -1,4 +1,5 @@
 # Local development only; do not commit real .dev.vars values.
+GEMINI_API_KEY=
 OPENROUTER_API_KEY=
 # Optional server-side model overrides; omit to use the Worker defaults.
 OPENROUTER_MODEL_LITE=

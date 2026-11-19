@@ -573,6 +573,7 @@
             .replace(/`([^`\n]+)`/g, '<code>$1</code>')
             .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
             .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+|https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2">$1</a>')
             .replace(/\n/g, '<br>');
     }
 

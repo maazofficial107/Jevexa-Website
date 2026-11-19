@@ -1773,6 +1773,17 @@ export default {
     }
 
     if (env.ASSETS) {
+      if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
+        const spaRequest = new Request(new URL("/index.html", request.url), request);
+        const assetResponse = await env.ASSETS.fetch(spaRequest);
+        const secured = new Response(assetResponse.body, assetResponse);
+        secured.headers.set("X-Content-Type-Options", "nosniff");
+        secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+        secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+        secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+        secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        return secured;
+      }
       const assetResponse = await env.ASSETS.fetch(request);
       const secured = new Response(assetResponse.body, assetResponse);
       secured.headers.set("X-Content-Type-Options", "nosniff");

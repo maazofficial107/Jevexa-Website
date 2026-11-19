@@ -243,6 +243,205 @@
                 <span class="hero-sub-static">— AI Chat and Content Generation are live; 8 more tools are on the roadmap.</span>
             </p>
 
+            <!-- AI Tools Launcher Grid / Cards (Left-Aligned Studio Hub) -->
+            <div class="tools-launcher-hub" id="toolsLauncherHub" data-aos="fade-up" data-aos-delay="150">
+                <div class="launcher-hub-header">
+                    <div class="launcher-hub-identity">
+                        <span class="launcher-hub-tag"><i class="fas fa-shapes"></i> AI TOOLS HUB</span>
+                        <span class="launcher-live-pill"><span class="pulse-dot"></span> 2 LIVE NOW • 8 ON ROADMAP</span>
+                    </div>
+                    <div class="launcher-filter-tabs" role="tablist" aria-label="Filter AI tools">
+                        <button type="button" class="launcher-tab active" data-tool-filter="all" role="tab" aria-selected="true">All (10)</button>
+                        <button type="button" class="launcher-tab" data-tool-filter="live" role="tab" aria-selected="false"><span class="tab-dot live"></span> Live (2)</button>
+                        <button type="button" class="launcher-tab" data-tool-filter="coming_soon" role="tab" aria-selected="false"><span class="tab-dot locked"></span> Roadmap (8)</button>
+                    </div>
+                </div>
+
+                <div class="tools-launcher-grid" id="toolsLauncherGrid" role="region" aria-label="AI Tools Launcher Grid">
+                    <!-- Tool 1: AI Chatbot (Live) -->
+                    <div class="tool-launcher-card tool-live" data-tool-id="chatbot" data-status="live" role="button" tabindex="0" aria-label="Open AI Chatbot (Jevexa AI) Workspace">
+                        <div class="tool-card-glow"></div>
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon live-icon">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <span class="tool-status-badge badge-live"><span class="pulse-ring"></span>LIVE</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">AI Chatbot <span class="tool-card-sub">(Jevexa AI)</span></h3>
+                            <p class="tool-card-desc">Multi-model reasoning assistant with document and file analysis.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta">Launch Workspace <i class="fas fa-arrow-right"></i></span>
+                            <span class="tool-card-badge-pill">1 credit / msg</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 2: Content Generation (Live) -->
+                    <div class="tool-launcher-card tool-live" data-tool-id="content-generator" data-status="live" role="button" tabindex="0" aria-label="Open Content Generation Workspace">
+                        <div class="tool-card-glow"></div>
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon live-icon">
+                                <i class="fas fa-pen-nib"></i>
+                            </div>
+                            <span class="tool-status-badge badge-live"><span class="pulse-ring"></span>LIVE</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Content Generation</h3>
+                            <p class="tool-card-desc">High-converting business copy, blogs, captions and email drafts.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta">Launch Workspace <i class="fas fa-arrow-right"></i></span>
+                            <span class="tool-card-badge-pill">Token-metered</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 3: Email & Outreach AI (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="email-outreach" data-status="coming_soon" role="button" tabindex="0" aria-label="Email &amp; Outreach AI (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-envelope-open-text"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Email &amp; Outreach AI</h3>
+                            <p class="tool-card-desc">Automated personalized cold outreach and customer follow-ups.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 4: Mini CRM (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="crm" data-status="coming_soon" role="button" tabindex="0" aria-label="Mini CRM (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-address-book"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Mini CRM</h3>
+                            <p class="tool-card-desc">Unified customer pipeline, interaction tracking and deal notes.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 5: Document AI & OCR (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="ocr" data-status="coming_soon" role="button" tabindex="0" aria-label="Document AI &amp; OCR (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-file-lines"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Document AI &amp; OCR</h3>
+                            <p class="tool-card-desc">In-browser OCR for invoices, receipts and scanned documents.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 6: Social Media Assistant (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="social" data-status="coming_soon" role="button" tabindex="0" aria-label="Social Media Assistant (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-hashtag"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Social Media Assistant</h3>
+                            <p class="tool-card-desc">Viral caption writing, content repurposing and schedule planning.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 7: Business Analytics (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="analytics" data-status="coming_soon" role="button" tabindex="0" aria-label="Business Analytics (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Business Analytics</h3>
+                            <p class="tool-card-desc">Interactive visual charts, performance metrics &amp; trend predictions.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 8: User & Admin Management (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="admin" data-status="coming_soon" role="button" tabindex="0" aria-label="User &amp; Admin Management (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-users-gear"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">User &amp; Admin Management</h3>
+                            <p class="tool-card-desc">Team permissions, seat provisioning and enterprise audit trails.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 9: Workflow Automation (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="workflows" data-status="coming_soon" role="button" tabindex="0" aria-label="Workflow Automation (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-diagram-project"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Workflow Automation</h3>
+                            <p class="tool-card-desc">Connect apps into autonomous event-driven automation sequences.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+
+                    <!-- Tool 10: Data Management (Coming Soon) -->
+                    <div class="tool-launcher-card tool-locked" data-tool-id="data" data-status="coming_soon" role="button" tabindex="0" aria-label="Data Management (Coming Soon)">
+                        <div class="tool-card-top">
+                            <div class="tool-card-icon locked-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <span class="tool-status-badge badge-locked"><i class="fas fa-lock"></i> COMING SOON</span>
+                        </div>
+                        <div class="tool-card-content">
+                            <h3 class="tool-card-title">Data Management</h3>
+                            <p class="tool-card-desc">Automated data cleaning, deduplication and schema transformation.</p>
+                        </div>
+                        <div class="tool-card-footer">
+                            <span class="tool-card-cta locked"><i class="fas fa-lock"></i> In Development</span>
+                            <span class="tool-card-badge-pill muted">Roadmap</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="hero-ctas" data-aos="fade-up" data-aos-delay="200">
 
                 <a href="#" class="btn btn-primary btn-magnetic" data-auth-action="signup">
@@ -564,68 +763,103 @@
     </section>
 
 
-    <section id="contentTool" class="content-tool-section" aria-labelledby="contentToolTitle">
-        <div class="container">
-            <div class="section-header" data-aos="fade-up">
-                <span class="section-tag"><i class="fas fa-pen-nib"></i> Live AI Tool</span>
-                <h2 class="section-title" id="contentToolTitle">Create Business <span class="gradient-text">Content</span></h2>
-                <p class="section-desc">Sign in to generate a blog post, social caption, email, product description, or short social post. Usage is charged in credits based on measured tokens.</p>
+    <!-- Dedicated Distraction-Free Content Generation Full-Page Workspace -->
+    <div class="tool-workspace" id="contentWorkspace" role="dialog" aria-modal="true" aria-label="Content Generation Workspace" aria-hidden="true">
+        <header class="workspace-header">
+            <div class="workspace-header-left">
+                <button type="button" class="workspace-back-btn" id="contentBackToStudio" aria-label="Back to Studio">
+                    <i class="fas fa-arrow-left"></i> <span>Back to Studio</span>
+                </button>
             </div>
-            <div class="content-tool-panel glass">
-                <form id="contentForm" class="content-tool-form">
-                    <div class="form-group">
-                        <label for="contentTopic">What should we write about?</label>
-                        <textarea id="contentTopic" name="topic" rows="5" maxlength="1000" required aria-describedby="contentTopicHelp" placeholder="Describe the product, audience, key points, or idea."></textarea>
-                        <small id="contentTopicHelp">Enter a topic or brief of up to 1,000 characters. Do not include sensitive information.</small>
-                    </div>
-                    <div class="content-tool-controls">
-                        <div class="form-group">
-                            <label for="contentType">Content type</label>
-                            <select id="contentType" name="type" required>
-                                <option value="blog">Blog post</option>
-                                <option value="caption">Social caption</option>
-                                <option value="email">Email draft</option>
-                                <option value="product">Product description</option>
-                                <option value="social">Short social post</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="contentTone">Tone</label>
-                            <select id="contentTone" name="tone" required>
-                                <option value="professional">Professional</option>
-                                <option value="friendly">Friendly</option>
-                                <option value="casual">Casual</option>
-                                <option value="persuasive">Persuasive</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="contentLength">Length</label>
-                            <select id="contentLength" name="length" required>
-                                <option value="short">Short</option>
-                                <option value="medium" selected>Medium</option>
-                                <option value="long">Long</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button id="contentGenerate" type="submit" class="btn btn-primary">
-                        <span>Generate content</span>
-                        <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
-                    </button>
-                    <p id="contentStatus" role="status" aria-live="polite"></p>
-                </form>
-                <div class="content-tool-output">
-                    <div class="content-output-header">
-                        <h3>Generated content</h3>
-                        <div class="content-output-actions">
-                            <button id="contentCopy" type="button" class="btn btn-outline" disabled>Copy</button>
-                            <button id="contentDownload" type="button" class="btn btn-outline" disabled>Download</button>
-                        </div>
-                    </div>
-                    <pre id="contentOutput" tabindex="0" aria-label="Generated content output"></pre>
+            <div class="workspace-header-center">
+                <div class="workspace-avatar">
+                    <i class="fas fa-pen-nib"></i>
+                </div>
+                <div class="workspace-title-info">
+                    <h3 class="workspace-title">Content Generation</h3>
+                    <span class="workspace-badge live"><span class="pulse-dot"></span> LIVE WORKSPACE</span>
                 </div>
             </div>
+            <div class="workspace-header-right">
+                <div class="workspace-credits-badge" id="contentWorkspaceCredits" role="status" aria-label="Credit balance">
+                    <span class="credits-lightning">ϟ</span>
+                    <strong class="workspace-credits-val">—</strong>
+                    <span>Credits Remaining</span>
+                </div>
+                <button type="button" class="workspace-close-btn" id="contentWorkspaceClose" aria-label="Close workspace">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="workspace-scroll-wrap">
+            <section id="contentTool" class="content-tool-section workspace-mode" aria-labelledby="contentToolTitle">
+                <div class="container workspace-container">
+                    <div class="section-header workspace-section-header">
+                        <span class="section-tag"><i class="fas fa-pen-nib"></i> Live AI Tool</span>
+                        <h2 class="section-title" id="contentToolTitle">Create Business <span class="gradient-text">Content</span></h2>
+                        <p class="section-desc">Sign in to generate a blog post, social caption, email, product description, or short social post. Usage is charged in credits based on measured tokens.</p>
+                    </div>
+                    <div class="content-tool-panel glass workspace-panel">
+                        <form id="contentForm" class="content-tool-form">
+                            <div class="form-group">
+                                <div class="form-label-row">
+                                    <label for="contentTopic">What should we write about?</label>
+                                    <span id="contentCharCount" class="char-count" aria-live="polite">0 / 1000</span>
+                                </div>
+                                <textarea id="contentTopic" name="topic" rows="5" maxlength="1000" required aria-describedby="contentTopicHelp" placeholder="Describe the product, audience, key points, or idea."></textarea>
+                                <small id="contentTopicHelp">Enter a topic or brief of up to 1,000 characters. Do not include sensitive information.</small>
+                            </div>
+                            <div class="content-tool-controls">
+                                <div class="form-group">
+                                    <label for="contentType">Content type</label>
+                                    <select id="contentType" name="type" required>
+                                        <option value="blog">Blog post</option>
+                                        <option value="caption">Social caption</option>
+                                        <option value="email">Email draft</option>
+                                        <option value="product">Product description</option>
+                                        <option value="social">Short social post</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="contentTone">Tone</label>
+                                    <select id="contentTone" name="tone" required>
+                                        <option value="professional">Professional</option>
+                                        <option value="friendly">Friendly</option>
+                                        <option value="casual">Casual</option>
+                                        <option value="persuasive">Persuasive</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="contentLength">Length</label>
+                                    <select id="contentLength" name="length" required>
+                                        <option value="short">Short</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="long">Long</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button id="contentGenerate" type="submit" class="btn btn-primary btn-generate">
+                                <span>Generate content</span>
+                                <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                            </button>
+                            <p id="contentStatus" role="status" aria-live="polite"></p>
+                        </form>
+                        <div class="content-tool-output">
+                            <div class="content-output-header">
+                                <h3>Generated content</h3>
+                                <div class="content-output-actions">
+                                    <button id="contentCopy" type="button" class="btn btn-outline" disabled>Copy</button>
+                                    <button id="contentDownload" type="button" class="btn btn-outline" disabled>Download</button>
+                                </div>
+                            </div>
+                            <pre id="contentOutput" tabindex="0" aria-label="Generated content output"></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
-    </section>
+    </div>
 
 
     <!-- How It Works -->
@@ -1409,6 +1643,27 @@
 
 
 
+    <!-- Glassmorphic Coming Soon Modal -->
+    <div id="comingSoonModal" class="coming-soon-modal" role="dialog" aria-modal="true" aria-labelledby="comingSoonToolTitle" aria-hidden="true" hidden>
+        <div class="coming-soon-backdrop" id="comingSoonBackdrop"></div>
+        <div class="coming-soon-card glassmorphic">
+            <button type="button" class="coming-soon-close" id="comingSoonCloseBtn" aria-label="Close modal">×</button>
+            <div class="coming-soon-icon-ring">
+                <i class="fas fa-lock"></i>
+            </div>
+            <h3 id="comingSoonToolTitle" class="coming-soon-title">🔒 Coming Soon</h3>
+            <p id="comingSoonToolDesc" class="coming-soon-desc">🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon.</p>
+            <div class="coming-soon-pills">
+                <span class="cs-pill"><i class="fas fa-circle-dot"></i> In Active Development</span>
+                <span class="cs-pill"><i class="fas fa-bolt"></i> Shared Credit Wallet Ready</span>
+            </div>
+            <div class="coming-soon-actions">
+                <button type="button" class="btn btn-primary" id="comingSoonConfirmBtn">Got it</button>
+                <a href="#features" class="btn btn-secondary" id="comingSoonExploreBtn">View Roadmap</a>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast"></div>
 
 
@@ -1465,20 +1720,31 @@
             </aside>
             <main class="chat-main">
             <div class="chatbot-header">
-                <button type="button" class="chat-sidebar-toggle" id="chatSidebarToggle" aria-label="Toggle chat history">☰</button>
-                <div class="chatbot-avatar">
-                    <div class="avatar-ring"></div>
-                    <i class="fas fa-wand-magic-sparkles"></i>
-
-                    <span class="status-dot"></span>
-
+                <div class="chatbot-header-left">
+                    <button type="button" class="workspace-back-btn" id="chatBackToStudio" aria-label="Back to Studio">
+                        <i class="fas fa-arrow-left"></i> <span>Back to Studio</span>
+                    </button>
+                    <button type="button" class="chat-sidebar-toggle" id="chatSidebarToggle" aria-label="Toggle chat history">☰</button>
                 </div>
-
-                <div class="chatbot-info">
-                    <h4 id="chatbotTitle">Jevexa AI</h4>
-                    <span class="status" id="chatbotStatusText">AI chat • Sign-in required</span>
+                <div class="chatbot-header-center">
+                    <div class="chatbot-avatar">
+                        <div class="avatar-ring"></div>
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        <span class="status-dot"></span>
+                    </div>
+                    <div class="chatbot-info">
+                        <h4 id="chatbotTitle">Jevexa AI</h4>
+                        <span class="status" id="chatbotStatusText">AI chat • Sign-in required</span>
+                    </div>
                 </div>
-                <button class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
+                <div class="chatbot-header-right">
+                    <div class="workspace-credits-badge" id="chatWorkspaceCredits" role="status" aria-label="Credit balance">
+                        <span class="credits-lightning">ϟ</span>
+                        <strong class="workspace-credits-val">—</strong>
+                        <span>Credits Remaining</span>
+                    </div>
+                    <button class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
+                </div>
             </div>
             <div class="chat-empty-state" id="chatEmptyState">
                 <div class="chat-empty-mark"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i></div>

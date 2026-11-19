@@ -2011,3 +2011,89 @@ test("zero startup error toasts and safe DOM query iterations", async () => {
   assert.match(scriptJs, /userInteracted/);
   assert.match(html, /location\.hostname\.endsWith\('\.workers\.dev'\)/);
 });
+
+
+test("hero tools launcher grid renders 10 tools with live vs locked states and filter tabs", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Hub & filter tabs exist
+  assert.match(html, /id="toolsLauncherHub"/);
+  assert.match(html, /id="toolsLauncherGrid"/);
+  assert.match(html, /data-tool-filter="all"/);
+  assert.match(html, /data-tool-filter="live"/);
+  assert.match(html, /data-tool-filter="coming_soon"/);
+
+  // Exactly 10 tool cards in grid
+  const toolCards = html.match(/class="tool-launcher-card\s+(tool-live|tool-locked)"/g) || [];
+  assert.equal(toolCards.length, 10, "Launcher grid must contain all 10 AI tools");
+
+  // 2 Live Tools
+  assert.match(html, /data-tool-id="chatbot"\s+data-status="live"/);
+  assert.match(html, /data-tool-id="content-generator"\s+data-status="live"/);
+
+  // 8 Coming Soon Tools
+  const comingSoonIds = ["email-outreach", "crm", "ocr", "social", "analytics", "admin", "workflows", "data"];
+  for (const id of comingSoonIds) {
+    assert.match(html, new RegExp(`data-tool-id="${id}"\\s+data-status="coming_soon"`));
+  }
+
+  // Scalable toolsConfig in script.js
+  assert.match(script, /const toolsConfig\s*=\s*\[/);
+  assert.match(script, /window\.JEVEXA_TOOLS_CONFIG\s*=\s*toolsConfig/);
+  assert.match(script, /status:\s*['"]live['"]/);
+  assert.match(script, /status:\s*['"]coming_soon['"]/);
+  assert.match(script, /route:\s*['"]\/tools\/chatbot['"]/);
+  assert.match(script, /route:\s*['"]\/tools\/content-generator['"]/);
+
+  // Coming Soon alert/toast text
+  assert.match(script, /🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon\./);
+  assert.match(html, /id="comingSoonModal"/);
+});
+
+test("dedicated full-page workspaces provide clean Back to Studio buttons and credit displays", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Content Generation Workspace
+  assert.match(html, /id="contentWorkspace"/);
+  assert.match(html, /class="[^"]*tool-workspace[^"]*"/);
+  assert.match(html, /id="contentBackToStudio"/);
+  assert.match(html, /id="contentWorkspaceCredits"/);
+  assert.match(html, /id="contentCharCount"/);
+
+  // Chatbot Workspace Header
+  assert.match(html, /id="chatBackToStudio"/);
+  assert.match(html, /id="chatWorkspaceCredits"/);
+
+  // Both workspaces display Credits Remaining label
+  assert.equal((html.match(/Credits Remaining/g) || []).length >= 3, true);
+
+  // Workspace CSS styling
+  assert.match(css, /\.tool-workspace\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;/);
+  assert.match(css, /\.workspace-back-btn/);
+  assert.match(css, /\.workspace-credits-badge/);
+
+  // Script routing & workspace functions
+  assert.match(script, /function openChatWorkspace/);
+  assert.match(script, /function openContentWorkspace/);
+  assert.match(script, /function returnToStudio/);
+  assert.match(script, /function navigateToRoute/);
+});
+
+test("bottom-left floating widget is cleanly removed without breaking required selectors", async () => {
+  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  // Floating button is hidden from viewport
+  assert.match(css, /\.chatbot-toggle\s*\{[\s\S]*?display:\s*none;[\s\S]*?opacity:\s*0;[\s\S]*?pointer-events:\s*none;/);
+
+  // Container is static/non-floating so it cannot overlap hero description
+  assert.match(css, /\.chatbot\s*\{\s*position:\s*static;[\s\S]*?z-index:\s*99999;\s*\}/);
+
+  // Existing test compliance: #chatbot display block !important remains
+  assert.match(css, /#chatbot\s*\{\s*display: block !important;\s*\}/);
+  assert.doesNotMatch(css, /(?:#chatbot|\.chatbot)[^{]*\{[^}]*display:\s*none\s*!important/);
+});

@@ -3843,3 +3843,394 @@ const JEVEXA_PLANS = {
         history.replaceState({}, '', clean);
     })();
 })();
+
+// ==========================================================================
+// JEVEXA AI STUDIO 2.0 — LAUNCHER & WORKSPACE ROUTING ARCHITECTURE
+// ==========================================================================
+(function initJevexaStudioWorkspaces() {
+    // 1. Single Scalable Configuration Array for AI Tools
+    const toolsConfig = [
+        {
+            id: 'chatbot',
+            name: 'AI Chatbot (Jevexa AI)',
+            shortName: 'AI Chatbot',
+            tagline: 'Multi-model reasoning assistant with document and file analysis.',
+            icon: 'fas fa-comments',
+            status: 'live',
+            route: '/tools/chatbot',
+            badge: 'LIVE',
+            badgeType: 'live',
+            actionText: 'Launch Workspace'
+        },
+        {
+            id: 'content-generator',
+            name: 'Content Generation',
+            shortName: 'Content AI',
+            tagline: 'High-converting business copy, blogs, captions and email drafts.',
+            icon: 'fas fa-pen-nib',
+            status: 'live',
+            route: '/tools/content-generator',
+            badge: 'LIVE',
+            badgeType: 'live',
+            actionText: 'Launch Workspace'
+        },
+        {
+            id: 'email-outreach',
+            name: 'Email & Outreach AI',
+            shortName: 'Outreach AI',
+            tagline: 'Automated personalized cold outreach and customer follow-ups.',
+            icon: 'fas fa-envelope-open-text',
+            status: 'coming_soon',
+            route: '/tools/email-outreach',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'crm',
+            name: 'Mini CRM',
+            shortName: 'Mini CRM',
+            tagline: 'Unified customer pipeline, interaction tracking and deal notes.',
+            icon: 'fas fa-address-book',
+            status: 'coming_soon',
+            route: '/tools/crm',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'ocr',
+            name: 'Document AI & OCR',
+            shortName: 'Doc OCR',
+            tagline: 'In-browser OCR for invoices, receipts and scanned documents.',
+            icon: 'fas fa-file-lines',
+            status: 'coming_soon',
+            route: '/tools/ocr',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'social',
+            name: 'Social Media Assistant',
+            shortName: 'Social AI',
+            tagline: 'Viral caption writing, content repurposing and schedule planning.',
+            icon: 'fas fa-hashtag',
+            status: 'coming_soon',
+            route: '/tools/social',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'analytics',
+            name: 'Business Analytics',
+            shortName: 'Analytics AI',
+            tagline: 'Interactive visual charts, performance metrics & trend predictions.',
+            icon: 'fas fa-chart-line',
+            status: 'coming_soon',
+            route: '/tools/analytics',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'admin',
+            name: 'User & Admin Management',
+            shortName: 'Team Admin',
+            tagline: 'Team permissions, seat provisioning and enterprise audit trails.',
+            icon: 'fas fa-users-gear',
+            status: 'coming_soon',
+            route: '/tools/admin',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'workflows',
+            name: 'Workflow Automation',
+            shortName: 'Workflows',
+            tagline: 'Connect apps into autonomous event-driven automation sequences.',
+            icon: 'fas fa-diagram-project',
+            status: 'coming_soon',
+            route: '/tools/workflows',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        },
+        {
+            id: 'data',
+            name: 'Data Management',
+            shortName: 'Data AI',
+            tagline: 'Automated data cleaning, deduplication and schema transformation.',
+            icon: 'fas fa-database',
+            status: 'coming_soon',
+            route: '/tools/data',
+            badge: 'COMING SOON',
+            badgeType: 'locked',
+            actionText: 'Coming Soon'
+        }
+    ];
+    window.JEVEXA_TOOLS_CONFIG = toolsConfig;
+
+    // DOM Elements
+    const contentWorkspace = document.getElementById('contentWorkspace');
+    const chatbotWindow = document.getElementById('chatbotWindow');
+    const comingSoonModal = document.getElementById('comingSoonModal');
+    const topicTextarea = document.getElementById('contentTopic');
+    const charCountDisplay = document.getElementById('contentCharCount');
+
+    // Helper: Safely bind interactions using JEVEXA_SAFE_INTERACTION
+    function bindAction(element, eventType, handler) {
+        if (!element) return;
+        if (window.JEVEXA_SAFE_INTERACTION?.bind) {
+            window.JEVEXA_SAFE_INTERACTION.bind(element, eventType, handler);
+        } else {
+            element.addEventListener(eventType, handler);
+        }
+    }
+
+    // Synchronize workspace credit badges
+    function syncWorkspaceCredits() {
+        const countEl = document.getElementById('creditsCount');
+        const count = countEl && countEl.textContent.trim() !== '—' ? countEl.textContent.trim() : (currentUser ? '…' : '—');
+        document.querySelectorAll('.workspace-credits-val').forEach(el => {
+            el.textContent = count;
+        });
+    }
+    window.JEVEXA_SYNC_WORKSPACE_CREDITS = syncWorkspaceCredits;
+
+    // Coming Soon Notification / Modal
+    function showComingSoonPopup(toolName) {
+        const message = '🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon.';
+        if (typeof showToast === 'function') {
+            showToast(message);
+        }
+        if (comingSoonModal) {
+            const titleEl = document.getElementById('comingSoonToolTitle');
+            const descEl = document.getElementById('comingSoonToolDesc');
+            if (titleEl) titleEl.textContent = toolName ? `🔒 ${toolName}` : '🔒 Coming Soon';
+            if (descEl) descEl.textContent = message;
+            comingSoonModal.hidden = false;
+            comingSoonModal.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function closeComingSoonModal() {
+        if (!comingSoonModal) return;
+        comingSoonModal.setAttribute('aria-hidden', 'true');
+        comingSoonModal.hidden = true;
+    }
+
+    // Workspaces Control
+    function openChatWorkspace(pushState = true) {
+        closeContentWorkspace(false);
+        closeComingSoonModal();
+        if (chatbotWindow) {
+            chatbotWindow.classList.add('open');
+            chatbotWindow.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('chat-modal-open');
+            if (typeof setChatbotToggleHidden === 'function') setChatbotToggleHidden(true);
+            syncWorkspaceCredits();
+            document.getElementById('chatInput')?.focus();
+        }
+        if (pushState) {
+            navigateToRoute('/tools/chatbot');
+        }
+    }
+
+    function closeChatWorkspace(pushState = true) {
+        if (chatbotWindow) {
+            chatbotWindow.classList.remove('open', 'chat-history-open');
+            chatbotWindow.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('chat-modal-open');
+            if (typeof setChatbotToggleHidden === 'function') setChatbotToggleHidden(false);
+        }
+        if (pushState) {
+            returnToStudio();
+        }
+    }
+
+    function openContentWorkspace(pushState = true) {
+        closeChatWorkspace(false);
+        closeComingSoonModal();
+        if (contentWorkspace) {
+            contentWorkspace.hidden = false;
+            contentWorkspace.classList.add('open');
+            contentWorkspace.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('workspace-open');
+            syncWorkspaceCredits();
+            topicTextarea?.focus();
+        }
+        if (pushState) {
+            navigateToRoute('/tools/content-generator');
+        }
+    }
+
+    function closeContentWorkspace(pushState = true) {
+        if (contentWorkspace) {
+            contentWorkspace.classList.remove('open');
+            contentWorkspace.setAttribute('aria-hidden', 'true');
+            contentWorkspace.hidden = true;
+            document.body.classList.remove('workspace-open');
+        }
+        if (pushState) {
+            returnToStudio();
+        }
+    }
+
+    function returnToStudio() {
+        closeChatWorkspace(false);
+        closeContentWorkspace(false);
+        closeComingSoonModal();
+        const currentPath = window.location.pathname;
+        const currentHash = window.location.hash;
+        if (currentPath.startsWith('/tools') || currentHash.startsWith('#/tools')) {
+            try {
+                window.history.pushState(null, '', '/');
+            } catch (_) {
+                window.location.hash = '';
+            }
+        }
+    }
+
+    // Routing Manager
+    function navigateToRoute(route) {
+        const currentPath = window.location.pathname;
+        const currentHash = window.location.hash;
+        if (currentPath !== route && currentHash !== '#' + route) {
+            try {
+                window.history.pushState({ route }, '', route);
+            } catch (_) {
+                window.location.hash = '#' + route;
+            }
+        }
+    }
+
+    function handleCurrentRoute() {
+        const path = window.location.pathname;
+        const hash = window.location.hash;
+        if (path === '/tools/chatbot' || hash === '#/tools/chatbot') {
+            openChatWorkspace(false);
+        } else if (path === '/tools/content-generator' || hash === '#/tools/content-generator') {
+            openContentWorkspace(false);
+        } else if (path.startsWith('/tools/') || hash.startsWith('#/tools/')) {
+            const toolId = path.replace(/^\/tools\//, '') || hash.replace(/^#\/tools\//, '');
+            const tool = toolsConfig.find(t => t.id === toolId || t.route === path || t.route === hash.replace(/^#/, ''));
+            if (tool && tool.status === 'live') {
+                if (tool.id === 'chatbot') openChatWorkspace(false);
+                else if (tool.id === 'content-generator') openContentWorkspace(false);
+            } else if (tool && tool.status === 'coming_soon') {
+                returnToStudio();
+                showComingSoonPopup(tool.name);
+            } else {
+                returnToStudio();
+            }
+        }
+    }
+
+    // Expose Global Studio API
+    window.JEVEXA_STUDIO = {
+        openChat: () => openChatWorkspace(true),
+        openContent: () => openContentWorkspace(true),
+        closeWorkspaces: returnToStudio,
+        showComingSoon: showComingSoonPopup,
+        tools: toolsConfig
+    };
+
+    // Card Interactivity in AI Tools Launcher
+    document.querySelectorAll('.tool-launcher-card').forEach(card => {
+        const toolId = card.dataset.toolId;
+        const status = card.dataset.status;
+        const tool = toolsConfig.find(t => t.id === toolId);
+
+        const handleCardAction = () => {
+            if (status === 'live' || tool?.status === 'live') {
+                if (toolId === 'chatbot') {
+                    openChatWorkspace(true);
+                } else if (toolId === 'content-generator') {
+                    openContentWorkspace(true);
+                }
+            } else {
+                showComingSoonPopup(tool?.name || card.querySelector('.tool-card-title')?.textContent?.trim());
+            }
+        };
+
+        bindAction(card, 'click', handleCardAction);
+
+        card.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleCardAction();
+            }
+        });
+    });
+
+    // Launcher Filter Tabs
+    document.querySelectorAll('.launcher-tab').forEach(tab => {
+        bindAction(tab, 'click', () => {
+            const filter = tab.dataset.toolFilter;
+            document.querySelectorAll('.launcher-tab').forEach(t => {
+                t.classList.toggle('active', t === tab);
+                t.setAttribute('aria-selected', String(t === tab));
+            });
+
+            document.querySelectorAll('.tool-launcher-card').forEach(card => {
+                const status = card.dataset.status;
+                const shouldShow = filter === 'all' || status === filter;
+                card.classList.toggle('is-filtered-out', !shouldShow);
+            });
+        });
+    });
+
+    // Content Topic Character Count
+    if (topicTextarea && charCountDisplay) {
+        topicTextarea.addEventListener('input', () => {
+            charCountDisplay.textContent = `${topicTextarea.value.length} / 1000`;
+        });
+    }
+
+    // "← Back to Studio" and Close buttons
+    bindAction(document.getElementById('chatBackToStudio'), 'click', () => returnToStudio());
+    bindAction(document.getElementById('contentBackToStudio'), 'click', () => returnToStudio());
+    bindAction(document.getElementById('contentWorkspaceClose'), 'click', () => returnToStudio());
+    document.querySelectorAll('.content-tool-link').forEach(link => {
+        bindAction(link, 'click', (event) => {
+            event.preventDefault();
+            openContentWorkspace(true);
+        });
+    });
+
+    // Coming Soon Modal buttons
+    bindAction(document.getElementById('comingSoonCloseBtn'), 'click', closeComingSoonModal);
+    bindAction(document.getElementById('comingSoonConfirmBtn'), 'click', closeComingSoonModal);
+    bindAction(document.getElementById('comingSoonBackdrop'), 'click', closeComingSoonModal);
+    bindAction(document.getElementById('comingSoonExploreBtn'), 'click', () => {
+        closeComingSoonModal();
+        returnToStudio();
+    });
+
+    // Keyboard ESC handler
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            if (contentWorkspace?.classList.contains('open') || chatbotWindow?.classList.contains('open')) {
+                event.preventDefault();
+                returnToStudio();
+            } else if (comingSoonModal && !comingSoonModal.hidden) {
+                event.preventDefault();
+                closeComingSoonModal();
+            }
+        }
+    });
+
+    // Browser History Navigation (popstate / hashchange)
+    window.addEventListener('popstate', handleCurrentRoute);
+    window.addEventListener('hashchange', handleCurrentRoute);
+
+    // Initial Route Check on Page Load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', handleCurrentRoute, { once: true });
+    } else {
+        handleCurrentRoute();
+    }
+})();

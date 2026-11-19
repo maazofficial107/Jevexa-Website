@@ -3854,121 +3854,121 @@ const JEVEXA_PLANS = {
             id: 'chatbot',
             name: 'AI Chatbot (Jevexa AI)',
             shortName: 'AI Chatbot',
-            tagline: 'Multi-model reasoning assistant with document and file analysis.',
+            tagline: 'Multi-model reasoning assistant with real-time web intelligence and file analysis.',
             icon: 'fas fa-comments',
             status: 'live',
             route: '/tools/chatbot',
-            badge: 'LIVE',
+            badge: 'LIVE NOW',
             badgeType: 'live',
-            actionText: 'Launch Workspace'
+            actionText: 'Open Workspace'
         },
         {
             id: 'content-generator',
             name: 'Content Generation',
             shortName: 'Content AI',
-            tagline: 'High-converting business copy, blogs, captions and email drafts.',
+            tagline: 'High-converting business copy, articles, social captions, and email campaigns.',
             icon: 'fas fa-pen-nib',
             status: 'live',
             route: '/tools/content-generator',
-            badge: 'LIVE',
+            badge: 'LIVE NOW',
             badgeType: 'live',
-            actionText: 'Launch Workspace'
+            actionText: 'Open Workspace'
         },
         {
             id: 'email-outreach',
             name: 'Email & Outreach AI',
             shortName: 'Outreach AI',
-            tagline: 'Automated personalized cold outreach and customer follow-ups.',
+            tagline: 'Personalized cold outreach sequences, follow-ups, and inbox automation.',
             icon: 'fas fa-envelope-open-text',
             status: 'coming_soon',
             route: '/tools/email-outreach',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'crm',
             name: 'Mini CRM',
             shortName: 'Mini CRM',
-            tagline: 'Unified customer pipeline, interaction tracking and deal notes.',
+            tagline: 'Pipeline deal tracking, contact timeline history, and lead scoring.',
             icon: 'fas fa-address-book',
             status: 'coming_soon',
             route: '/tools/crm',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'ocr',
             name: 'Document AI & OCR',
             shortName: 'Doc OCR',
-            tagline: 'In-browser OCR for invoices, receipts and scanned documents.',
+            tagline: 'Automated data extraction from invoices, receipts, and PDF contracts.',
             icon: 'fas fa-file-lines',
             status: 'coming_soon',
             route: '/tools/ocr',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'social',
             name: 'Social Media Assistant',
             shortName: 'Social AI',
-            tagline: 'Viral caption writing, content repurposing and schedule planning.',
+            tagline: 'Viral caption drafting, platform scheduling, and engagement analytics.',
             icon: 'fas fa-hashtag',
             status: 'coming_soon',
             route: '/tools/social',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'analytics',
             name: 'Business Analytics',
             shortName: 'Analytics AI',
-            tagline: 'Interactive visual charts, performance metrics & trend predictions.',
+            tagline: 'Real-time KPI dashboards, revenue forecasting, and growth metrics.',
             icon: 'fas fa-chart-line',
             status: 'coming_soon',
             route: '/tools/analytics',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'admin',
             name: 'User & Admin Management',
             shortName: 'Team Admin',
-            tagline: 'Team permissions, seat provisioning and enterprise audit trails.',
+            tagline: 'Granular team permissions, seat provisioning, and enterprise audit logs.',
             icon: 'fas fa-users-gear',
             status: 'coming_soon',
             route: '/tools/admin',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'workflows',
             name: 'Workflow Automation',
             shortName: 'Workflows',
-            tagline: 'Connect apps into autonomous event-driven automation sequences.',
+            tagline: 'Autonomous multi-step sequence builder connecting your entire tool stack.',
             icon: 'fas fa-diagram-project',
             status: 'coming_soon',
             route: '/tools/workflows',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         },
         {
             id: 'data',
             name: 'Data Management',
             shortName: 'Data AI',
-            tagline: 'Automated data cleaning, deduplication and schema transformation.',
+            tagline: 'Automated data cleaning, deduplication, and schema synchronization.',
             icon: 'fas fa-database',
             status: 'coming_soon',
             route: '/tools/data',
             badge: 'COMING SOON',
             badgeType: 'locked',
-            actionText: 'Coming Soon'
+            actionText: 'Click for release info'
         }
     ];
     window.JEVEXA_TOOLS_CONFIG = toolsConfig;

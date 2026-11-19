@@ -2050,6 +2050,18 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   // Coming Soon alert/toast text
   assert.match(script, /🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon\./);
   assert.match(html, /id="comingSoonModal"/);
+
+  // Visual hierarchy, live-first ordering, badges, and action cues
+  assert.match(html, /class="tool-status-badge badge-live">[\s\S]*?LIVE NOW/);
+  assert.match(html, /class="tool-card-cta live-cta">Open Workspace/);
+  assert.match(html, /class="tool-status-badge badge-locked">[\s\S]*?COMING SOON/);
+  assert.match(html, /class="tool-card-cta locked">[\s\S]*?Click for release info/);
+
+  // CSS live-first ordering, electric border glow & muted locked card finish
+  assert.match(css, /\.tool-launcher-card\.tool-live\s*\{[\s\S]*?order:\s*-1;/);
+  assert.match(css, /\.tool-launcher-card\.tool-live\s*\{[\s\S]*?border:\s*1\.5px solid rgba\(34,\s*211,\s*238/);
+  assert.match(css, /\.tool-launcher-card\.tool-locked\s*\{[\s\S]*?background:\s*linear-gradient\(150deg/);
+  assert.match(css, /\.tool-card-cta\.live-cta/);
 });
 
 test("dedicated full-page workspaces provide clean Back to Studio buttons and credit displays", async () => {

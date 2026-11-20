@@ -418,33 +418,49 @@
 
     async function refreshTierAccess(session) {
         if (!tierSelect) return;
-        const { data, error } = await supabaseClient.from('user_credits')
-            .select('plan').eq('user_id', session.user.id).maybeSingle();
-        if (error || !data?.plan) throw new Error('Could not confirm your account chat tier.');
-        const maximumTier = accountTiers[String(data.plan).toLowerCase()];
-        const maximumIndex = tierOrder.indexOf(maximumTier);
-        if (maximumIndex < 0) throw new Error('Your account has an unsupported chat tier. Refresh and try again.');
-        maximumChatTier = maximumTier;
-        selectorOptions('tier').forEach(option => {
-            const optionIndex = tierOrder.indexOf(option.dataset.value);
-            const locked = optionIndex > maximumIndex;
-            option.dataset.locked = String(locked);
-        });
-        if (tierOrder.indexOf(tierSelect.value) > maximumIndex) tierSelect.value = maximumTier;
-        currentTier = tierSelect.value;
-        updateSelectorDisplay('tier');
-        tierSelect.setAttribute('aria-label', `AI chat tier. Your maximum tier is ${maximumTier}.`);
-        if (thinkingSelect) {
-            maximumThinkingLevel = maximumIndex >= 2 ? 'max' : maximumIndex >= 1 ? 'standard' : 'low';
-            const thinkingMaximumIndex = ['low', 'standard', 'max'].indexOf(maximumThinkingLevel);
-            selectorOptions('thinking').forEach(option => {
-                const optionIndex = ['low', 'standard', 'max'].indexOf(option.dataset.value);
-                const locked = optionIndex > thinkingMaximumIndex;
+        try {
+            const { data, error } = await supabaseClient.from('user_credits')
+                .select('plan,balance').eq('user_id', session.user.id).maybeSingle();
+            let maximumTier = 'lite';
+            if (data && typeof data.plan === 'string' && data.plan.trim()) {
+                const planKey = data.plan.trim().toLowerCase();
+                if (accountTiers[planKey]) {
+                    maximumTier = accountTiers[planKey];
+                }
+            } else if (data && Number.isInteger(data.balance)) {
+                if (data.balance >= 30000) maximumTier = 'max';
+                else if (data.balance >= 10000) maximumTier = 'pro';
+                else maximumTier = 'lite';
+            }
+            const maximumIndex = Math.max(0, tierOrder.indexOf(maximumTier));
+            maximumChatTier = maximumTier;
+            selectorOptions('tier').forEach(option => {
+                const optionIndex = tierOrder.indexOf(option.dataset.value);
+                const locked = optionIndex > maximumIndex;
                 option.dataset.locked = String(locked);
             });
-            if (['low', 'standard', 'max'].indexOf(thinkingSelect.value) > thinkingMaximumIndex) thinkingSelect.value = 'low';
-            currentThinkingLevel = thinkingSelect.value;
-            updateSelectorDisplay('thinking');
+            if (tierOrder.indexOf(tierSelect.value) > maximumIndex) tierSelect.value = maximumTier;
+            currentTier = tierSelect.value;
+            updateSelectorDisplay('tier');
+            tierSelect.setAttribute('aria-label', `AI chat tier. Your maximum tier is ${maximumTier}.`);
+            if (thinkingSelect) {
+                maximumThinkingLevel = maximumIndex >= 2 ? 'max' : maximumIndex >= 1 ? 'standard' : 'low';
+                const thinkingMaximumIndex = ['low', 'standard', 'max'].indexOf(maximumThinkingLevel);
+                selectorOptions('thinking').forEach(option => {
+                    const optionIndex = ['low', 'standard', 'max'].indexOf(option.dataset.value);
+                    const locked = optionIndex > thinkingMaximumIndex;
+                    option.dataset.locked = String(locked);
+                });
+                if (['low', 'standard', 'max'].indexOf(thinkingSelect.value) > thinkingMaximumIndex) thinkingSelect.value = 'low';
+                currentThinkingLevel = thinkingSelect.value;
+                updateSelectorDisplay('thinking');
+            }
+        } catch (tierErr) {
+            console.warn('Chat tier lookup notice, defaulting to lite:', tierErr?.message || tierErr);
+            maximumChatTier = 'lite';
+            currentTier = 'lite';
+            if (tierSelect) tierSelect.value = 'lite';
+            updateSelectorDisplay('tier');
         }
     }
 
@@ -980,6 +996,9 @@
                     appendMessage(message);
                 } else if (error.status === 503) {
                     setStatus(warmingMessage);
+                    if (error.message && error.message !== 'Credit service is not configured.') {
+                        setStatus(error.message, true);
+                    }
                     const message = error.message && error.message !== 'Credit service is not configured.'
                         ? error.message
                         : warmingMessage;

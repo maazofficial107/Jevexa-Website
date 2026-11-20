@@ -2757,3 +2757,65 @@ test("content generation releases reservation on definitive Gemini 429 rate limi
   }
 });
 
+test("chat and quote gracefully default to lite tier when user_credits is empty or unconfirmed", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      // Return empty array to simulate missing/indeterminate user_credits record
+      return Response.json([]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        fixed_credits: 1,
+        credits_per_1000_tokens: null,
+        enabled: true,
+        integration_status: "available"
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") {
+      return Response.json(1);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 99
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Graceful lite reply" }] },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const quote = await worker.fetch(makeRequest("/api/credits/quote", { body: { message: "Hello", tier: "lite" } }), geminiEnv);
+    assert.equal(quote.status, 200);
+    const quoteData = await quote.json();
+    assert.equal(quoteData.estimatedCredits, 1);
+
+    const chat = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), geminiEnv);
+    assert.equal(chat.status, 200);
+    const chatData = await chat.json();
+    assert.equal(chatData.reply, "Graceful lite reply");
+    assert.equal(chatData.tier, "lite");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+

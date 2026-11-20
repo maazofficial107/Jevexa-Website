@@ -840,18 +840,26 @@ async function callCreditRpc(cfg, name, args) {
 }
 
 async function getAccountChatTier(cfg, userId) {
-  const response = await sbRequest(
-    cfg,
-    `/rest/v1/user_credits?select=plan&user_id=eq.${encodeURIComponent(userId)}&limit=1`
-  );
-  const rows = await readJsonResponse(response);
-  if (!response.ok || !Array.isArray(rows) || rows.length !== 1 || typeof rows[0]?.plan !== "string") {
-    throw new Error("Chat tier lookup failed");
+  try {
+    const response = await sbRequest(
+      cfg,
+      `/rest/v1/user_credits?select=plan,balance&user_id=eq.${encodeURIComponent(userId)}&limit=1`
+    );
+    const rows = await readJsonResponse(response);
+    if (response.ok && Array.isArray(rows) && rows.length > 0) {
+      const plan = typeof rows[0]?.plan === "string" ? rows[0].plan.trim().toLowerCase() : "";
+      if (plan && Object.hasOwn(ACCOUNT_PLAN_TIER, plan) && ACCOUNT_PLAN_TIER[plan]) {
+        return ACCOUNT_PLAN_TIER[plan];
+      }
+      const balance = Number.isInteger(rows[0]?.balance) ? rows[0].balance : 0;
+      if (balance >= 30000) return "max";
+      if (balance >= 10000) return "pro";
+      return "lite";
+    }
+  } catch (err) {
+    console.warn("Account chat tier lookup warning:", err?.message || err, userId);
   }
-  const plan = rows[0].plan.trim().toLowerCase();
-  const tier = Object.hasOwn(ACCOUNT_PLAN_TIER, plan) ? ACCOUNT_PLAN_TIER[plan] : null;
-  if (!tier) throw new Error("Chat tier is not recognized");
-  return tier;
+  return "lite";
 }
 
 async function getFixedChatPricing(cfg, tier) {
@@ -932,12 +940,12 @@ async function handleCreditQuote(request, env) {
   }
   if (!user) return json({ error: "Please sign in before using AI chat." }, 401);
 
-  let accountTier;
+  let accountTier = "lite";
   try {
     accountTier = await getAccountChatTier(cfg, user.id);
   } catch (error) {
-    console.error("Chat tier lookup failed:", error?.message || "database");
-    return json({ error: "Your chat tier could not be confirmed. Please try again later." }, 503);
+    console.warn("Chat tier lookup notice, defaulting to lite:", error?.message || "database");
+    accountTier = "lite";
   }
   if (!requestedTierIsAllowed(parsed.tier, accountTier)) {
     return json({
@@ -1084,12 +1092,12 @@ async function handleChat(request, env) {
   }
   if (!user) return json({ error: "Please sign in before using AI chat." }, 401);
 
-  let accountTier;
+  let accountTier = "lite";
   try {
     accountTier = await getAccountChatTier(cfg, user.id);
   } catch (error) {
-    console.error("Chat tier lookup failed:", error?.message || "database", requestId);
-    return json({ error: "Your chat tier could not be confirmed. Please try again later." }, 503);
+    console.warn("Chat tier lookup notice, defaulting to lite:", error?.message || "database", requestId);
+    accountTier = "lite";
   }
   if (!requestedTierIsAllowed(parsed.tier, accountTier)) {
     return json({

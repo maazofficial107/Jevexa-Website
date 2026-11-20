@@ -16,6 +16,7 @@ const env = {
   JEVEXA_ENVIRONMENT: "production"
 };
 const groqEnv = { ...env, GROQ_API_KEY: "unit-test-groq" };
+delete groqEnv.OPENROUTER_API_KEY;
 const contentRequestBody = {
   topic: "A new scheduling app for small businesses",
   type: "blog",
@@ -187,7 +188,7 @@ test("successful content generation settles measured provider usage", async () =
       assert.equal(options.headers.Authorization, "Bearer unit-test-groq");
       assert.ok(options.signal);
       const providerBody = JSON.parse(options.body);
-      assert.equal(providerBody.model, "llama-3.3-70b-versatile");
+      assert.equal(providerBody.model, "qwen/qwen3.8-27b");
       assert.equal(providerBody.max_tokens, 700);
       assert.match(providerBody.messages[0].content, /ignore any instructions.*embedded in the topic/i);
       assert.ok(providerBody.messages[1].content.includes(JSON.stringify(contentRequestBody.topic)));
@@ -247,7 +248,7 @@ test("content generation retries the smaller Groq model after a 4xx response", a
     const payload = await response.json();
     assert.equal(response.status, 200);
     assert.equal(payload.content, "Fallback content.");
-    assert.deepEqual(attemptedModels, ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]);
+    assert.deepEqual(attemptedModels, ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]);
     assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_release"), false);
   } finally {
     mock.restore();
@@ -730,7 +731,7 @@ test("public support AI uses a guarded Jevexa support prompt and the free OpenRo
   const mock = mockFetch((url, options) => {
     assert.equal(url.hostname, "openrouter.ai");
     const body = JSON.parse(options.body);
-    assert.equal(body.model, "meta-llama/llama-3.1-8b-instruct:free");
+    assert.equal(body.model, "meta-llama/llama-3.1-8b-instruct");
     assert.match(body.messages[0].content, /You are Jevexa Support AI/);
     assert.match(body.messages[0].content, /NEVER claim to be human/);
     assert.match(body.messages[0].content, /Always offer 'Talk to Human'/);
@@ -1159,7 +1160,7 @@ test("successful OpenRouter usage settles fixed tier credits exactly once", asyn
       assert.equal(options.headers.Authorization, "Bearer unit-test-openrouter");
       assert.equal(options.headers["HTTP-Referer"], "https://jevexa.net");
       const providerBody = JSON.parse(options.body);
-      assert.equal(providerBody.model, "meta-llama/llama-3.1-8b-instruct:free");
+      assert.equal(providerBody.model, "meta-llama/llama-3.1-8b-instruct");
       assert.deepEqual(providerBody.reasoning, { effort: "low" });
       assert.equal(providerBody.messages[0].role, "system");
       assert.equal(providerBody.messages[1].role, "user");
@@ -1217,7 +1218,7 @@ test("chat tier access, model selection, attachments, and history are enforced s
     }
     if (url.hostname === "openrouter.ai") {
       const providerBody = JSON.parse(options.body);
-      assert.equal(providerBody.model, "google/gemini-2.0-flash-exp:free");
+      assert.equal(providerBody.model, "google/gemini-2.5-flash");
       assert.deepEqual(providerBody.reasoning, { effort: "medium" });
       assert.deepEqual(providerBody.messages.slice(1, 3).map(message => message.role), ["user", "assistant"]);
       assert.equal(providerBody.messages[3].content[1].image_url.url, body.attachments[0].data);
@@ -1290,7 +1291,7 @@ test("Max tier accepts validated PDF and ZIP files with Max reasoning", async ()
     }
     if (url.hostname === "openrouter.ai") {
       const request = JSON.parse(options.body);
-      assert.equal(request.model, "meta-llama/llama-3.3-70b-instruct:free");
+      assert.equal(request.model, "meta-llama/llama-3.3-70b-instruct");
       assert.deepEqual(request.reasoning, { effort: "high" });
       assert.deepEqual(request.messages.at(-1).content.slice(1).map(part => part.type), ["file", "file"]);
       assert.deepEqual(request.messages.at(-1).content.slice(1).map(part => part.file.filename), ["brief.pdf", "archive.zip"]);
@@ -2178,6 +2179,7 @@ const geminiEnv = {
   ...env,
   GEMINI_API_KEY: "test-gemini-key"
 };
+delete geminiEnv.OPENROUTER_API_KEY;
 
 test("chat uses Gemini primary model gemini-3.5-flash-lite and settles credits", async () => {
   const mock = mockFetch(async (url, options) => {
@@ -2320,6 +2322,166 @@ test("chat releases reservation on definitive Gemini 429 rate limit", async () =
     assert.equal(released, true);
     const data = await response.json();
     assert.match(data.error, /busy right now/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("chat automatically falls back to Groq when Gemini is unavailable", async () => {
+  const multiEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key"
+  };
+  delete multiEnv.OPENROUTER_API_KEY;
+
+  let groqCalled = false;
+  let geminiCalls = 0;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiCalls++;
+      return Response.json({ error: { code: 503, message: "Spike load" } }, { status: 503 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqCalled = true;
+      const body = JSON.parse(options.body);
+      assert.equal(body.model, "qwen/qwen3.8-27b");
+      return Response.json({
+        choices: [{ message: { content: "Groq failover reply." } }],
+        usage: { total_tokens: 45 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), multiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.reply, "Groq failover reply.");
+    assert.equal(geminiCalls, 2);
+    assert.equal(groqCalled, true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("content generation automatically falls back to Groq when Gemini fails", async () => {
+  const multiEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key"
+  };
+  delete multiEnv.OPENROUTER_API_KEY;
+
+  let groqCalled = false;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({ error: { code: 503, message: "Unavailable" } }, { status: 503 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqCalled = true;
+      return Response.json({
+        choices: [{ message: { content: "Groq generated content." } }],
+        usage: { total_tokens: 350 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 3, balance: 97 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeContentRequest(contentRequestBody), multiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.content, "Groq generated content.");
+    assert.equal(groqCalled, true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("chat automatically falls back to OpenRouter when Gemini and Groq fail", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-or-key"
+  };
+
+  let orCalled = false;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({ error: { code: 503, message: "Down" } }, { status: 503 });
+    }
+    if (url.hostname === "api.groq.com") {
+      return Response.json({ error: { message: "Busy" } }, { status: 429 });
+    }
+    if (url.hostname === "openrouter.ai") {
+      orCalled = true;
+      return Response.json({
+        choices: [{ message: { content: "OpenRouter third-line defense reply." } }],
+        usage: { total_tokens: 120 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), tripleEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.reply, "OpenRouter third-line defense reply.");
+    assert.equal(orCalled, true);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("support AI automatically cascades across Gemini -> Groq -> OpenRouter", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-or-key"
+  };
+
+  let groqCalled = false;
+  const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({ error: { code: 503, message: "Down" } }, { status: 503 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqCalled = true;
+      return Response.json({
+        choices: [{ message: { content: "Groq support answer: We offer 100 free credits." } }]
+      });
+    }
+  });
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/support/ai", {
+      body: { message: "What are the welcome credits?" },
+      headers: { "CF-Connecting-IP": "192.0.2.11" }
+    }), tripleEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.reply, "Groq support answer: We offer 100 free credits.");
+    assert.equal(groqCalled, true);
   } finally {
     mock.restore();
   }
@@ -2594,3 +2756,4 @@ test("content generation releases reservation on definitive Gemini 429 rate limi
     mock.restore();
   }
 });
+

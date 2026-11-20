@@ -4106,3 +4106,104 @@ test("upgrade 3: unauthenticated API calls to /api/chat and /api/content return 
     globalThis.fetch = originalFetch;
   }
 });
+
+// ============================================================================
+// PUBLIC PAGES, SEO, MONETIZATION & SAFE MODAL AUDIT TESTS
+// ============================================================================
+
+test("Worker serves public pages (/privacy-policy, /terms, /about, /contact) with security headers", async () => {
+  const routes = [
+    { path: "/privacy-policy", expectedAsset: "/privacy-policy.html" },
+    { path: "/privacy", expectedAsset: "/privacy-policy.html" },
+    { path: "/terms", expectedAsset: "/terms.html" },
+    { path: "/terms-of-service", expectedAsset: "/terms.html" },
+    { path: "/about", expectedAsset: "/about.html" },
+    { path: "/about-us", expectedAsset: "/about.html" },
+    { path: "/contact", expectedAsset: "/contact.html" },
+    { path: "/contact-us", expectedAsset: "/contact.html" }
+  ];
+
+  for (const { path, expectedAsset } of routes) {
+    let requestedUrl = null;
+    const mockEnv = {
+      ASSETS: {
+        fetch: async (req) => {
+          requestedUrl = req.url;
+          return new Response(`<html><body>${expectedAsset}</body></html>`, {
+            headers: { "Content-Type": "text/html; charset=utf-8" }
+          });
+        }
+      }
+    };
+
+    const res = await worker.fetch(new Request(`https://jevexa.net${path}`), mockEnv);
+    assert.equal(res.status, 200, `${path} should return 200`);
+    assert.equal(new URL(requestedUrl).pathname, expectedAsset, `${path} should map to ${expectedAsset}`);
+    assert.equal(res.headers.get("X-Content-Type-Options"), "nosniff");
+    assert.equal(res.headers.get("X-Frame-Options"), "SAMEORIGIN");
+    assert.equal(res.headers.get("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+  }
+});
+
+test("/api/contact validates payload, handles methods and protects endpoints", async () => {
+  const contactEnv = {
+    ...env,
+    RESEND_API_KEY: "test-resend-key"
+  };
+
+  // Missing fields -> 400
+  const missingReq = new Request("https://jevexa.net/api/contact", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "", email: "test@example.com", message: "" })
+  });
+  const missingRes = await worker.fetch(missingReq, contactEnv);
+  assert.equal(missingRes.status, 400);
+
+  // Invalid email -> 400
+  const invalidEmailReq = new Request("https://jevexa.net/api/contact", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Alex", email: "not-an-email", message: "Hello" })
+  });
+  const invalidEmailRes = await worker.fetch(invalidEmailReq, contactEnv);
+  assert.equal(invalidEmailRes.status, 400);
+
+  // Method not allowed -> 405
+  const getReq = new Request("https://jevexa.net/api/contact", { method: "GET" });
+  const getRes = await worker.fetch(getReq, contactEnv);
+  assert.equal(getRes.status, 405);
+});
+
+test("monetization & trust compliance: public pages exist with SEO tags and footer links work", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const privacyHtml = await readFile(new URL("../privacy-policy.html", import.meta.url), "utf8");
+  const termsHtml = await readFile(new URL("../terms.html", import.meta.url), "utf8");
+  const aboutHtml = await readFile(new URL("../about.html", import.meta.url), "utf8");
+  const contactHtml = await readFile(new URL("../contact.html", import.meta.url), "utf8");
+  const sitemapXml = await readFile(new URL("../sitemap.xml", import.meta.url), "utf8");
+  const scriptCode = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // Sitemap includes all public pages
+  assert.match(sitemapXml, /https:\/\/jevexa\.net\/about/);
+  assert.match(sitemapXml, /https:\/\/jevexa\.net\/contact/);
+  assert.match(sitemapXml, /https:\/\/jevexa\.net\/privacy-policy/);
+  assert.match(sitemapXml, /https:\/\/jevexa\.net\/terms/);
+
+  // Footer links point to real pages without dead coming-soon-link
+  assert.match(html, /<a href="\/about">About Us<\/a>/);
+  assert.match(html, /<a href="\/privacy-policy">Privacy Policy<\/a>/);
+  assert.match(html, /<a href="\/terms">Terms of Service<\/a>/);
+  assert.doesNotMatch(html, /class="coming-soon-link"[^>]*>Privacy<\/a>/);
+  assert.doesNotMatch(html, /class="coming-soon-link"[^>]*>Terms<\/a>/);
+
+  // Public pages have proper titles and meta descriptions
+  assert.match(privacyHtml, /<title>Privacy Policy \| JEVEXA AI Automation Studio<\/title>/);
+  assert.match(termsHtml, /<title>Terms of Service \| JEVEXA AI Automation Studio<\/title>/);
+  assert.match(aboutHtml, /<title>About Us \| JEVEXA AI Automation Studio<\/title>/);
+  assert.match(contactHtml, /<title>Contact Us &amp; Studio Inquiries \| JEVEXA AI Automation Studio<\/title>/);
+
+  // Modal backdrop dismissal
+  assert.match(scriptCode, /loginModalBackdropTarget/);
+  assert.match(scriptCode, /window\.JEVEXA_SAFE_INTERACTION\.bind\(loginModalBackdropTarget/);
+});

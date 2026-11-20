@@ -100,6 +100,9 @@ const supportAiRequests = new Map();
 const SUPPORT_TICKET_RATE_WINDOW_MS = 60 * 60_000;
 const SUPPORT_TICKET_RATE_LIMIT = 3;
 const supportTicketRequests = new Map();
+const CONTACT_RATE_WINDOW_MS = 10 * 60_000;
+const CONTACT_RATE_LIMIT = 5;
+const contactRequests = new Map();
 const CONTENT_MAX_TOKENS = { short: 300, medium: 700, long: 1200 };
 const CONTENT_TYPES = ["blog", "caption", "email", "product", "social"];
 const CONTENT_TONES = ["professional", "friendly", "casual", "persuasive"];
@@ -1342,7 +1345,46 @@ async function handleChat(request, env) {
   }
 
   if (reservation.reserved_credits !== fixedCredits) {
-    const released = await releaseChatReservation(cfg, user.id, requestId);
+    let released = await releaseChatReservation(cfg, user.id, requestId);
+  if (!released) {
+    try {
+      const resRes = await sbRequest(
+        cfg,
+        `/rest/v1/credit_reservations?select=id,status,reserved_credits&user_id=eq.${encodeURIComponent(user.id)}&request_id=eq.${encodeURIComponent(requestId)}&status=eq.reserved&limit=1`
+      );
+      const resRows = await readJsonResponse(resRes);
+      if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
+        const reservedCredits = resRows[0].reserved_credits || 1;
+        await sbRequest(
+          cfg,
+          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
+          }
+        );
+        const balRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+        );
+        const balRows = await readJsonResponse(balRes);
+        if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+          const newBal = (balRows[0].balance || 0) + reservedCredits;
+          await sbRequest(
+            cfg,
+            `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+            }
+          );
+        }
+        released = true;
+      }
+    } catch (fbErr) {
+      console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
+    }
+  }
     return json({
       error: released
         ? "Chat tier pricing changed before reservation. No charge was made; please retry."
@@ -1372,7 +1414,46 @@ async function handleChat(request, env) {
       }
       return json({ error: message, requestId }, status);
     }
-    const released = await releaseChatReservation(cfg, user.id, requestId);
+    let released = await releaseChatReservation(cfg, user.id, requestId);
+  if (!released) {
+    try {
+      const resRes = await sbRequest(
+        cfg,
+        `/rest/v1/credit_reservations?select=id,status,reserved_credits&user_id=eq.${encodeURIComponent(user.id)}&request_id=eq.${encodeURIComponent(requestId)}&status=eq.reserved&limit=1`
+      );
+      const resRows = await readJsonResponse(resRes);
+      if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
+        const reservedCredits = resRows[0].reserved_credits || 1;
+        await sbRequest(
+          cfg,
+          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
+          }
+        );
+        const balRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+        );
+        const balRows = await readJsonResponse(balRes);
+        if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+          const newBal = (balRows[0].balance || 0) + reservedCredits;
+          await sbRequest(
+            cfg,
+            `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+            }
+          );
+        }
+        released = true;
+      }
+    } catch (fbErr) {
+      console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
+    }
+  }
     return json({
       error: released ? message : "The request failed and its credit reservation is being held for safe reconciliation.",
       requestId
@@ -2156,6 +2237,10 @@ async function handleContact(request, env) {
     return json({ error: "Method not allowed." }, 405);
   }
 
+  if (!allowContactRequest(request)) {
+    return json({ error: "Too many contact submissions. Please wait a few minutes before trying again." }, 429);
+  }
+
   if (!env.RESEND_API_KEY) {
     return json({ error: "Contact email service is not configured." }, 503);
   }
@@ -2310,6 +2395,25 @@ async function handleSupportTicket(request, env) {
     }
     return json({ error: "Your support request could not be saved. Please try again later." }, 502);
   }
+}
+
+function allowContactRequest(request) {
+  const now = Date.now();
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const timestamps = (contactRequests.get(ip) || [])
+    .filter(time => now - time < CONTACT_RATE_WINDOW_MS);
+  if (timestamps.length >= CONTACT_RATE_LIMIT) {
+    contactRequests.set(ip, timestamps);
+    return false;
+  }
+  timestamps.push(now);
+  contactRequests.set(ip, timestamps);
+  if (contactRequests.size > 1000) {
+    for (const [key, values] of contactRequests) {
+      if (!values.some(time => now - time < CONTACT_RATE_WINDOW_MS)) contactRequests.delete(key);
+    }
+  }
+  return true;
 }
 
 function allowSupportTicketRequest(request) {
@@ -2883,7 +2987,46 @@ async function handleCreditReconcile(request, env) {
     return json({ error: "Valid requestId is required for reconciliation." }, 400);
   }
 
-  const released = await releaseChatReservation(cfg, user.id, requestId);
+  let released = await releaseChatReservation(cfg, user.id, requestId);
+  if (!released) {
+    try {
+      const resRes = await sbRequest(
+        cfg,
+        `/rest/v1/credit_reservations?select=id,status,reserved_credits&user_id=eq.${encodeURIComponent(user.id)}&request_id=eq.${encodeURIComponent(requestId)}&status=eq.reserved&limit=1`
+      );
+      const resRows = await readJsonResponse(resRes);
+      if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
+        const reservedCredits = resRows[0].reserved_credits || 1;
+        await sbRequest(
+          cfg,
+          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
+          }
+        );
+        const balRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+        );
+        const balRows = await readJsonResponse(balRes);
+        if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+          const newBal = (balRows[0].balance || 0) + reservedCredits;
+          await sbRequest(
+            cfg,
+            `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+            }
+          );
+        }
+        released = true;
+      }
+    } catch (fbErr) {
+      console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
+    }
+  }
   return json({
     ok: true,
     released: Boolean(released),
@@ -2986,6 +3129,29 @@ export default {
     }
 
     if (env.ASSETS) {
+      const publicRoutes = {
+        "/privacy-policy": "/privacy-policy.html",
+        "/privacy": "/privacy-policy.html",
+        "/terms": "/terms.html",
+        "/terms-of-service": "/terms.html",
+        "/about": "/about.html",
+        "/about-us": "/about.html",
+        "/contact": "/contact.html",
+        "/contact-us": "/contact.html"
+      };
+
+      if (publicRoutes[url.pathname]) {
+        const pageReq = new Request(new URL(publicRoutes[url.pathname], request.url), request);
+        const assetResponse = await env.ASSETS.fetch(pageReq);
+        const secured = new Response(assetResponse.body, assetResponse);
+        secured.headers.set("X-Content-Type-Options", "nosniff");
+        secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+        secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+        secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+        secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        return secured;
+      }
+
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
         const spaRequest = new Request(new URL("/", request.url), request);
         const assetResponse = await env.ASSETS.fetch(spaRequest);

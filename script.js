@@ -446,7 +446,27 @@ function closeLogin() {
     previousLoginFocus = null;
 }
 
+const loginModalBackdropTarget = document.getElementById('loginModal');
+if (loginModalBackdropTarget) {
+    window.JEVEXA_SAFE_INTERACTION.bind(loginModalBackdropTarget, 'click', event => {
+        if (event.target === loginModalBackdropTarget) {
+            closeLogin();
+        }
+    }, { matches: event => event.target === loginModalBackdropTarget, getKey: () => loginModalBackdropTarget });
+}
+
 document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+        const accountBackdrop = document.getElementById('jevexaAccountBackdrop');
+        if (accountBackdrop && accountBackdrop.style.display !== 'none') {
+            accountBackdrop.style.display = 'none';
+        }
+        const profilePanel = document.getElementById('jevexaProfilePanel');
+        if (profilePanel && profilePanel.style.display !== 'none') {
+            profilePanel.style.display = 'none';
+            document.getElementById('jevexaAccountUI')?.querySelector('button')?.setAttribute('aria-expanded', 'false');
+        }
+    }
     const modal = document.getElementById('loginModal');
     if (!modal?.classList.contains('open')) return;
     if (event.key === 'Escape') {

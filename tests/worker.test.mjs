@@ -188,7 +188,7 @@ test("successful content generation settles measured provider usage", async () =
       assert.equal(options.headers.Authorization, "Bearer unit-test-groq");
       assert.ok(options.signal);
       const providerBody = JSON.parse(options.body);
-      assert.equal(providerBody.model, "qwen/qwen3.8-27b");
+      assert.equal(providerBody.model, "llama-3.3-70b-versatile");
       assert.equal(providerBody.max_tokens, 700);
       assert.match(providerBody.messages[0].content, /ignore any instructions.*embedded in the topic/i);
       assert.ok(providerBody.messages[1].content.includes(JSON.stringify(contentRequestBody.topic)));
@@ -248,7 +248,7 @@ test("content generation retries the smaller Groq model after a 4xx response", a
     const payload = await response.json();
     assert.equal(response.status, 200);
     assert.equal(payload.content, "Fallback content.");
-    assert.deepEqual(attemptedModels, ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]);
+    assert.deepEqual(attemptedModels, ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]);
     assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_release"), false);
   } finally {
     mock.restore();
@@ -2380,7 +2380,7 @@ test("chat releases reservation on definitive Gemini 429 rate limit", async () =
   }
 });
 
-test("chat automatically falls back to Groq when Gemini is unavailable", async () => {
+test("chat automatically falls back to Gemini when Groq is unavailable", async () => {
   const multiEnv = {
     ...env,
     GEMINI_API_KEY: "test-gemini-key",
@@ -2388,20 +2388,28 @@ test("chat automatically falls back to Groq when Gemini is unavailable", async (
   };
   delete multiEnv.OPENROUTER_API_KEY;
 
-  let groqCalled = false;
+  let groqCalls = 0;
   let geminiCalls = 0;
   const mock = mockFetch(async (url, options) => {
+    if (url.hostname === "api.groq.com") {
+      groqCalls++;
+      return Response.json({ error: { message: "Groq capacity overload" } }, { status: 503 });
+    }
     if (url.hostname === "generativelanguage.googleapis.com") {
       geminiCalls++;
-      return Response.json({ error: { code: 503, message: "Spike load" } }, { status: 503 });
-    }
-    if (url.hostname === "api.groq.com") {
-      groqCalled = true;
-      const body = JSON.parse(options.body);
-      assert.equal(body.model, "qwen/qwen3.8-27b");
       return Response.json({
-        choices: [{ message: { content: "Groq failover reply." } }],
-        usage: { total_tokens: 45 }
+        candidates: [{
+          content: {
+            parts: [{ text: "Gemini failover reply." }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: {
+          promptTokenCount: 15,
+          candidatesTokenCount: 10,
+          totalTokenCount: 25
+        }
       });
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
@@ -2416,15 +2424,15 @@ test("chat automatically falls back to Groq when Gemini is unavailable", async (
     const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), multiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.reply, "Groq failover reply.");
-    assert.equal(geminiCalls, 2);
-    assert.equal(groqCalled, true);
+    assert.equal(data.reply, "Gemini failover reply.");
+    assert.ok(groqCalls >= 1, "Groq primary was attempted first");
+    assert.equal(geminiCalls, 1, "Gemini was seamlessly failed over to");
   } finally {
     mock.restore();
   }
 });
 
-test("content generation automatically falls back to Groq when Gemini fails", async () => {
+test("content generation automatically falls back to Gemini when Groq fails", async () => {
   const multiEnv = {
     ...env,
     GEMINI_API_KEY: "test-gemini-key",
@@ -2433,15 +2441,25 @@ test("content generation automatically falls back to Groq when Gemini fails", as
   delete multiEnv.OPENROUTER_API_KEY;
 
   let groqCalled = false;
+  let geminiCalled = false;
   const mock = mockFetch(async (url, options) => {
-    if (url.hostname === "generativelanguage.googleapis.com") {
-      return Response.json({ error: { code: 503, message: "Unavailable" } }, { status: 503 });
-    }
     if (url.hostname === "api.groq.com") {
       groqCalled = true;
+      return Response.json({ error: { message: "Groq capacity overload" } }, { status: 503 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiCalled = true;
       return Response.json({
-        choices: [{ message: { content: "Groq generated content." } }],
-        usage: { total_tokens: 350 }
+        candidates: [{
+          content: {
+            parts: [{ text: "Gemini generated content." }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: {
+          totalTokenCount: 350
+        }
       });
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
@@ -2456,14 +2474,15 @@ test("content generation automatically falls back to Groq when Gemini fails", as
     const response = await worker.fetch(makeContentRequest(contentRequestBody), multiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.content, "Groq generated content.");
-    assert.equal(groqCalled, true);
+    assert.equal(data.content, "Gemini generated content.");
+    assert.equal(groqCalled, true, "Groq was attempted first");
+    assert.equal(geminiCalled, true, "Gemini was failed over to");
   } finally {
     mock.restore();
   }
 });
 
-test("chat automatically falls back to OpenRouter when Gemini and Groq fail", async () => {
+test("chat automatically falls back to OpenRouter when Groq and Gemini fail", async () => {
   const tripleEnv = {
     ...env,
     GEMINI_API_KEY: "test-gemini-key",
@@ -2472,12 +2491,16 @@ test("chat automatically falls back to OpenRouter when Gemini and Groq fail", as
   };
 
   let orCalled = false;
+  let groqCalled = false;
+  let geminiCalled = false;
   const mock = mockFetch(async (url, options) => {
-    if (url.hostname === "generativelanguage.googleapis.com") {
-      return Response.json({ error: { code: 503, message: "Down" } }, { status: 503 });
-    }
     if (url.hostname === "api.groq.com") {
+      groqCalled = true;
       return Response.json({ error: { message: "Busy" } }, { status: 429 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiCalled = true;
+      return Response.json({ error: { code: 503, message: "Down" } }, { status: 503 });
     }
     if (url.hostname === "openrouter.ai") {
       orCalled = true;
@@ -2499,13 +2522,15 @@ test("chat automatically falls back to OpenRouter when Gemini and Groq fail", as
     assert.equal(response.status, 200);
     const data = await response.json();
     assert.equal(data.reply, "OpenRouter third-line defense reply.");
+    assert.equal(groqCalled, true);
+    assert.equal(geminiCalled, true);
     assert.equal(orCalled, true);
   } finally {
     mock.restore();
   }
 });
 
-test("support AI automatically cascades across Gemini -> Groq -> OpenRouter", async () => {
+test("support AI automatically cascades across Groq -> Gemini -> OpenRouter", async () => {
   const tripleEnv = {
     ...env,
     GEMINI_API_KEY: "test-gemini-key",
@@ -2514,14 +2539,19 @@ test("support AI automatically cascades across Gemini -> Groq -> OpenRouter", as
   };
 
   let groqCalled = false;
+  let geminiCalled = false;
   const mock = mockFetch(async (url, options) => {
-    if (url.hostname === "generativelanguage.googleapis.com") {
-      return Response.json({ error: { code: 503, message: "Down" } }, { status: 503 });
-    }
     if (url.hostname === "api.groq.com") {
       groqCalled = true;
+      return Response.json({ error: { message: "Groq 503" } }, { status: 503 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiCalled = true;
       return Response.json({
-        choices: [{ message: { content: "Groq support answer: We offer 100 free credits." } }]
+        candidates: [{
+          content: { parts: [{ text: "Gemini support answer: We offer 100 free credits." }], role: "model" },
+          finishReason: "STOP"
+        }]
       });
     }
   });
@@ -2533,8 +2563,9 @@ test("support AI automatically cascades across Gemini -> Groq -> OpenRouter", as
     }), tripleEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.reply, "Groq support answer: We offer 100 free credits.");
+    assert.equal(data.reply, "Gemini support answer: We offer 100 free credits.");
     assert.equal(groqCalled, true);
+    assert.equal(geminiCalled, true);
   } finally {
     mock.restore();
   }
@@ -3493,14 +3524,14 @@ test("stability: primary provider timeout and 500 triggers instant multi-provide
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
       return Response.json({ ok: true, charged_credits: 1, balance: 99 });
     }
-    if (url.hostname === "generativelanguage.googleapis.com") {
-      callOrder.push("gemini");
+    if (url.hostname === "api.groq.com") {
+      callOrder.push("groq");
       const err = new Error("Gateway timeout");
       err.name = "AbortError";
       throw err;
     }
-    if (url.hostname === "api.groq.com") {
-      callOrder.push("groq");
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      callOrder.push("gemini");
       return Response.json({ error: { code: 500, message: "Internal server error" } }, { status: 500 });
     }
     if (url.hostname === "openrouter.ai") {
@@ -3520,9 +3551,9 @@ test("stability: primary provider timeout and 500 triggers instant multi-provide
     const data = await res.json();
     assert.equal(data.reply, "Instant tertiary failover response.");
     assert.equal(data.creditsCharged, 1);
-    assert.ok(callOrder.includes("gemini"), "Gemini must be tried first");
-    assert.ok(callOrder.includes("groq"), "Groq must be tried second on Gemini timeout");
-    assert.ok(callOrder.includes("openrouter"), "OpenRouter must be tried third on Groq 500");
+    assert.ok(callOrder.includes("groq"), "Groq must be tried first");
+    assert.ok(callOrder.includes("gemini"), "Gemini must be tried second on Groq timeout");
+    assert.ok(callOrder.includes("openrouter"), "OpenRouter must be tried third on Gemini 500");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -3601,7 +3632,7 @@ test("stability: coding prompt fetchWithRetry succeeds cleanly under Jevexa Lite
   }
 });
 
-test("stability: Content Generation succeeds cleanly and fails over seamlessly to Groq when Gemini errors", async () => {
+test("stability: Content Generation succeeds cleanly and fails over seamlessly to Gemini when Groq errors", async () => {
   const tripleEnv = {
     ...env,
     GEMINI_API_KEY: "test-gemini-key",
@@ -3629,15 +3660,18 @@ test("stability: Content Generation succeeds cleanly and fails over seamlessly t
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
       return Response.json({ ok: true, charged_credits: 2, balance: 98 });
     }
-    if (url.hostname === "generativelanguage.googleapis.com") {
-      geminiHit = true;
-      return Response.json({ error: { code: 503, message: "Gemini backend unavailable" } }, { status: 503 });
-    }
     if (url.hostname === "api.groq.com") {
       groqHit = true;
+      return Response.json({ error: { code: 503, message: "Groq backend unavailable" } }, { status: 503 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiHit = true;
       return Response.json({
-        choices: [{ message: { content: "High quality marketing blog post generated via Groq." } }],
-        usage: { total_tokens: 1200 }
+        candidates: [{
+          content: { parts: [{ text: "High quality marketing blog post generated via Gemini." }], role: "model" },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { totalTokenCount: 1200 }
       });
     }
     assert.fail(`Unexpected request to ${url.pathname}`);
@@ -3654,8 +3688,8 @@ test("stability: Content Generation succeeds cleanly and fails over seamlessly t
     const res = await worker.fetch(contentReq, tripleEnv);
     assert.equal(res.status, 200);
     const data = await res.json();
-    assert.equal(geminiHit, true, "Gemini primary was attempted first");
-    assert.equal(groqHit, true, "Groq was seamlessly failed over to");
+    assert.equal(groqHit, true, "Groq primary was attempted first");
+    assert.equal(geminiHit, true, "Gemini was seamlessly failed over to");
     assert.match(data.content, /High quality marketing blog post/);
     assert.equal(data.creditsCharged, 2);
     assert.equal(data.remaining_credits, 98);
@@ -3857,3 +3891,210 @@ test("stability: support ticket saves safely to Supabase with 201 even when Rese
 
 
 
+
+// ============================================================================
+// CRITICAL UPGRADE TESTS: STABILITY, ANIMATIONS & STRICT LOGIN WALL
+// ============================================================================
+
+test("upgrade 1: rapid chatbot requests with Groq timeout fail over seamlessly to Gemini", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-openrouter-key"
+  };
+
+  let groqAttempted = 0;
+  let geminiSuccesses = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: userId });
+    if (url.pathname === "/rest/v1/user_credits") return Response.json([{ plan: "pro", balance: 100 }]);
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: 1, credits_per_1000_tokens: null, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqAttempted++;
+      const err = new Error("Stalled connection");
+      err.name = "AbortError";
+      throw err;
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiSuccesses++;
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Gemini instantaneous fallback reply" }], role: "model" },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 15, totalTokenCount: 35 }
+      });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    for (let i = 0; i < 3; i++) {
+      const burstId = `00000000-0000-4000-8000-00000000009${i}`;
+      const req = makeRequest("/api/chat", { body: { message: `Burst test ${i}`, tier: "lite", requestId: burstId } });
+      const res = await worker.fetch(req, tripleEnv);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.reply, "Gemini instantaneous fallback reply");
+      assert.equal(data.creditsCharged, 1);
+    }
+    assert.ok(groqAttempted >= 3, "Groq was attempted first for each rapid request");
+    assert.equal(geminiSuccesses, 3, "Gemini handled all failovers cleanly with 0 exceptions");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("upgrade 1: content generation rapid requests with Groq 429 rate limit fail over seamlessly to Gemini", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-openrouter-key"
+  };
+
+  let groqAttempts = 0;
+  let geminiSuccesses = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: userId });
+    if (url.pathname === "/rest/v1/user_credits") return Response.json([{ plan: "free", balance: 100 }]);
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: null, credits_per_1000_tokens: 1, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 3, balance: 97 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 2, balance: 98 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqAttempts++;
+      return Response.json({ error: { message: "Rate limit exceeded" } }, { status: 429 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiSuccesses++;
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "High quality marketing copy from Gemini." }], role: "model" },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { totalTokenCount: 1500 }
+      });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const req = makeContentRequest({
+      topic: "E-commerce conversion optimization",
+      type: "blog",
+      tone: "professional",
+      length: "medium",
+      requestId: "00000000-0000-4000-8000-000000000088"
+    });
+    const res = await worker.fetch(req, tripleEnv);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.content, "High quality marketing copy from Gemini.");
+    assert.equal(data.creditsCharged, 2);
+    assert.ok(groqAttempts >= 1, "Groq was called first");
+    assert.equal(geminiSuccesses, 1, "Gemini delivered output after Groq 429");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("upgrade 2: animated 'Searching the web...' UI states exist and clean up properly in frontend", async () => {
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Chatbot live states
+  assert.match(creditsCode, /live-status-indicator/);
+  assert.match(creditsCode, /Searching the web\.\.\./);
+  assert.match(creditsCode, /Thinking\.\.\./);
+  assert.match(creditsCode, /Generating response\.\.\./);
+  assert.match(creditsCode, /clearInterval\(typingStatusTimer\)/);
+  assert.match(creditsCode, /window\.removeChatTyping/);
+
+  // Content generator live states & shimmer
+  assert.match(contentCode, /content-processing-container/);
+  assert.match(contentCode, /live-status-indicator/);
+  assert.match(contentCode, /Searching the web\.\.\./);
+  assert.match(contentCode, /content-skeleton-lines/);
+  assert.match(contentCode, /content-skeleton-bar/);
+  assert.match(contentCode, /clearContentProcessing\(\)/);
+  assert.match(contentCode, /window\.clearContentProcessing/);
+
+  // CSS animations
+  assert.match(stylesCode, /\.live-status-indicator/);
+  assert.match(stylesCode, /@keyframes liveStatusGlow/);
+  assert.match(stylesCode, /\.live-status-dots/);
+  assert.match(stylesCode, /\.content-processing-container/);
+  assert.match(stylesCode, /@keyframes skeletonShimmer/);
+});
+
+test("upgrade 3: strict auth & credit-gating wall blocks unauthenticated guests before API calls", async () => {
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const scriptCode = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // Chatbot blocks guest and triggers auth modal
+  assert.match(creditsCode, /const session = await getSession\(\);[\s\S]*?!session[\s\S]*?window\.openAuthModal\('signup'\)/);
+  assert.match(creditsCode, /Please sign in or create an account to use the AI Chatbot/);
+
+  // Content Generator blocks guest and triggers auth modal
+  assert.match(contentCode, /if \(!session\)[\s\S]*?window\.openAuthModal\('signup'\)/);
+  assert.match(contentCode, /Please create an account or sign in to generate content/);
+
+  // Zero-credit blocking in Content Generator
+  assert.match(contentCode, /cachedBalance <= 0[\s\S]*?JEVEXA_SHOW_UPGRADE_MODAL/);
+
+  // Script.js exports auth modal triggers globally
+  assert.match(scriptCode, /window\.openLogin = openLogin/);
+  assert.match(scriptCode, /window\.openSignup = openSignup/);
+  assert.match(scriptCode, /window\.openAuthModal = openAuthModal/);
+
+  // Script.js immediately restores session on startup
+  assert.match(scriptCode, /supabaseClient\.auth\.getSession\(\)/);
+});
+
+test("upgrade 3: unauthenticated API calls to /api/chat and /api/content return 401 Unauthorized", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ message: "Invalid token" }, { status: 401 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const chatReq = makeRequest("/api/chat", { body: { message: "Unauthorized test", tier: "lite" } });
+    const chatRes = await worker.fetch(chatReq, env);
+    assert.equal(chatRes.status, 401);
+    const chatData = await chatRes.json();
+    assert.match(chatData.error, /sign in/i);
+
+    const contentReq = makeContentRequest();
+    const contentRes = await worker.fetch(contentReq, env);
+    assert.equal(contentRes.status, 401);
+    const contentData = await contentRes.json();
+    assert.match(contentData.error, /sign in/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

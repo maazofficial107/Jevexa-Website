@@ -654,19 +654,63 @@
         messages.scrollTop = messages.scrollHeight;
     }
 
+    let typingStatusTimer = null;
+
     function showTyping() {
-        if (!messages || messages.querySelector('#typingMsg')) return;
+        if (!messages) return;
+        if (messages.querySelector('#typingMsg')) {
+            removeTyping();
+        }
         const typing = document.createElement('div');
-        typing.className = 'message bot';
+        typing.className = 'message bot live-typing-msg';
         typing.id = 'typingMsg';
-        typing.innerHTML = '<div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div><div class="typing-indicator"><span></span><span></span><span></span></div>';
+        typing.innerHTML = `
+            <div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div>
+            <div class="msg-content live-status-bubble">
+                <div class="live-status-indicator" role="status" aria-live="polite">
+                    <div class="live-status-icon-wrap"><i class="fas fa-globe" id="liveChatIcon"></i></div>
+                    <span class="live-status-text" id="liveChatStatusText">Searching the web...</span>
+                    <div class="live-status-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                </div>
+            </div>
+        `;
         messages.appendChild(typing);
         messages.scrollTop = messages.scrollHeight;
+
+        const liveStates = [
+            { text: 'Searching the web...', icon: 'fa-globe' },
+            { text: 'Thinking...', icon: 'fa-brain' },
+            { text: 'Generating response...', icon: 'fa-wand-magic-sparkles' }
+        ];
+        let stateIdx = 0;
+        if (typingStatusTimer) clearInterval(typingStatusTimer);
+        typingStatusTimer = setInterval(() => {
+            stateIdx = (stateIdx + 1) % liveStates.length;
+            const textEl = document.getElementById('liveChatStatusText');
+            const iconEl = document.getElementById('liveChatIcon');
+            if (textEl && iconEl) {
+                textEl.classList.add('fade-out');
+                setTimeout(() => {
+                    textEl.textContent = liveStates[stateIdx].text;
+                    iconEl.className = `fas ${liveStates[stateIdx].icon}`;
+                    textEl.classList.remove('fade-out');
+                    textEl.classList.add('fade-in');
+                }, 180);
+            }
+        }, 1800);
     }
 
     function removeTyping() {
-        messages?.querySelector('#typingMsg')?.remove();
+        if (typingStatusTimer) {
+            clearInterval(typingStatusTimer);
+            typingStatusTimer = null;
+        }
+        const typingEl = messages?.querySelector('#typingMsg');
+        if (typingEl) {
+            typingEl.remove();
+        }
     }
+    window.removeChatTyping = removeTyping;
 
     function createRequestId() {
         if (crypto.randomUUID) return crypto.randomUUID();
@@ -871,11 +915,33 @@
         }
         return "I can help with that! As your JEVEXA AI Assistant, I can draft comprehensive responses, analyze technical topics, explore business automation strategies, or guide you through our studio tools. Let me know what specific focus or format you prefer!";
     }
+    // generateChatbotGuestReply(displayText) reference for offline/fallback compatibility
 
     async function handleSend() {
         if (sending) return;
         const text = input?.value.trim();
         if (!text && pendingAttachments.length === 0) return;
+
+        // Strict Login Wall: Intercept unauthenticated guest immediately BEFORE sending
+        let session = null;
+        try {
+            session = await getSession();
+        } catch {
+            session = null;
+        }
+
+        if (!session) {
+            if (typeof window.showToast === 'function') {
+                window.showToast('Please create an account or sign in to use Jevexa AI Chatbot.');
+            }
+            setStatus('Please sign in or create an account to use the AI Chatbot.', true);
+            if (typeof window.openAuthModal === 'function') {
+                window.openAuthModal('signup');
+            } else if (typeof window.openLogin === 'function') {
+                window.openLogin();
+            }
+            return;
+        }
 
         sending = true;
         if (sendButton) sendButton.disabled = true;
@@ -886,7 +952,7 @@
         const displayText = text || `Attached: ${attachments.map(item => item.name).join(', ')}`;
         const messageIndex = conversation.length;
 
-        // Immediately render user bubble and show typing indicator
+        // Render user bubble and show animated live status
         appendMessage(displayText, true, messageIndex);
         if (input) input.value = '';
         pendingAttachments.length = 0;
@@ -895,37 +961,6 @@
         setStatus('Checking sign-in, tier access, and credit cost…');
 
         try {
-            const session = await getSession();
-            if (!session) {
-                let guestReply = '';
-                try {
-                    const response = await fetch('/api/support/ai', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ message: displayText, history: conversation.slice(-4) })
-                    });
-                    const resJson = await response.json().catch(() => ({}));
-                    if (typeof resJson?.reply === 'string' && resJson.reply.trim()) {
-                        guestReply = resJson.reply.trim();
-                    }
-                } catch { /* fallback to client generator */ }
-
-                if (!guestReply) {
-                    guestReply = generateChatbotGuestReply(displayText);
-                }
-
-                removeTyping();
-                conversation.push({ role: 'user', text: displayText });
-                conversation.push({ role: 'assistant', text: guestReply });
-                appendMessage(
-                    `${guestReply}\n\n*⚡ Sign in to claim 100 free credits and unlock live AI generation, or explore our [Pricing](#pricing) tiers.*`,
-                    false,
-                    conversation.length - 1
-                );
-                setStatus('Guest mode • Sign in to claim 100 free credits and use full AI capabilities.');
-                return;
-            }
-
             loadConversation(session.user.id);
             if (await reconcilePendingRequest(session)) {
                 removeTyping();
@@ -1187,8 +1222,23 @@
             : messages
     });
 
-    bindSafe(attachButton, 'click', (event) => {
+    bindSafe(attachButton, 'click', async (event) => {
         try {
+            let session = null;
+            try { session = await getSession(); } catch { session = null; }
+            if (!session) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Please create an account or sign in to upload files.');
+                }
+                if (typeof window.openAuthModal === 'function') {
+                    window.openAuthModal('signup');
+                } else if (typeof window.openLogin === 'function') {
+                    window.openLogin();
+                }
+                return;
+            }
             // Lock file uploads for free tier (lite) users
             if (maximumChatTier === 'lite') {
                 event.preventDefault();

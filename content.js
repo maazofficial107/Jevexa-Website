@@ -177,6 +177,57 @@
         return payload?.error || 'Content generation is temporarily unavailable. Please try again.';
     }
 
+    let contentProcessingTimer = null;
+
+    function showContentProcessing() {
+        if (!output) return;
+        output.innerHTML = `
+            <div class="content-processing-container" role="status" aria-live="polite">
+                <div class="live-status-indicator">
+                    <div class="live-status-icon-wrap"><i class="fas fa-globe" id="liveContentIcon"></i></div>
+                    <span class="live-status-text" id="liveContentStatusText">Searching the web...</span>
+                    <div class="live-status-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                </div>
+                <div class="content-skeleton-lines" aria-hidden="true">
+                    <div class="content-skeleton-bar"></div>
+                    <div class="content-skeleton-bar"></div>
+                    <div class="content-skeleton-bar"></div>
+                    <div class="content-skeleton-bar"></div>
+                </div>
+            </div>
+        `;
+
+        const liveStates = [
+            { text: 'Searching the web...', icon: 'fa-globe' },
+            { text: 'Analyzing context & tone...', icon: 'fa-brain' },
+            { text: 'Synthesizing & generating...', icon: 'fa-pen-nib' }
+        ];
+        let stateIdx = 0;
+        if (contentProcessingTimer) clearInterval(contentProcessingTimer);
+        contentProcessingTimer = setInterval(() => {
+            stateIdx = (stateIdx + 1) % liveStates.length;
+            const textEl = document.getElementById('liveContentStatusText');
+            const iconEl = document.getElementById('liveContentIcon');
+            if (textEl && iconEl) {
+                textEl.classList.add('fade-out');
+                setTimeout(() => {
+                    textEl.textContent = liveStates[stateIdx].text;
+                    iconEl.className = `fas ${liveStates[stateIdx].icon}`;
+                    textEl.classList.remove('fade-out');
+                    textEl.classList.add('fade-in');
+                }, 180);
+            }
+        }, 1800);
+    }
+
+    function clearContentProcessing() {
+        if (contentProcessingTimer) {
+            clearInterval(contentProcessingTimer);
+            contentProcessingTimer = null;
+        }
+    }
+    window.clearContentProcessing = clearContentProcessing;
+
     function requestOutcomeIsUncertain(response, payload) {
         return Boolean(payload?.requestId && (
             (response.status === 409 && payload.status === 'reserved')
@@ -196,11 +247,32 @@
             return;
         }
         if (!session) {
-            setStatus('Sign in to generate content.', 'info');
-            if (typeof window.openLogin === 'function') window.openLogin();
-            else setStatus('Sign-in is unavailable right now. Please try again later.', 'error');
+            if (typeof window.showToast === 'function') {
+                window.showToast('Please create an account or sign in to use the Content Generator.');
+            }
+            setStatus('Please create an account or sign in to generate content.', 'info');
+            if (typeof window.openAuthModal === 'function') {
+                window.openAuthModal('signup');
+            } else if (typeof window.openLogin === 'function') {
+                window.openLogin();
+            } else {
+                setStatus('Sign-in is unavailable right now. Please try again later.', 'error');
+            }
             return;
         }
+
+        const countEl = document.getElementById('creditsCount');
+        const cachedBalance = countEl ? parseInt(countEl.textContent, 10) : NaN;
+        if (!isNaN(cachedBalance) && cachedBalance <= 0) {
+            setStatus('You have 0 credits remaining. Please choose a plan or top up to generate content.', 'error');
+            if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'additional AI credits');
+            } else if (typeof window.showToast === 'function') {
+                window.showToast('You have 0 credits remaining. Please choose a plan to continue.');
+            }
+            return;
+        }
+
         if (await reconcilePendingRequest(session)) return;
 
         let requestId;
@@ -222,7 +294,7 @@
         generateButton.disabled = true;
         copyButton.disabled = true;
         downloadButton.disabled = true;
-        output.textContent = '';
+        showContentProcessing();
         setStatus('Generating content…', 'info');
         rememberPendingRequest(session, requestId);
 
@@ -251,6 +323,7 @@
                 throw new Error('The content service returned an invalid response. Please try again later.');
             }
             if (!response.ok) {
+                clearContentProcessing();
                 if (payload?.content && typeof payload.content === 'string' && payload.content.trim()) {
                     output.textContent = payload.content;
                     forgetPendingRequest(session, requestId);
@@ -265,6 +338,7 @@
                     }
                     return;
                 }
+                output.textContent = '';
                 if (requestOutcomeIsUncertain(response, payload)) {
                     rememberPendingRequest(session, payload.requestId);
                     try {
@@ -304,6 +378,7 @@
                 throw new Error('The content response could not be verified. Please contact JEVEXA Support before retrying.');
             }
 
+            clearContentProcessing();
             output.textContent = payload.content;
             forgetPendingRequest(session, requestId);
             copyButton.disabled = false;
@@ -326,9 +401,12 @@
             }
             setStatus(`Content generated. ${used} credits charged; ${remaining} remaining.${balanceMessage}`, 'success');
         } catch (error) {
+            clearContentProcessing();
+            output.textContent = '';
             forgetPendingRequest(session, requestId);
             setStatus(`${error?.message || 'The content request could not be completed.'} Reference: ${requestId}`, 'error');
         } finally {
+            clearContentProcessing();
             requestInFlight = false;
             generateButton.disabled = false;
         }

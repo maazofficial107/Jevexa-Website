@@ -68,10 +68,13 @@ window.addEventListener('pointerdown', () => { userInteracted = true; }, { once:
 window.addEventListener('keydown', () => { userInteracted = true; }, { once: true, passive: true });
 
 window.addEventListener('error', event => {
+    if (event?.error?.name === 'AbortError' || /ResizeObserver|aborted/i.test(event?.message || '')) return;
     if (userInteracted && event.error) reportInteractionError(event.error, 'Something went wrong. Please refresh and try again.');
     else console.warn('Unhandled runtime error:', event.error || event.message);
 });
 window.addEventListener('unhandledrejection', event => {
+    const reason = event.reason;
+    if (reason?.name === 'AbortError' || /ResizeObserver|aborted/i.test(reason?.message || '')) return;
     if (userInteracted && event.reason) reportInteractionError(event.reason, 'Something went wrong. Please try that action again.');
     else console.warn('Unhandled promise rejection:', event.reason);
 });
@@ -815,6 +818,12 @@ function openSignup() {
     }
     openAuthModal('signup');
 }
+
+window.openLogin = openLogin;
+window.openSignup = openSignup;
+window.openAuthModal = openAuthModal;
+window.showLoginModal = showLoginModal;
+window.closeLogin = closeLogin;
 
 async function handleAuthSubmit() {
     if (isSignupMode) {
@@ -1666,6 +1675,15 @@ function applyAuthState(user) {
 }
 
 if (supabaseClient) {
+    if (supabaseClient.auth?.getSession) {
+        supabaseClient.auth.getSession().then(({ data, error }) => {
+            if (!error && data?.session?.user) {
+                applyAuthState(data.session.user);
+            }
+        }).catch(err => {
+            console.warn('Initial session restore notice:', err);
+        });
+    }
     supabaseClient.auth.onAuthStateChange((event, session) => {
         applyAuthState(session?.user || null);
         if (event === 'SIGNED_IN') closeLogin();
@@ -4059,6 +4077,7 @@ const JEVEXA_PLANS = {
     }
 
     function closeChatWorkspace(pushState = true) {
+        window.removeChatTyping?.();
         if (chatbotWindow) {
             chatbotWindow.classList.remove('open', 'chat-history-open');
             chatbotWindow.setAttribute('aria-hidden', 'true');
@@ -4087,6 +4106,7 @@ const JEVEXA_PLANS = {
     }
 
     function closeContentWorkspace(pushState = true) {
+        window.clearContentProcessing?.();
         if (contentWorkspace) {
             contentWorkspace.classList.remove('open');
             contentWorkspace.setAttribute('aria-hidden', 'true');

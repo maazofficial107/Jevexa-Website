@@ -3414,4 +3414,27 @@ test("chat message on Jevexa Pro sends 2000 fixed tokens to reservation and sett
   }
 });
 
+test("Worker rewrites /tools/* routes to root asset URL without 307 redirect", async () => {
+  let requestedAssetUrl = null;
+  const mockEnv = {
+    ASSETS: {
+      fetch: async (req) => {
+        requestedAssetUrl = req.url;
+        return new Response("<!DOCTYPE html><html><body>SPA Root</body></html>", {
+          headers: { "Content-Type": "text/html; charset=utf-8" }
+        });
+      }
+    }
+  };
+
+  const res = await worker.fetch(new Request("https://jevexa.net/tools/chatbot"), mockEnv);
+  assert.equal(res.status, 200);
+  assert.equal(new URL(requestedAssetUrl).pathname, "/");
+  assert.equal(res.headers.get("X-Frame-Options"), "SAMEORIGIN");
+  assert.equal(res.headers.get("X-Content-Type-Options"), "nosniff");
+  const text = await res.text();
+  assert.match(text, /SPA Root/);
+});
+
+
 

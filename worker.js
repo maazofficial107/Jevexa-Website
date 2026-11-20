@@ -2883,7 +2883,7 @@ export default {
 
     if (env.ASSETS) {
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
-        const spaRequest = new Request(new URL("/index.html", request.url), request);
+        const spaRequest = new Request(new URL("/", request.url), request);
         const assetResponse = await env.ASSETS.fetch(spaRequest);
         const secured = new Response(assetResponse.body, assetResponse);
         secured.headers.set("X-Content-Type-Options", "nosniff");

@@ -243,6 +243,7 @@
     }
 
     function clearAccountChatState() {
+        abortInFlightChatRequest();
         conversation.length = 0;
         chatSessions = [];
         activeChatId = null;
@@ -338,6 +339,7 @@
     }
 
     function createChatSession() {
+        abortInFlightChatRequest();
         const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         activeChatId = id;
         conversation.length = 0;
@@ -355,6 +357,7 @@
     }
 
     function selectChatSession(sessionId) {
+        abortInFlightChatRequest();
         const session = chatSessions.find(item => item.id === sessionId);
         if (!session) return;
         activeChatId = sessionId;
@@ -654,61 +657,115 @@
         messages.scrollTop = messages.scrollHeight;
     }
 
+    let activeChatAbortController = null;
+    let activeChatRequestId = null;
     let typingStatusTimer = null;
+    let typingPhaseTimeouts = [];
+
+    function clearTypingTimers() {
+        if (typingStatusTimer) {
+            clearInterval(typingStatusTimer);
+            typingStatusTimer = null;
+        }
+        if (Array.isArray(typingPhaseTimeouts)) {
+            typingPhaseTimeouts.forEach(t => clearTimeout(t));
+            typingPhaseTimeouts = [];
+        }
+    }
+
+    function abortInFlightChatRequest() {
+        if (activeChatAbortController) {
+            try {
+                activeChatAbortController.abort();
+            } catch {}
+            activeChatAbortController = null;
+        }
+        activeChatRequestId = null;
+        removeTyping();
+        sending = false;
+        if (sendButton) sendButton.disabled = false;
+        if (input) input.disabled = false;
+        if (attachButton) attachButton.disabled = false;
+    }
+    window.abortChatRequest = abortInFlightChatRequest;
 
     function showTyping() {
         if (!messages) return;
-        if (messages.querySelector('#typingMsg')) {
-            removeTyping();
-        }
+        removeTyping();
+
         const typing = document.createElement('div');
         typing.className = 'message bot live-typing-msg';
         typing.id = 'typingMsg';
+        typing.setAttribute('role', 'status');
+        typing.setAttribute('aria-live', 'polite');
         typing.innerHTML = `
             <div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div>
             <div class="msg-content live-status-bubble">
-                <div class="live-status-indicator" role="status" aria-live="polite">
+                <div class="live-status-indicator">
                     <div class="live-status-icon-wrap"><i class="fas fa-globe" id="liveChatIcon"></i></div>
                     <span class="live-status-text" id="liveChatStatusText">Searching the web...</span>
-                    <div class="live-status-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <div class="live-status-dots" aria-hidden="true">
+                        <span class="live-dot"></span>
+                        <span class="live-dot"></span>
+                        <span class="live-dot"></span>
+                    </div>
                 </div>
             </div>
         `;
         messages.appendChild(typing);
         messages.scrollTop = messages.scrollHeight;
 
+        clearTypingTimers();
+
         const liveStates = [
             { text: 'Searching the web...', icon: 'fa-globe' },
             { text: 'Thinking...', icon: 'fa-brain' },
             { text: 'Generating response...', icon: 'fa-wand-magic-sparkles' }
         ];
-        let stateIdx = 0;
-        if (typingStatusTimer) clearInterval(typingStatusTimer);
-        typingStatusTimer = setInterval(() => {
-            stateIdx = (stateIdx + 1) % liveStates.length;
+
+        function setPhase(idx) {
             const textEl = document.getElementById('liveChatStatusText');
             const iconEl = document.getElementById('liveChatIcon');
-            if (textEl && iconEl) {
+            if (textEl && iconEl && liveStates[idx]) {
                 textEl.classList.add('fade-out');
                 setTimeout(() => {
-                    textEl.textContent = liveStates[stateIdx].text;
-                    iconEl.className = `fas ${liveStates[stateIdx].icon}`;
+                    textEl.textContent = liveStates[idx].text;
+                    iconEl.className = `fas ${liveStates[idx].icon}`;
                     textEl.classList.remove('fade-out');
                     textEl.classList.add('fade-in');
-                }, 180);
+                }, 160);
             }
-        }, 1800);
+        }
+
+        // Phase 1 is immediately visible: "Searching the web..."
+        // Phase 2: If request takes > ~1.5s, transition smoothly to "Thinking..."
+        const t1 = setTimeout(() => {
+            setPhase(1);
+        }, 1500);
+        typingPhaseTimeouts.push(t1);
+
+        // Phase 3: If request takes > ~3.2s, transition to "Generating response..."
+        const t2 = setTimeout(() => {
+            setPhase(2);
+        }, 3200);
+        typingPhaseTimeouts.push(t2);
+
+        // Periodic cycle if model/network takes longer
+        let loopIdx = 2;
+        typingStatusTimer = setInterval(() => {
+            loopIdx = (loopIdx + 1) % liveStates.length;
+            setPhase(loopIdx);
+        }, 4500);
     }
 
     function removeTyping() {
-        if (typingStatusTimer) {
-            clearInterval(typingStatusTimer);
-            typingStatusTimer = null;
-        }
+        clearTypingTimers();
         const typingEl = messages?.querySelector('#typingMsg');
         if (typingEl) {
             typingEl.remove();
         }
+        const allTyping = messages?.querySelectorAll('.live-typing-msg, #typingMsg');
+        allTyping?.forEach(el => el.remove());
     }
     window.removeChatTyping = removeTyping;
 
@@ -866,6 +923,13 @@
     async function requestJson(url, session, options = {}) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 35000);
+        if (options.signal) {
+            if (options.signal.aborted) {
+                controller.abort();
+            } else {
+                options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+            }
+        }
         let response;
         try {
             response = await fetch(url, {
@@ -918,7 +982,9 @@
     // generateChatbotGuestReply(displayText) reference for offline/fallback compatibility
 
     async function handleSend() {
-        if (sending) return;
+        if (sending) {
+            abortInFlightChatRequest();
+        }
         const text = input?.value.trim();
         if (!text && pendingAttachments.length === 0) return;
 
@@ -942,6 +1008,13 @@
             }
             return;
         }
+
+        // Setup unique AbortController and RequestId for this exact send
+        abortInFlightChatRequest();
+        const currentAbortController = new AbortController();
+        activeChatAbortController = currentAbortController;
+        const requestId = createRequestId();
+        activeChatRequestId = requestId;
 
         sending = true;
         if (sendButton) sendButton.disabled = true;
@@ -991,6 +1064,7 @@
                 quote = await Promise.race([
                     requestJson('/api/credits/quote', session, {
                         method: 'POST',
+                        signal: currentAbortController.signal,
                         body: JSON.stringify(chatPayload)
                     }),
                     new Promise(resolve => setTimeout(resolve, 600))
@@ -1034,14 +1108,20 @@
             }
 
             setStatus(`${selectedTier.toUpperCase()} costs ${estimatedCredits} fixed credits per message.`);
-            const requestId = createRequestId();
 
             try {
                 const result = await requestJson('/api/chat', session, {
                     method: 'POST',
+                    signal: currentAbortController.signal,
                     headers: { 'Idempotency-Key': requestId },
                     body: JSON.stringify({ ...chatPayload, requestId })
                 });
+
+                if (currentAbortController.signal.aborted || activeChatAbortController !== currentAbortController || (activeChatRequestId && activeChatRequestId !== requestId)) {
+                    removeTyping();
+                    return;
+                }
+
                 removeTyping();
                 const replyText = String(result.reply || '').trim();
                 conversation.push({ role: 'user', text: displayText });
@@ -1067,6 +1147,10 @@
                 );
                 await refreshDisplayedCredits();
             } catch (error) {
+                if (error?.name === 'AbortError' || currentAbortController.signal.aborted || (activeChatRequestId && activeChatRequestId !== requestId)) {
+                    removeTyping();
+                    return;
+                }
                 removeTyping();
                 await refreshDisplayedCredits();
                 if (error.payload?.reply) {
@@ -1151,6 +1235,11 @@
             setStatus(message, true);
             appendMessage(message);
         } finally {
+            if (activeChatAbortController === currentAbortController) {
+                activeChatAbortController = null;
+                activeChatRequestId = null;
+            }
+            removeTyping();
             sending = false;
             if (sendButton) sendButton.disabled = false;
             if (input) input.disabled = false;
@@ -1204,6 +1293,7 @@
             return;
         }
         if (button.dataset.chatAction === 'regenerate' && Number.isInteger(index) && index > 0) {
+            abortInFlightChatRequest();
             const userIndex = index - 1;
             const userMessage = conversation[userIndex];
             if (userMessage?.role !== 'user') return;

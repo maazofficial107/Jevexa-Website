@@ -2941,6 +2941,8 @@ function setChatbotToggleHidden(hidden) {
 }
 
 function closeChatbot() {
+    window.abortChatRequest?.();
+    window.removeChatTyping?.();
     chatbotWindow?.classList.remove('open', 'chat-history-open');
     chatbotWindow?.setAttribute('aria-hidden', 'true');
     setChatbotToggleHidden(false);
@@ -4077,6 +4079,7 @@ const JEVEXA_PLANS = {
     }
 
     function closeChatWorkspace(pushState = true) {
+        window.abortChatRequest?.();
         window.removeChatTyping?.();
         if (chatbotWindow) {
             chatbotWindow.classList.remove('open', 'chat-history-open');

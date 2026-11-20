@@ -4029,6 +4029,13 @@ test("upgrade 2: animated 'Searching the web...' UI states exist and clean up pr
   assert.match(creditsCode, /Generating response\.\.\./);
   assert.match(creditsCode, /clearInterval\(typingStatusTimer\)/);
   assert.match(creditsCode, /window\.removeChatTyping/);
+  assert.match(creditsCode, /activeChatAbortController/);
+  assert.match(creditsCode, /abortInFlightChatRequest/);
+  assert.match(creditsCode, /window\.abortChatRequest/);
+  assert.match(creditsCode, /1500/);
+  assert.match(creditsCode, /createChatSession[\s\S]*?abortInFlightChatRequest/);
+  assert.match(creditsCode, /selectChatSession[\s\S]*?abortInFlightChatRequest/);
+  assert.match(creditsCode, /regenerate[\s\S]*?abortInFlightChatRequest/);
 
   // Content generator live states & shimmer
   assert.match(contentCode, /content-processing-container/);
@@ -4039,10 +4046,11 @@ test("upgrade 2: animated 'Searching the web...' UI states exist and clean up pr
   assert.match(contentCode, /clearContentProcessing\(\)/);
   assert.match(contentCode, /window\.clearContentProcessing/);
 
-  // CSS animations
+  // CSS animations & accessibility
   assert.match(stylesCode, /\.live-status-indicator/);
   assert.match(stylesCode, /@keyframes liveStatusGlow/);
   assert.match(stylesCode, /\.live-status-dots/);
+  assert.match(stylesCode, /prefers-reduced-motion/);
   assert.match(stylesCode, /\.content-processing-container/);
   assert.match(stylesCode, /@keyframes skeletonShimmer/);
 });

@@ -4323,3 +4323,24 @@ test("Frontend connection resilience and offline error recovery", async () => {
   assert.match(scriptCode, /const targetId = hash\.replace\(\/\^#\/, ''\);/);
   assert.match(scriptCode, /closeChatWorkspace\(false\);/);
 });
+
+test("Reliability & Schema security: RPC permissions and notification timeout safeguards", async () => {
+  const schemaSql = await readFile(new URL("../supabase/complete_credit_and_saas_schema.sql", import.meta.url), "utf8");
+  const safepaySql = await readFile(new URL("../supabase/safepay_service_role_permissions_migration.sql", import.meta.url), "utf8");
+  const workerSrc = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const adminHtml = await readFile(new URL("../admin.html", import.meta.url), "utf8");
+
+  // Schema: jevexa_credit_quote must be restricted to service_role, not authenticated
+  assert.match(schemaSql, /grant execute on function public\.jevexa_credit_quote\(text, integer\) to service_role;/);
+  assert.doesNotMatch(schemaSql, /grant execute on function public\.jevexa_credit_quote\(text, integer\) to service_role, authenticated;/);
+
+  // Safepay permissions: select, insert, update on billing_orders granted to service_role
+  assert.match(safepaySql, /grant select, insert, update on public\.billing_orders to service_role;/);
+
+  // Worker notification timeout safeguards with finally cleanup
+  assert.match(workerSrc, /handleContact[\s\S]*?const controller = new AbortController\(\);[\s\S]*?finally\s*\{\s*clearTimeout\(timeoutId\);\s*\}/);
+  assert.match(workerSrc, /handleSupportTicket[\s\S]*?const emailController = new AbortController\(\);[\s\S]*?finally\s*\{\s*clearTimeout\(emailTimeoutId\);\s*\}/);
+
+  // Admin HTML base href
+  assert.match(adminHtml, /<base href="\/">/i);
+});

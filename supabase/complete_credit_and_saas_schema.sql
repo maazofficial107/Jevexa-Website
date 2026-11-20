@@ -819,7 +819,13 @@ revoke all on function public.jevexa_credit_release(uuid, uuid) from public, ano
 revoke all on function public.jevexa_credit_adjust(uuid, uuid, integer, text, text, text) from public, anon, authenticated;
 revoke all on function public.jevexa_apply_safepay_payment(text, bigint, text) from public, anon, authenticated;
 
-grant execute on function public.jevexa_credit_quote(text, integer) to service_role, authenticated;
+-- AUDIT BUG: jevexa_credit_quote is granted to `authenticated` here but NOT in
+-- credit_system_migration.sql (service_role only). The staging verification script
+-- (staging-credit.integration.mjs line 319-322) tests it via anonKey+userToken and
+-- expects a DENIED response. Granting execute to `authenticated` breaks that security
+-- invariant. Revert to service_role only unless a public quote endpoint is intentional.
+-- FIX: Remove `authenticated` from the grant below.
+grant execute on function public.jevexa_credit_quote(text, integer) to service_role;
 grant execute on function public.jevexa_credit_reserve(uuid, uuid, text, integer) to service_role;
 grant execute on function public.jevexa_credit_settle(uuid, uuid, integer) to service_role;
 grant execute on function public.jevexa_credit_release(uuid, uuid) to service_role;

@@ -2298,7 +2298,6 @@ async function handleContact(request, env) {
         `
       })
     });
-    clearTimeout(timeoutId);
 
     if (!emailResponse.ok) {
       console.error("Resend status:", emailResponse.status);
@@ -2313,6 +2312,8 @@ async function handleContact(request, env) {
   } catch (error) {
     console.error("Contact failed:", error?.message || "unknown");
     return json({ error: "Unable to submit your inquiry right now." }, 502);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -2370,9 +2371,12 @@ async function handleSupportTicket(request, env) {
     createdTicketId = ticketId;
 
     if (resendApiKey) {
+      const emailController = new AbortController();
+      const emailTimeoutId = setTimeout(() => emailController.abort(), 7000);
       try {
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
+          signal: emailController.signal,
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${resendApiKey}`
@@ -2390,6 +2394,8 @@ async function handleSupportTicket(request, env) {
         }
       } catch (emailErr) {
         console.warn("Support ticket notification email network notice:", emailErr?.message || emailErr, ticketId);
+      } finally {
+        clearTimeout(emailTimeoutId);
       }
     }
     return json({ success: true, ticketId }, 201);

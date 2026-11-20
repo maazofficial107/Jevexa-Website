@@ -962,13 +962,21 @@
                 appendMessage(replyText, false, conversation.length - 1);
                 if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
                 const historySaved = persistConversation(session.user.id);
-                if (Number.isInteger(result.creditsRemaining)) {
+                const remaining = Number.isInteger(result.remaining_credits)
+                    ? result.remaining_credits
+                    : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null);
+                const used = Number.isInteger(result.credits_used)
+                    ? result.credits_used
+                    : (Number.isInteger(result.creditsCharged) ? result.creditsCharged : 1);
+                if (remaining !== null) {
                     const countEl = document.getElementById('creditsCount');
-                    if (countEl) countEl.textContent = String(result.creditsRemaining);
+                    if (countEl) countEl.textContent = String(remaining);
+                    const settingsBal = document.getElementById('settingsBalance');
+                    if (settingsBal) settingsBal.textContent = String(remaining);
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                 }
                 setStatus(
-                    `AI reply completed. ${result.creditsCharged} fixed ${String(result.tier || selectedTier).toUpperCase()} credits charged. Balance ${result.creditsRemaining}.${historySaved ? '' : ' This browser could not save the conversation.'}`
+                    `AI reply completed. ${used} ${String(result.tier || selectedTier).toUpperCase()} credit${used === 1 ? '' : 's'} used. Balance ${remaining !== null ? remaining : result.creditsRemaining}.${historySaved ? '' : ' This browser could not save the conversation.'}`
                 );
                 await refreshDisplayedCredits();
             } catch (error) {

@@ -232,9 +232,16 @@
                 setStatus(responseError(response, payload), 'error');
                 return;
             }
+            const remaining = Number.isInteger(payload.remaining_credits)
+                ? payload.remaining_credits
+                : (Number.isInteger(payload.creditsRemaining) ? payload.creditsRemaining : null);
+            const used = Number.isInteger(payload.credits_used)
+                ? payload.credits_used
+                : (Number.isInteger(payload.creditsCharged) ? payload.creditsCharged : null);
+
             if (typeof payload?.content !== 'string' || !payload.content.trim()
-                || !Number.isInteger(payload.creditsCharged) || payload.creditsCharged < 1
-                || !Number.isInteger(payload.creditsRemaining) || payload.creditsRemaining < 0) {
+                || used === null || used < 1
+                || remaining === null || remaining < 0) {
                 throw new Error('The content response could not be verified. Please contact JEVEXA Support before retrying.');
             }
 
@@ -242,9 +249,11 @@
             forgetPendingRequest(session, requestId);
             copyButton.disabled = false;
             downloadButton.disabled = false;
-            if (Number.isInteger(payload.creditsRemaining)) {
+            if (remaining !== null) {
                 const countEl = document.getElementById('creditsCount');
-                if (countEl) countEl.textContent = String(payload.creditsRemaining);
+                if (countEl) countEl.textContent = String(remaining);
+                const settingsBal = document.getElementById('settingsBalance');
+                if (settingsBal) settingsBal.textContent = String(remaining);
                 window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
             }
             let balanceMessage = '';
@@ -256,7 +265,7 @@
                     balanceMessage = ' Your displayed balance could not be refreshed.';
                 }
             }
-            setStatus(`Content generated. ${payload.creditsCharged} credits charged; ${payload.creditsRemaining} remaining.${balanceMessage}`, 'success');
+            setStatus(`Content generated. ${used} credits charged; ${remaining} remaining.${balanceMessage}`, 'success');
         } catch (error) {
             setStatus(`${error?.message || 'The content request could not be completed.'} The outcome may be uncertain; do not retry with a new request ID until it is confirmed. Reference: ${requestId}`, 'error');
         } finally {

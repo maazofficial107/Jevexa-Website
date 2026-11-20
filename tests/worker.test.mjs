@@ -2814,6 +2814,224 @@ test("chat and quote gracefully default to lite tier when user_credits is empty 
     const chatData = await chat.json();
     assert.equal(chatData.reply, "Graceful lite reply");
     assert.equal(chatData.tier, "lite");
+    assert.equal(chatData.credits_used, 1);
+    assert.equal(chatData.remaining_credits, 99);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("chat and content generation return credits_used and remaining_credits for live UI sync", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 500 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        fixed_credits: 1,
+        credits_per_1000_tokens: null,
+        enabled: true,
+        integration_status: "available"
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 499
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 499 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Live sync verified" }] },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 20, totalTokenCount: 35 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const chatRes = await worker.fetch(makeRequest("/api/chat", { body: { message: "Sync check", tier: "lite" } }), geminiEnv);
+    assert.equal(chatRes.status, 200);
+    const chatPayload = await chatRes.json();
+    assert.equal(chatPayload.creditsCharged, 1);
+    assert.equal(chatPayload.credits_used, 1);
+    assert.equal(chatPayload.creditsRemaining, 499);
+    assert.equal(chatPayload.remaining_credits, 499);
+    assert.equal(chatPayload.promptTokens, 15);
+    assert.equal(chatPayload.completionTokens, 20);
+    assert.equal(chatPayload.totalTokens, 35);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("content generation returns credits_used and remaining_credits for live UI sync", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 500 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        fixed_credits: null,
+        credits_per_1000_tokens: 1,
+        enabled: true,
+        integration_status: "available"
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 2,
+        balance: 498
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 2, balance: 498 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Generated headline for blog" }] },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 700, totalTokenCount: 1200 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const contentRes = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
+    assert.equal(contentRes.status, 200);
+    const contentPayload = await contentRes.json();
+    assert.equal(contentPayload.creditsCharged, 2);
+    assert.equal(contentPayload.credits_used, 2);
+    assert.equal(contentPayload.creditsRemaining, 498);
+    assert.equal(contentPayload.remaining_credits, 498);
+    assert.equal(contentPayload.totalTokens, 1200);
+    assert.equal(contentPayload.promptTokens, 500);
+    assert.equal(contentPayload.completionTokens, 700);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("insufficient credits returns 402 without contacting AI providers", async () => {
+  let aiCalled = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 0 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        fixed_credits: 1,
+        credits_per_1000_tokens: null,
+        enabled: true,
+        integration_status: "available"
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: false,
+        error: "insufficient_credits",
+        required_credits: 1,
+        available_credits: 0
+      });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com" || url.hostname === "api.groq.com" || url.hostname === "openrouter.ai") {
+      aiCalled = true;
+      return Response.json({ error: "Should not be called" }, { status: 500 });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), geminiEnv);
+    assert.equal(response.status, 402);
+    assert.equal(aiCalled, false);
+    const data = await response.json();
+    assert.equal(data.code, "insufficient_credits");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("character-based token fallback applies when provider omits token metadata", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        fixed_credits: 1,
+        credits_per_1000_tokens: null,
+        enabled: true,
+        integration_status: "available"
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: 1,
+        balance: 99
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      // Intentionally omit usageMetadata to test character-based estimation fallback
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Short reply without tokens" }] },
+          finishReason: "STOP"
+        }]
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Test fallback estimation", tier: "lite" } }), geminiEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.creditsCharged, 1);
+    assert.equal(data.credits_used, 1);
+    assert.equal(data.usageEstimated, true);
+    assert.ok(data.totalTokens > 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

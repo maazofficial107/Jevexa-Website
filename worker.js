@@ -119,6 +119,82 @@ const GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b";
 const GROQ_LEGACY_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
 const GROQ_API_BASE = "https://api.groq.com/openai/v1/chat/completions";
 
+const THINKING_MULTIPLIERS = Object.freeze({
+  low: 1.0,
+  standard: 1.5,
+  medium: 1.5,
+  max: 2.0,
+  high: 2.0
+});
+
+const TIER_BASE_CREDITS = Object.freeze({
+  lite: 1,
+  pro: 2,
+  max: 4,
+  ultra: 8
+});
+
+function calculateUsageCredits({
+  tier = "lite",
+  thinkingLevel = "low",
+  promptTokens = null,
+  completionTokens = null,
+  totalTokens = null,
+  inputText = "",
+  outputText = "",
+  service = "ai_chat"
+} = {}) {
+  const normTier = typeof tier === "string" ? tier.trim().toLowerCase() : "lite";
+  const normThinking = typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "low";
+
+  // 1. Model tier base credits (e.g. lite: 1, pro: 2, max: 4, ultra: 8)
+  const baseCredits = TIER_BASE_CREDITS[normTier] || 1;
+
+  // 2. Thinking level multiplier (low = 1x, standard/medium = 1.5x, max/high = 2x)
+  const thinkingMultiplier = THINKING_MULTIPLIERS[normThinking] || 1.0;
+
+  // 3. Token measurement from provider or character-based fallback estimate (~4 chars per token)
+  let measured = false;
+  let pTokens = Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null;
+  let cTokens = Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null;
+  let tokens = 0;
+
+  if (pTokens !== null && cTokens !== null) {
+    tokens = pTokens + cTokens;
+    measured = true;
+  } else if (Number.isInteger(totalTokens) && totalTokens > 0) {
+    tokens = totalTokens;
+    measured = true;
+  } else {
+    const inChars = typeof inputText === "string" ? inputText.length : 0;
+    const outChars = typeof outputText === "string" ? outputText.length : 0;
+    tokens = Math.max(1, Math.ceil((inChars + outChars) / 4));
+    measured = false;
+  }
+
+  // Bound tokens to safe PostgreSQL range [1, 50000]
+  tokens = Math.max(1, Math.min(50000, tokens));
+
+  // 4. Usage-based credits with minimum floor of 1 credit
+  const tokenScale = Math.max(1, Math.ceil(tokens / 1000));
+  const calculatedCredits = Math.max(
+    1,
+    Math.ceil(baseCredits * thinkingMultiplier * (service === "content_generation" ? tokenScale : 1))
+  );
+
+  return {
+    credits: calculatedCredits,
+    totalTokens: tokens,
+    promptTokens: pTokens,
+    completionTokens: cTokens,
+    measured,
+    tier: normTier,
+    thinkingLevel: normThinking,
+    thinkingMultiplier,
+    baseCredits
+  };
+}
+
 function getGroqModels(env) {
   const customModel = typeof env?.GROQ_MODEL === "string" ? env.GROQ_MODEL.trim() : "";
   if (customModel) {
@@ -295,11 +371,15 @@ async function executeGeminiWithFallback({
 
         if (text) {
           const totalTokens = data?.usageMetadata?.totalTokenCount;
+          const promptTokens = data?.usageMetadata?.promptTokenCount;
+          const completionTokens = data?.usageMetadata?.candidatesTokenCount;
           return {
             ok: true,
             model,
             reply: text,
             totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+            promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+            completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
             data
           };
         }
@@ -433,12 +513,16 @@ async function executeGroqWithFallback({
 
         if (text) {
           const totalTokens = data?.usage?.total_tokens;
+          const promptTokens = data?.usage?.prompt_tokens;
+          const completionTokens = data?.usage?.completion_tokens;
           return {
             ok: true,
             provider: "groq",
             model,
             reply: text,
             totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+            promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+            completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
             data
           };
         }
@@ -575,12 +659,16 @@ async function executeOpenRouterWithFallback({
 
         if (text) {
           const totalTokens = data?.usage?.total_tokens;
+          const promptTokens = data?.usage?.prompt_tokens;
+          const completionTokens = data?.usage?.completion_tokens;
           return {
             ok: true,
             provider: "openrouter",
             model: currentModel,
             reply: text,
             totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+            promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+            completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
             data
           };
         }
@@ -1221,6 +1309,8 @@ async function handleChat(request, env) {
 
   let reply = "";
   let totalTokens = parsed.estimatedTokens;
+  let promptTokens = null;
+  let completionTokens = null;
   let tokenCountMeasured = false;
   let executionSuccess = false;
   let lastProviderError = null;
@@ -1247,6 +1337,8 @@ async function handleChat(request, env) {
 
     if (geminiResult.ok && geminiResult.reply) {
       reply = geminiResult.reply;
+      promptTokens = geminiResult.promptTokens;
+      completionTokens = geminiResult.completionTokens;
       if (Number.isInteger(geminiResult.totalTokens) && geminiResult.totalTokens > 0) {
         totalTokens = geminiResult.totalTokens;
         tokenCountMeasured = true;
@@ -1279,6 +1371,8 @@ async function handleChat(request, env) {
 
     if (groqResult.ok && groqResult.reply) {
       reply = groqResult.reply;
+      promptTokens = groqResult.promptTokens;
+      completionTokens = groqResult.completionTokens;
       if (Number.isInteger(groqResult.totalTokens) && groqResult.totalTokens > 0) {
         totalTokens = groqResult.totalTokens;
         tokenCountMeasured = true;
@@ -1310,6 +1404,8 @@ async function handleChat(request, env) {
 
     if (orResult.ok && orResult.reply) {
       reply = orResult.reply;
+      promptTokens = orResult.promptTokens;
+      completionTokens = orResult.completionTokens;
       if (Number.isInteger(orResult.totalTokens) && orResult.totalTokens > 0) {
         totalTokens = orResult.totalTokens;
         tokenCountMeasured = true;
@@ -1346,6 +1442,19 @@ async function handleChat(request, env) {
     return releaseWithError("Chatbot is temporarily unavailable. Reserved credits were released.", 502);
   }
 
+  const usage = calculateUsageCredits({
+    tier: parsed.tier,
+    thinkingLevel: parsed.thinkingLevel,
+    promptTokens,
+    completionTokens,
+    totalTokens: tokenCountMeasured ? totalTokens : null,
+    inputText: parsed.message,
+    outputText: reply,
+    service: parsed.service
+  });
+  totalTokens = usage.totalTokens;
+  tokenCountMeasured = usage.measured;
+
   let settlementResponse;
   let settlement;
   try {
@@ -1376,12 +1485,19 @@ async function handleChat(request, env) {
     }, 503);
   }
 
+  const chargedCredits = settlement.charged_credits;
+  const remainingCredits = settlement.balance;
+
   return json({
     reply,
     tier: parsed.tier,
-    creditsCharged: settlement.charged_credits,
-    creditsRemaining: settlement.balance,
+    creditsCharged: chargedCredits,
+    creditsRemaining: remainingCredits,
+    credits_used: chargedCredits,
+    remaining_credits: remainingCredits,
     totalTokens,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
     usageEstimated: !tokenCountMeasured,
     requestId
   });
@@ -1509,6 +1625,8 @@ async function handleContent(request, env) {
 
   let content = "";
   let totalTokens = parsed.estimatedTokens;
+  let promptTokens = null;
+  let completionTokens = null;
   let tokenCountMeasured = false;
   let executionSuccess = false;
   let lastProviderError = null;
@@ -1536,6 +1654,8 @@ async function handleContent(request, env) {
 
     if (geminiResult.ok && geminiResult.reply) {
       content = geminiResult.reply;
+      promptTokens = geminiResult.promptTokens;
+      completionTokens = geminiResult.completionTokens;
       if (Number.isInteger(geminiResult.totalTokens) && geminiResult.totalTokens > 0) {
         totalTokens = geminiResult.totalTokens;
         tokenCountMeasured = true;
@@ -1566,6 +1686,8 @@ async function handleContent(request, env) {
 
     if (groqResult.ok && groqResult.reply) {
       content = groqResult.reply;
+      promptTokens = groqResult.promptTokens;
+      completionTokens = groqResult.completionTokens;
       if (Number.isInteger(groqResult.totalTokens) && groqResult.totalTokens > 0) {
         totalTokens = groqResult.totalTokens;
         tokenCountMeasured = true;
@@ -1593,6 +1715,8 @@ async function handleContent(request, env) {
 
     if (orResult.ok && orResult.reply) {
       content = orResult.reply;
+      promptTokens = orResult.promptTokens;
+      completionTokens = orResult.completionTokens;
       if (Number.isInteger(orResult.totalTokens) && orResult.totalTokens > 0) {
         totalTokens = orResult.totalTokens;
         tokenCountMeasured = true;
@@ -1628,6 +1752,20 @@ async function handleContent(request, env) {
     }
     return releaseWithError("Content generation is temporarily unavailable. Reserved credits were released; please try again.", 502);
   }
+
+  const usage = calculateUsageCredits({
+    tier: "lite",
+    thinkingLevel: "low",
+    promptTokens,
+    completionTokens,
+    totalTokens: tokenCountMeasured ? totalTokens : null,
+    inputText: parsed.topic,
+    outputText: content,
+    service: "content_generation"
+  });
+  totalTokens = usage.totalTokens;
+  tokenCountMeasured = usage.measured;
+
   let settlementResponse;
   let settlement;
   try {
@@ -1658,10 +1796,18 @@ async function handleContent(request, env) {
     }, 503);
   }
 
+  const chargedCredits = settlement.charged_credits;
+  const remainingCredits = settlement.balance;
+
   return json({
     content,
-    creditsCharged: settlement.charged_credits,
-    creditsRemaining: settlement.balance,
+    creditsCharged: chargedCredits,
+    creditsRemaining: remainingCredits,
+    credits_used: chargedCredits,
+    remaining_credits: remainingCredits,
+    totalTokens,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
     usageEstimated: !tokenCountMeasured,
     requestId: parsed.requestId
   });

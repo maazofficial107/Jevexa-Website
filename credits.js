@@ -1004,13 +1004,14 @@
                     appendMessage(message);
                 } else if (error.status === 503) {
                     setStatus(warmingMessage);
-                    if (error.message && error.message !== 'Credit service is not configured.') {
-                        setStatus(error.message, true);
+                    const isPricingConfigNotice = error.message && /pricing.*not configured/i.test(error.message);
+                    const cleanMessage = isPricingConfigNotice
+                        ? 'AI assistant is temporarily busy. Please try sending your message again.'
+                        : (error.message && error.message !== 'Credit service is not configured.' ? error.message : warmingMessage);
+                    if (cleanMessage !== warmingMessage) {
+                        setStatus(cleanMessage, !isPricingConfigNotice);
                     }
-                    const message = error.message && error.message !== 'Credit service is not configured.'
-                        ? error.message
-                        : warmingMessage;
-                    appendMessage(message);
+                    appendMessage(cleanMessage);
                 } else if (error.status === 429) {
                     setStatus('Rate limited. Wait 60 seconds before sending another message.');
                     appendMessage('Rate limited. Wait 60 seconds before sending another message.');

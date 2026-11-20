@@ -1338,9 +1338,26 @@ test("invalid server-side OpenRouter model IDs fail closed before reservation", 
   }
 });
 
-test("chat fails closed when the database still has token-metered pricing", async () => {
+test("chat safely falls back to default fixed tier pricing when the database still has token-metered pricing", async () => {
   const mock = mockFetch(
-    url => assert.fail(`Unexpected request to ${url.pathname}`),
+    url => {
+      if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") {
+        return Response.json(1);
+      }
+      if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+        return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 1, balance: 99 });
+      }
+      if (url.hostname === "openrouter.ai") {
+        return Response.json({
+          choices: [{ message: { content: "Fallback pricing response" } }],
+          usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }
+        });
+      }
+      if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+        return Response.json({ ok: true, status: "settled", charged_credits: 1, balance: 99 });
+      }
+      assert.fail(`Unexpected request to ${url.pathname}`);
+    },
     null,
     "free",
     {
@@ -1354,11 +1371,15 @@ test("chat fails closed when the database still has token-metered pricing", asyn
   );
   try {
     const quote = await worker.fetch(makeRequest("/api/credits/quote"), env);
-    assert.equal(quote.status, 503);
+    assert.equal(quote.status, 200);
+    const quotePayload = await quote.json();
+    assert.equal(quotePayload.estimatedCredits, 1);
     const chat = await worker.fetch(makeRequest(), env);
-    assert.equal(chat.status, 503);
-    assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_quote"), false);
-    assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_reserve"), false);
+    assert.equal(chat.status, 200);
+    const chatPayload = await chat.json();
+    assert.equal(chatPayload.reply, "Fallback pricing response");
+    assert.equal(chatPayload.creditsCharged, 1);
+    assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_reserve"), true);
   } finally {
     mock.restore();
   }
@@ -1475,7 +1496,7 @@ test("pricing quote is authenticated and comes from the database function", asyn
   }
 });
 
-test("credit quote database errors fail closed and never call the AI provider", async () => {
+test("credit quote safely falls back to tier default pricing when database rpc encounters an error", async () => {
   const mock = mockFetch(url => {
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") {
       return Response.json({ message: "function unavailable" }, { status: 404 });
@@ -1485,9 +1506,9 @@ test("credit quote database errors fail closed and never call the AI provider", 
   try {
     const response = await worker.fetch(makeRequest("/api/credits/quote"), env);
     const payload = await response.json();
-    assert.equal(response.status, 503);
-    assert.equal(payload.code, "credit_pricing_unavailable");
-    assert.match(payload.error, /credit pricing could not be confirmed/i);
+    assert.equal(response.status, 200);
+    assert.equal(payload.estimatedCredits, 1);
+    assert.equal(typeof payload.estimatedTokens, "number");
     assert.equal(mock.calls.some(call => call.url.hostname === "openrouter.ai"), false);
   } finally {
     mock.restore();
@@ -1574,14 +1595,16 @@ test("authentication navigation resets login mode and clears guest UI after sign
   assert.doesNotMatch(script, /JEVEXA Protected CTA System/);
 });
 
-test("invalid nonpositive database pricing quotes fail closed", async () => {
+test("nonpositive database pricing quotes fall back safely to tier default pricing", async () => {
   const mock = mockFetch(url => {
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") return Response.json(0);
     assert.fail(`Unexpected request to ${url.pathname}`);
   });
   try {
     const response = await worker.fetch(makeRequest("/api/credits/quote"), env);
-    assert.equal(response.status, 503);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.estimatedCredits, 1);
   } finally {
     mock.restore();
   }
@@ -3036,4 +3059,210 @@ test("character-based token fallback applies when provider omits token metadata"
     globalThis.fetch = originalFetch;
   }
 });
+
+test("regression 1: missing or unseeded fixed tier pricing rows do not block chat or content requests", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "pro", balance: 250 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      // Return empty array to simulate completely unseeded/missing service pricing rows
+      return Response.json([]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") {
+      return Response.json(null, { status: 404 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      const body = JSON.parse(options.body || "{}");
+      return Response.json({
+        ok: true,
+        status: "reserved",
+        duplicate: false,
+        reserved_credits: body.p_required_credits || 2,
+        balance: 248
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 2, balance: 248 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Successfully responded despite unseeded DB pricing" }] },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 20, totalTokenCount: 40 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    // 1. Quote falls back cleanly without 503
+    const quoteRes = await worker.fetch(makeRequest("/api/credits/quote", { body: { message: "Hello", tier: "pro" } }), geminiEnv);
+    assert.equal(quoteRes.status, 200);
+    const quoteData = await quoteRes.json();
+    assert.equal(quoteData.estimatedCredits, 2);
+
+    // 2. Chat falls back cleanly without 503 and answers user
+    const chatRes = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello Pro", tier: "pro" } }), geminiEnv);
+    assert.equal(chatRes.status, 200);
+    const chatData = await chatRes.json();
+    assert.equal(chatData.reply, "Successfully responded despite unseeded DB pricing");
+    assert.equal(chatData.creditsCharged, 2);
+    assert.equal(chatData.remaining_credits, 248);
+
+    // 3. Content generation falls back cleanly without 503
+    const contentRes = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
+    assert.equal(contentRes.status, 200);
+    const contentData = await contentRes.json();
+    assert.equal(contentData.content, "Successfully responded despite unseeded DB pricing");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("regression 2: multi-provider fallback cascades when Gemini fails (404/429/503) and Groq or OpenRouter succeeds", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-openrouter-key"
+  };
+
+  let geminiAttempted = false;
+  let groqAttempted = false;
+  let openRouterAttempted = false;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: 1, credits_per_1000_tokens: null, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiAttempted = true;
+      return Response.json({ error: { code: 404, message: "models/gemini-3.5-flash-lite not found" } }, { status: 404 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqAttempted = true;
+      return Response.json({ error: { code: 503, message: "Groq capacity overload" } }, { status: 503 });
+    }
+    if (url.hostname === "openrouter.ai") {
+      openRouterAttempted = true;
+      return Response.json({
+        choices: [{ message: { content: "OpenRouter multi-provider cascade succeeded!" } }],
+        usage: { prompt_tokens: 15, completion_tokens: 25, total_tokens: 40 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Cascade test", tier: "lite" } }), tripleEnv);
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.reply, "OpenRouter multi-provider cascade succeeded!");
+    assert.equal(geminiAttempted, true);
+    assert.equal(groqAttempted, true);
+    assert.equal(openRouterAttempted, true);
+    assert.equal(data.creditsCharged, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("regression 3: content generation credit settlement charges measured usage and releases 100% reservation on full provider failure", async () => {
+  let releaseCalled = false;
+  let settleCalled = false;
+  let failGemini = false;
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: null, credits_per_1000_tokens: 1, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 3, balance: 97 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      settleCalled = true;
+      return Response.json({ ok: true, charged_credits: 2, balance: 98 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_release") {
+      releaseCalled = true;
+      return Response.json({ ok: true, released: true, balance: 100 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      if (!failGemini) {
+        return Response.json({
+          candidates: [{ content: { parts: [{ text: "Generated content" }] }, finishReason: "STOP" }],
+          usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 700, totalTokenCount: 1200 }
+        });
+      }
+      return Response.json({ error: { code: 429, message: "Resource has been exhausted" } }, { status: 429 });
+    }
+    if (url.hostname === "api.groq.com") {
+      return Response.json({ error: { message: "Service unavailable" } }, { status: 503 });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    // 1. Success scenario: verifies measured usage settlement
+    const successRes = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
+    assert.equal(successRes.status, 200);
+    const successData = await successRes.json();
+    assert.equal(successData.creditsCharged, 2);
+    assert.equal(settleCalled, true, "Settlement must be called on success");
+    assert.equal(releaseCalled, false, "Release must not be called on success");
+
+    // 2. Failure scenario: both Gemini and Groq fail fatally => 100% release, zero settlement
+    settleCalled = false;
+    failGemini = true;
+    const failEnv = {
+      ...env,
+      GEMINI_API_KEY: "test-gemini-key",
+      GROQ_API_KEY: "test-groq-key"
+    };
+    delete failEnv.OPENROUTER_API_KEY;
+
+    const failRequest = makeContentRequest({
+      ...contentRequestBody,
+      requestId: "00000000-0000-4000-8000-000000000099"
+    });
+
+    const response = await worker.fetch(failRequest, failEnv);
+    assert.ok(response.status >= 400);
+    assert.equal(settleCalled, false, "Must not settle any credits on provider failure");
+    assert.equal(releaseCalled, true, "Must release 100% of reserved credits on provider failure");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 

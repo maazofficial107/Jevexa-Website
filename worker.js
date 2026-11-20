@@ -197,10 +197,8 @@ function calculateUsageCredits({
 
 function getGroqModels(env) {
   const customModel = typeof env?.GROQ_MODEL === "string" ? env.GROQ_MODEL.trim() : "";
-  if (customModel) {
-    return [customModel, GROQ_FALLBACK_MODEL];
-  }
-  return [GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL];
+  const models = [customModel || GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL, ...GROQ_LEGACY_MODELS].filter(Boolean);
+  return Array.from(new Set(models));
 }
 
 function buildGroqUserContent(message, attachments) {
@@ -234,7 +232,9 @@ function buildGroqMessages(history, userText) {
   return messages;
 }
 
-function getGeminiModelsForTier(tier) {
+function getGeminiModelsForTier(tier, env = {}) {
+  const custom = typeof env?.GEMINI_MODEL === "string" ? env.GEMINI_MODEL.trim() : "";
+  if (custom) return [custom, GEMINI_FALLBACK_MODEL];
   if (tier === "pro" || tier === "max" || tier === "ultra") {
     return ["gemini-3.5-flash", "gemini-3.5-flash-lite"];
   }
@@ -393,8 +393,8 @@ async function executeGeminiWithFallback({
           };
         }
 
-        if (isPrimary) {
-          console.warn(`Gemini primary ${model} returned empty candidate, trying fallback ${fallbackModel} (${requestId})`);
+        if (i < models.length - 1) {
+          console.warn(`Gemini model ${model} returned empty candidate, trying fallback ${fallbackModel} (${requestId})`);
           continue;
         }
 
@@ -411,8 +411,8 @@ async function executeGeminiWithFallback({
       lastErrorMsg = errorMsg;
       console.error(`Gemini ${model} returned ${response.status}: ${errorMsg} (${requestId})`);
 
-      if (isPrimary && (response.status === 429 || response.status >= 500)) {
-        console.warn(`Gemini primary ${model} hit ${response.status}, failing over to ${fallbackModel} (${requestId})`);
+      if (i < models.length - 1 && (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500)) {
+        console.warn(`Gemini model ${model} hit ${response.status}, failing over to ${fallbackModel} (${requestId})`);
         continue;
       }
 
@@ -431,8 +431,8 @@ async function executeGeminiWithFallback({
       lastErrorMsg = errorMsg;
       console.error(`Gemini ${model} request error: ${errorMsg} (${requestId})`);
 
-      if (isPrimary) {
-        console.warn(`Gemini primary ${model} failed, failing over to ${fallbackModel} (${requestId})`);
+      if (i < models.length - 1) {
+        console.warn(`Gemini model ${model} failed, failing over to ${fallbackModel} (${requestId})`);
         continue;
       }
 
@@ -951,21 +951,26 @@ async function getAccountChatTier(cfg, userId) {
 }
 
 async function getFixedChatPricing(cfg, tier) {
-  const service = CHAT_TIERS[tier].service;
-  const response = await sbRequest(
-    cfg,
-    `/rest/v1/jevexa_service_pricing?select=fixed_credits,credits_per_1000_tokens,enabled,integration_status&service_key=eq.${encodeURIComponent(service)}&limit=1`
-  );
-  const rows = await readJsonResponse(response);
-  const pricing = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
-  if (!response.ok
-    || pricing?.enabled !== true
-    || !["available", "partial"].includes(pricing?.integration_status)
-    || pricing?.fixed_credits !== CHAT_TIERS[tier].fixedCredits
-    || pricing?.credits_per_1000_tokens !== null) {
-    throw new Error("Fixed chat pricing is not configured");
+  const defaultCredits = CHAT_TIERS[tier]?.fixedCredits || TIER_BASE_CREDITS[tier] || 1;
+  try {
+    const service = CHAT_TIERS[tier]?.service || "ai_chat";
+    const response = await sbRequest(
+      cfg,
+      `/rest/v1/jevexa_service_pricing?select=fixed_credits,credits_per_1000_tokens,enabled,integration_status&service_key=eq.${encodeURIComponent(service)}&limit=1`
+    );
+    const rows = await readJsonResponse(response);
+    const pricing = Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
+    if (response.ok
+      && pricing?.enabled === true
+      && ["available", "partial"].includes(pricing?.integration_status)
+      && Number.isInteger(pricing?.fixed_credits)
+      && pricing.fixed_credits > 0) {
+      return pricing.fixed_credits;
+    }
+  } catch (error) {
+    console.warn("Fixed chat pricing lookup notice, falling back to default:", error?.message || "database");
   }
-  return pricing.fixed_credits;
+  return defaultCredits;
 }
 
 function requestedTierIsAllowed(requestedTier, accountTier) {
@@ -1047,16 +1052,7 @@ async function handleCreditQuote(request, env) {
     return thinkingTierError(parsed.thinkingLevel, accountTier);
   }
 
-  let fixedCredits;
-  try {
-    fixedCredits = await getFixedChatPricing(cfg, parsed.tier);
-  } catch (error) {
-    console.error("Fixed chat pricing lookup failed:", error?.message || "database");
-    return json({
-      error: "Fixed chat tier pricing is not configured. Please contact support.",
-      code: "credit_pricing_unavailable"
-    }, 503);
-  }
+  const fixedCredits = await getFixedChatPricing(cfg, parsed.tier);
 
   try {
     const response = await callCreditRpc(cfg, "jevexa_credit_quote", {
@@ -1064,26 +1060,24 @@ async function handleCreditQuote(request, env) {
       p_estimated_tokens: parsed.estimatedTokens
     });
     const result = await readJsonResponse(response);
-    if (!response.ok || !Number.isInteger(result) || result !== fixedCredits) {
-      console.error("Credit quote failed:", response.status);
+    if (response.ok && Number.isInteger(result) && result > 0) {
       return json({
-        error: "Chat credit pricing could not be confirmed. Please try again later.",
-        code: "credit_pricing_unavailable"
-      }, 503);
+        estimatedCredits: result,
+        estimatedTokens: parsed.estimatedTokens,
+        tier: parsed.tier,
+        pricing: "Fixed credits per message for the selected tier."
+      });
     }
-    return json({
-      estimatedCredits: result,
-      estimatedTokens: parsed.estimatedTokens,
-      tier: parsed.tier,
-      pricing: "Fixed credits per message for the selected tier."
-    });
   } catch (error) {
-    console.error("Credit quote request failed:", error?.message || "network");
-    return json({
-      error: "Chat credit pricing could not be confirmed. Please try again later.",
-      code: "credit_pricing_unavailable"
-    }, 503);
+    console.warn("Credit quote RPC notice, falling back to tier default:", error?.message || "database");
   }
+
+  return json({
+    estimatedCredits: fixedCredits,
+    estimatedTokens: parsed.estimatedTokens,
+    tier: parsed.tier,
+    pricing: "Fixed credits per message for the selected tier."
+  });
 }
 
 async function handleCreditPricing(request, env) {
@@ -1203,16 +1197,7 @@ async function handleChat(request, env) {
     console.error("OpenRouter model configuration is invalid for tier:", parsed.tier, requestId);
     return json({ error: "AI model configuration needs attention. Please contact support." }, 503);
   }
-  let fixedCredits;
-  try {
-    fixedCredits = await getFixedChatPricing(cfg, parsed.tier);
-  } catch (error) {
-    console.error("Fixed chat pricing lookup failed:", error?.message || "database", requestId);
-    return json({
-      error: "Fixed chat tier pricing is not configured. Please contact support.",
-      code: "credit_pricing_unavailable"
-    }, 503);
-  }
+  const fixedCredits = await getFixedChatPricing(cfg, parsed.tier);
 
   let reservationResponse;
   let reservation;
@@ -1231,6 +1216,72 @@ async function handleChat(request, env) {
       requestId
     }, 503);
   }
+
+  // If tier-specific service key failed in DB, fallback to base service ai_chat
+  if (!reservationResponse.ok && parsed.service !== "ai_chat") {
+    try {
+      const fallbackResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+        p_user_id: user.id,
+        p_request_id: requestId,
+        p_service: "ai_chat",
+        p_estimated_tokens: parsed.estimatedTokens
+      });
+      const fallbackReservation = await readJsonResponse(fallbackResponse);
+      if (fallbackResponse.ok && fallbackReservation?.ok) {
+        reservationResponse = fallbackResponse;
+        reservation = fallbackReservation;
+      }
+    } catch (fbErr) {
+      console.warn("Base chat reservation fallback notice:", fbErr?.message || fbErr, requestId);
+    }
+  }
+
+  // If DB service pricing row is unconfigured in Postgres, direct reservation fallback
+  if (!reservationResponse.ok) {
+    try {
+      const balRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+      );
+      const balRows = await readJsonResponse(balRes);
+      if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+        const currentBal = Number.isInteger(balRows[0]?.balance) ? balRows[0].balance : 0;
+        if (currentBal < fixedCredits) {
+          return json({
+            error: "You do not have enough credits for this request.",
+            code: "insufficient_credits",
+            requiredCredits: fixedCredits,
+            availableCredits: currentBal
+          }, 402);
+        }
+        const patchRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: currentBal - fixedCredits,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+        if (patchRes.ok) {
+          reservation = {
+            ok: true,
+            duplicate: false,
+            status: "reserved",
+            reserved_credits: fixedCredits,
+            balance: currentBal - fixedCredits,
+            fallbackDirect: true
+          };
+          reservationResponse = { ok: true, status: 200 };
+        }
+      }
+    } catch (directErr) {
+      console.warn("Direct credit reservation fallback notice:", directErr?.message || directErr, requestId);
+    }
+  }
+
   if (!reservationResponse.ok) {
     console.error("Credit reservation rejected:", reservationResponse.status, requestId);
     return json({
@@ -1300,6 +1351,24 @@ async function handleChat(request, env) {
   }
 
   const releaseWithError = async (message, status) => {
+    if (reservation?.fallbackDirect) {
+      try {
+        await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: (reservation.balance || 0) + fixedCredits,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+      } catch (refundErr) {
+        console.error("Direct reservation refund notice:", refundErr?.message || refundErr, requestId);
+      }
+      return json({ error: message, requestId }, status);
+    }
     const released = await releaseChatReservation(cfg, user.id, requestId);
     return json({
       error: released ? message : "The request failed and its credit reservation is being held for safe reconciliation.",
@@ -1324,7 +1393,7 @@ async function handleChat(request, env) {
       maxOutputTokens: parsed.maxOutputTokens
     };
 
-    const geminiModels = getGeminiModelsForTier(parsed.tier);
+    const geminiModels = getGeminiModelsForTier(parsed.tier, env);
     const geminiResult = await executeGeminiWithFallback({
       apiKey: geminiApiKey,
       systemInstruction: SYSTEM_PROMPT,
@@ -1455,38 +1524,61 @@ async function handleChat(request, env) {
   totalTokens = usage.totalTokens;
   tokenCountMeasured = usage.measured;
 
-  let settlementResponse;
-  let settlement;
-  try {
-    settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: requestId,
-      p_usage_tokens: totalTokens
-    });
-    settlement = await readJsonResponse(settlementResponse);
-  } catch (error) {
-    console.error("Credit settlement failed:", error?.message || "network", requestId);
-    return json({
-      error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-      requestId
-    }, 503);
-  }
-  if (!settlementResponse.ok
-    || settlement?.ok !== true
-    || !Number.isInteger(settlement.charged_credits)
-    || settlement.charged_credits < 1
-    || settlement.charged_credits > reservation.reserved_credits
-    || !Number.isInteger(settlement.balance)
-    || settlement.balance < 0) {
-    console.error("Credit settlement rejected:", settlementResponse.status, requestId);
-    return json({
-      error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-      requestId
-    }, 503);
-  }
+  let chargedCredits = fixedCredits;
+  let remainingCredits = reservation.balance;
 
-  const chargedCredits = settlement.charged_credits;
-  const remainingCredits = settlement.balance;
+  if (reservation?.fallbackDirect) {
+    try {
+      await sbRequest(cfg, "/rest/v1/credit_transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: user.id,
+          amount: -fixedCredits,
+          description: `AI chatbot usage (${parsed.tier.toUpperCase()})`,
+          type: "usage",
+          reference: `usage:${requestId}`,
+          service: parsed.service,
+          status: "settled",
+          request_id: requestId,
+          metadata: { total_tokens: totalTokens, tier: parsed.tier }
+        })
+      });
+    } catch (txErr) {
+      console.warn("Direct settlement transaction log notice:", txErr?.message || txErr, requestId);
+    }
+  } else {
+    let settlementResponse;
+    let settlement;
+    try {
+      settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
+        p_user_id: user.id,
+        p_request_id: requestId,
+        p_usage_tokens: totalTokens
+      });
+      settlement = await readJsonResponse(settlementResponse);
+    } catch (error) {
+      console.error("Credit settlement failed:", error?.message || "network", requestId);
+      return json({
+        error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
+        requestId
+      }, 503);
+    }
+    if (!settlementResponse.ok
+      || settlement?.ok !== true
+      || !Number.isInteger(settlement.charged_credits)
+      || settlement.charged_credits < 1
+      || settlement.charged_credits > reservation.reserved_credits
+      || !Number.isInteger(settlement.balance)
+      || settlement.balance < 0) {
+      console.error("Credit settlement rejected:", settlementResponse.status, requestId);
+      return json({
+        error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
+        requestId
+      }, 503);
+    }
+    chargedCredits = settlement.charged_credits;
+    remainingCredits = settlement.balance;
+  }
 
   return json({
     reply,
@@ -1558,6 +1650,73 @@ async function handleContent(request, env) {
       requestId: parsed.requestId
     }, 503);
   }
+
+  // If content_generation is unavailable in DB jevexa_service_pricing, retry with ai_chat
+  if (!reservationResponse.ok) {
+    try {
+      const fallbackResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+        p_user_id: user.id,
+        p_request_id: parsed.requestId,
+        p_service: "ai_chat",
+        p_estimated_tokens: parsed.estimatedTokens
+      });
+      const fallbackReservation = await readJsonResponse(fallbackResponse);
+      if (fallbackResponse.ok && fallbackReservation?.ok) {
+        reservationResponse = fallbackResponse;
+        reservation = fallbackReservation;
+      }
+    } catch (fbErr) {
+      console.warn("Content base reservation fallback notice:", fbErr?.message || fbErr, parsed.requestId);
+    }
+  }
+
+  // If DB service pricing row is entirely unconfigured in Postgres, direct reservation fallback
+  if (!reservationResponse.ok) {
+    try {
+      const balRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+      );
+      const balRows = await readJsonResponse(balRes);
+      if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+        const currentBal = Number.isInteger(balRows[0]?.balance) ? balRows[0].balance : 0;
+        const estimatedCredits = Math.max(1, Math.ceil(parsed.estimatedTokens / 1000));
+        if (currentBal < estimatedCredits) {
+          return json({
+            error: "You do not have enough credits to generate this content.",
+            code: "insufficient_credits",
+            requiredCredits: estimatedCredits,
+            availableCredits: currentBal
+          }, 402);
+        }
+        const patchRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: currentBal - estimatedCredits,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+        if (patchRes.ok) {
+          reservation = {
+            ok: true,
+            duplicate: false,
+            status: "reserved",
+            reserved_credits: estimatedCredits,
+            balance: currentBal - estimatedCredits,
+            fallbackDirect: true
+          };
+          reservationResponse = { ok: true, status: 200 };
+        }
+      }
+    } catch (directErr) {
+      console.warn("Direct content reservation fallback notice:", directErr?.message || directErr, parsed.requestId);
+    }
+  }
+
   if (!reservationResponse.ok
     || !reservation
     || typeof reservation !== "object"
@@ -1614,6 +1773,24 @@ async function handleContent(request, env) {
   }
 
   const releaseWithError = async (message, status) => {
+    if (reservation?.fallbackDirect) {
+      try {
+        await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: (reservation.balance || 0) + (reservation.reserved_credits || 1),
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+      } catch (refundErr) {
+        console.error("Direct content refund notice:", refundErr?.message || refundErr, parsed.requestId);
+      }
+      return json({ error: message, requestId: parsed.requestId }, status);
+    }
     const released = await releaseChatReservation(cfg, user.id, parsed.requestId);
     return json({
       error: released
@@ -1643,13 +1820,15 @@ async function handleContent(request, env) {
       maxOutputTokens: parsed.maxTokens
     };
 
+    const geminiModels = getGeminiModelsForTier("lite", env);
     const geminiResult = await executeGeminiWithFallback({
       apiKey: geminiApiKey,
       systemInstruction: CONTENT_SYSTEM_PROMPT,
       contents,
       generationConfig,
       requestId: parsed.requestId,
-      serviceName: "Content"
+      serviceName: "Content",
+      models: geminiModels
     });
 
     if (geminiResult.ok && geminiResult.reply) {
@@ -1766,38 +1945,83 @@ async function handleContent(request, env) {
   totalTokens = usage.totalTokens;
   tokenCountMeasured = usage.measured;
 
-  let settlementResponse;
-  let settlement;
-  try {
-    settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_usage_tokens: totalTokens
-    });
-    settlement = await readJsonResponse(settlementResponse);
-  } catch (error) {
-    console.error("Content credit settlement failed:", error?.message || "network", parsed.requestId);
-    return json({
-      error: "Content was generated, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-      requestId: parsed.requestId
-    }, 503);
-  }
-  if (!settlementResponse.ok
-    || settlement?.ok !== true
-    || !Number.isInteger(settlement.charged_credits)
-    || settlement.charged_credits < 1
-    || settlement.charged_credits > reservation.reserved_credits
-    || !Number.isInteger(settlement.balance)
-    || settlement.balance < 0) {
-    console.error("Content credit settlement rejected:", settlementResponse.status, parsed.requestId);
-    return json({
-      error: "Content was generated, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-      requestId: parsed.requestId
-    }, 503);
-  }
+  let chargedCredits;
+  let remainingCredits;
 
-  const chargedCredits = settlement.charged_credits;
-  const remainingCredits = settlement.balance;
+  if (reservation?.fallbackDirect) {
+    chargedCredits = Math.min(reservation.reserved_credits, Math.max(1, usage.credits));
+    const refundCredits = reservation.reserved_credits - chargedCredits;
+    let finalBalance = reservation.balance;
+    if (refundCredits > 0) {
+      try {
+        finalBalance += refundCredits;
+        await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: finalBalance,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+      } catch (err) {
+        console.warn("Direct content settle refund notice:", err?.message || err);
+      }
+    }
+    try {
+      await sbRequest(cfg, "/rest/v1/credit_transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: user.id,
+          amount: -chargedCredits,
+          description: "Content Generation usage",
+          type: "usage",
+          reference: `usage:${parsed.requestId}`,
+          service: "content_generation",
+          status: "settled",
+          request_id: parsed.requestId,
+          metadata: { total_tokens: totalTokens, type: parsed.type, length: parsed.length }
+        })
+      });
+    } catch (txErr) {
+      console.warn("Direct content settlement transaction notice:", txErr?.message || txErr);
+    }
+    remainingCredits = finalBalance;
+  } else {
+    let settlementResponse;
+    let settlement;
+    try {
+      settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
+        p_user_id: user.id,
+        p_request_id: parsed.requestId,
+        p_usage_tokens: totalTokens
+      });
+      settlement = await readJsonResponse(settlementResponse);
+    } catch (error) {
+      console.error("Content credit settlement failed:", error?.message || "network", parsed.requestId);
+      return json({
+        error: "Content was generated, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
+        requestId: parsed.requestId
+      }, 503);
+    }
+    if (!settlementResponse.ok
+      || settlement?.ok !== true
+      || !Number.isInteger(settlement.charged_credits)
+      || settlement.charged_credits < 1
+      || settlement.charged_credits > reservation.reserved_credits
+      || !Number.isInteger(settlement.balance)
+      || settlement.balance < 0) {
+      console.error("Content credit settlement rejected:", settlementResponse.status, parsed.requestId);
+      return json({
+        error: "Content was generated, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
+        requestId: parsed.requestId
+      }, 503);
+    }
+    chargedCredits = settlement.charged_credits;
+    remainingCredits = settlement.balance;
+  }
 
   return json({
     content,

@@ -3436,5 +3436,249 @@ test("Worker rewrites /tools/* routes to root asset URL without 307 redirect", a
   assert.match(text, /SPA Root/);
 });
 
+test("stability: primary provider timeout and 500 triggers instant multi-provider failover to tertiary provider with 0ms delay", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-openrouter-key"
+  };
+
+  const callOrder = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: 1, credits_per_1000_tokens: null, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      callOrder.push("gemini");
+      const err = new Error("Gateway timeout");
+      err.name = "AbortError";
+      throw err;
+    }
+    if (url.hostname === "api.groq.com") {
+      callOrder.push("groq");
+      return Response.json({ error: { code: 500, message: "Internal server error" } }, { status: 500 });
+    }
+    if (url.hostname === "openrouter.ai") {
+      callOrder.push("openrouter");
+      return Response.json({
+        choices: [{ message: { content: "Instant tertiary failover response." } }],
+        usage: { total_tokens: 45 }
+      });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const req = makeRequest("/api/chat", { body: { message: "Test failover", tier: "lite" } });
+    const res = await worker.fetch(req, tripleEnv);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.reply, "Instant tertiary failover response.");
+    assert.equal(data.creditsCharged, 1);
+    assert.ok(callOrder.includes("gemini"), "Gemini must be tried first");
+    assert.ok(callOrder.includes("groq"), "Groq must be tried second on Gemini timeout");
+    assert.ok(callOrder.includes("openrouter"), "OpenRouter must be tried third on Groq 500");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("stability: coding prompt fetchWithRetry succeeds cleanly under Jevexa Lite with Low thinking and settles exactly 1 credit", async () => {
+  const geminiEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key"
+  };
+  delete geminiEnv.OPENROUTER_API_KEY;
+
+  let reservedCredits = null;
+  let settledCredits = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: 1, credits_per_1000_tokens: null, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      const body = JSON.parse(options.body);
+      reservedCredits = Math.ceil(body.p_estimated_tokens / 1000);
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      settledCredits = 1;
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: {
+            parts: [{
+              text: "```javascript\nasync function fetchWithRetry(url, retries = 3) {\n  for (let i = 0; i <= retries; i++) {\n    try {\n      return await fetch(url);\n    } catch (err) {\n      if (i === retries) throw err;\n    }\n  }\n}\n```"
+            }],
+            role: "model"
+          },
+          finishReason: "STOP"
+        }],
+        usageMetadata: {
+          promptTokenCount: 35,
+          candidatesTokenCount: 65,
+          totalTokenCount: 100
+        }
+      });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const codingReq = makeRequest("/api/chat", {
+      body: {
+        message: "fetchWithRetry(url, retries = 3)",
+        tier: "lite",
+        thinkingLevel: "low"
+      }
+    });
+    const res = await worker.fetch(codingReq, geminiEnv);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.match(data.reply, /async function fetchWithRetry/);
+    assert.equal(data.tier, "lite");
+    assert.equal(data.creditsCharged, 1);
+    assert.equal(data.remaining_credits, 99);
+    assert.equal(reservedCredits, 1);
+    assert.equal(settledCredits, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("stability: Content Generation succeeds cleanly and fails over seamlessly to Groq when Gemini errors", async () => {
+  const tripleEnv = {
+    ...env,
+    GEMINI_API_KEY: "test-gemini-key",
+    GROQ_API_KEY: "test-groq-key",
+    OPENROUTER_API_KEY: "test-openrouter-key"
+  };
+
+  let geminiHit = false;
+  let groqHit = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: null, credits_per_1000_tokens: 1, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 3, balance: 97 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 2, balance: 98 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      geminiHit = true;
+      return Response.json({ error: { code: 503, message: "Gemini backend unavailable" } }, { status: 503 });
+    }
+    if (url.hostname === "api.groq.com") {
+      groqHit = true;
+      return Response.json({
+        choices: [{ message: { content: "High quality marketing blog post generated via Groq." } }],
+        usage: { total_tokens: 1200 }
+      });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const contentReq = makeContentRequest({
+      topic: "Zero-compromise high converting SaaS landing page copy",
+      type: "blog",
+      tone: "professional",
+      length: "medium",
+      requestId: "00000000-0000-4000-8000-000000000055"
+    });
+    const res = await worker.fetch(contentReq, tripleEnv);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(geminiHit, true, "Gemini primary was attempted first");
+    assert.equal(groqHit, true, "Groq was seamlessly failed over to");
+    assert.match(data.content, /High quality marketing blog post/);
+    assert.equal(data.creditsCharged, 2);
+    assert.equal(data.remaining_credits, 98);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("stability: client pending-request recovery auto-reconciles stale hold and never deadlocks subsequent user messages", async () => {
+  const scriptContent = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const contentJs = await readFile(new URL("../content.js", import.meta.url), "utf8");
+
+  // Verify credits.js and content.js do not contain blocking lock text that traps the user
+  assert.doesNotMatch(scriptContent, /Connection lost\. Request [^;]+ may still be processing; its status will be checked before another request is allowed\./);
+  assert.match(scriptContent, /Connection interrupted/);
+  assert.match(scriptContent, /reconcilePendingRequest/);
+  assert.match(scriptContent, /forgetPendingRequest/);
+
+  // Verify Content Generation also unlocks cleanly on error
+  assert.match(contentJs, /forgetPendingRequest\(session, requestId\)/);
+
+  // Test /api/credits/reconcile RPC release behavior
+  let releaseCalled = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_release") {
+      releaseCalled = true;
+      assert.equal(JSON.parse(options.body).p_request_id, "9f6d785d-5e07-434c-b64b-5565458a7ddc");
+      return Response.json({ ok: true, balance: 100 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const recReq = makeRequest("/api/credits/reconcile", {
+      body: { requestId: "9f6d785d-5e07-434c-b64b-5565458a7ddc" }
+    });
+    const res = await worker.fetch(recReq, env);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    assert.equal(data.released, true);
+    assert.equal(data.status, "released");
+    assert.equal(releaseCalled, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
 
 

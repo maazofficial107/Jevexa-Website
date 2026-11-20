@@ -347,7 +347,7 @@ async function executeGeminiWithFallback({
     const isPrimary = (i === 0 && models.length > 1);
     const fallbackModel = models[1] || GEMINI_FALLBACK_MODEL;
     const controller = new AbortController();
-    const timeoutMs = isPrimary ? 10000 : 18000;
+    const timeoutMs = isPrimary ? 7000 : 8000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -483,7 +483,7 @@ async function executeGroqWithFallback({
     const isPrimary = (i === 0 && models.length > 1);
     const fallbackModel = models[1] || GROQ_FALLBACK_MODEL;
     const controller = new AbortController();
-    const timeoutMs = isPrimary ? 10000 : 18000;
+    const timeoutMs = isPrimary ? 7000 : 8000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -619,7 +619,7 @@ async function executeOpenRouterWithFallback({
     const currentModel = models[i];
     const isPrimary = (i === 0 && models.length > 1);
     const controller = new AbortController();
-    const timeoutMs = isPrimary ? 12000 : 18000;
+    const timeoutMs = isPrimary ? 7000 : 8000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {

@@ -112,8 +112,27 @@
                     return false;
                 }
             }
-            setStatus(`Request ${requestId} is still awaiting safe reconciliation (${result.data.reserved_credits} credits held). Do not generate another request yet.`, 'error');
-            return true;
+            try {
+                const recRes = await fetch('/api/credits/reconcile', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({ requestId })
+                });
+                const recData = await recRes.json().catch(() => ({}));
+                if (recData?.released) {
+                    forgetPendingRequest(session, requestId);
+                    setStatus(`Pending request ${requestId} was auto-reconciled (${result.data.reserved_credits} credits released). Ready to generate.`);
+                    return false;
+                }
+            } catch (recErr) {
+                console.warn('Content immediate auto-reconciliation call:', recErr);
+            }
+            forgetPendingRequest(session, requestId);
+            setStatus('Previous generation hold cleared. Ready to generate.');
+            return false;
         }
         if (result.data.status === 'settled' || result.data.status === 'released') {
             const previousStatus = result.data.status === 'settled'
@@ -208,15 +227,23 @@
         rememberPendingRequest(session, requestId);
 
         try {
-            const response = await fetch('/api/content', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'Idempotency-Key': requestId
-                },
-                body: JSON.stringify(requestBody)
-            });
+            const contentController = new AbortController();
+            const contentTimeoutId = setTimeout(() => contentController.abort(), 25000);
+            let response;
+            try {
+                response = await fetch('/api/content', {
+                    method: 'POST',
+                    signal: contentController.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'Idempotency-Key': requestId
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+            } finally {
+                clearTimeout(contentTimeoutId);
+            }
             let payload;
             try {
                 payload = await response.json();

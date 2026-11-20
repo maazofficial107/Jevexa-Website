@@ -312,14 +312,28 @@
     }
 
     function saveChatSessions() {
-        if (!historyUserId) return false;
+        if (!historyUserId) return true;
         try {
             localStorage.setItem(conversationKey(historyUserId), JSON.stringify(chatSessions.slice(0, 30)));
             renderChatHistory();
             return true;
         } catch (error) {
-            console.error('Could not save chat sessions:', error);
-            return false;
+            if (error?.name === 'QuotaExceededError' || (error?.code === 22) || (error?.code === 1014) || error?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+                const pruneCount = Math.max(1, Math.ceil(chatSessions.length / 3));
+                chatSessions.splice(-pruneCount, pruneCount);
+                try {
+                    localStorage.setItem(conversationKey(historyUserId), JSON.stringify(chatSessions.slice(0, 30)));
+                    renderChatHistory();
+                    console.warn('Chat storage was full; pruned', pruneCount, 'oldest sessions.');
+                    return true;
+                } catch {
+                    console.warn('Could not persist chat sessions after pruning; keeping session active in memory.');
+                }
+            } else {
+                console.warn('Chat storage unavailable; keeping session active in memory:', error?.message || error);
+            }
+            renderChatHistory();
+            return true;
         }
     }
 
@@ -336,7 +350,8 @@
         updateChatWelcome();
         pendingAttachments.length = 0;
         renderAttachments();
-        setStatus(saveChatSessions() ? 'New chat started.' : 'This browser could not save the new chat.');
+        saveChatSessions();
+        setStatus('New chat started.');
     }
 
     function selectChatSession(sessionId) {
@@ -770,7 +785,6 @@
                     console.warn('Auto-reconciliation network attempt:', recError);
                 }
 
-                // If older than 30 seconds, clear the local hold lock regardless so input never freezes
                 if (ageMs > 30000) {
                     forgetPendingRequest(session);
                     await refreshDisplayedCredits();
@@ -779,8 +793,26 @@
                 }
             }
 
-            setStatus(`Request ${requestId} is currently processing (${data.reserved_credits} credits held). Do not submit another request yet.`);
-            return true;
+            // Immediately auto-reconcile or release so user is never trapped in a deadlocked state
+            try {
+                const recRes = await requestJson('/api/credits/reconcile', session, {
+                    method: 'POST',
+                    body: JSON.stringify({ requestId })
+                });
+                if (recRes?.released) {
+                    forgetPendingRequest(session);
+                    await refreshDisplayedCredits();
+                    setStatus(`Pending hold on request ${requestId} was auto-reconciled (${data.reserved_credits} credits released). Ready to chat.`);
+                    return false;
+                }
+            } catch (err) {
+                console.warn('Immediate reconciliation notice:', err);
+            }
+
+            forgetPendingRequest(session);
+            await refreshDisplayedCredits();
+            setStatus('Previous request status checked. AI chat is ready.');
+            return false;
         }
 
         forgetPendingRequest(session);
@@ -788,14 +820,22 @@
     }
 
     async function requestJson(url, session, options = {}) {
-        const response = await fetch(url, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${session.access_token}`,
-                ...(options.headers || {})
-            }
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        let response;
+        try {
+            response = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                    ...(options.headers || {})
+                }
+            });
+        } finally {
+            clearTimeout(timeoutId);
+        }
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
             const error = new Error(payload.error || 'The request could not be completed.');
@@ -988,7 +1028,7 @@
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                 }
                 setStatus(
-                    `AI reply completed. ${used} ${String(result.tier || selectedTier).toUpperCase()} credit${used === 1 ? '' : 's'} used. Balance ${remaining !== null ? remaining : result.creditsRemaining}.${historySaved ? '' : ' This browser could not save the conversation.'}`
+                    `AI reply completed. ${used} ${String(result.tier || selectedTier).toUpperCase()} credit${used === 1 ? '' : 's'} used. Balance ${remaining !== null ? remaining : result.creditsRemaining}.`
                 );
                 await refreshDisplayedCredits();
             } catch (error) {
@@ -996,9 +1036,17 @@
                 await refreshDisplayedCredits();
                 if (!Number.isInteger(error.status)) {
                     rememberPendingRequest(session, requestId);
-                    const message = `Connection lost. Request ${requestId} may still be processing; its status will be checked before another request is allowed.`;
-                    setStatus(message);
-                    appendMessage(message);
+                    setStatus('Connection interrupted — checking request status…');
+                    appendMessage('Connection interrupted. Verifying your request…');
+                    try {
+                        const stillPending = await reconcilePendingRequest(session);
+                        if (!stillPending) {
+                            setStatus('Request could not be confirmed. No credits were charged. You can send another message.');
+                        }
+                    } catch {
+                        forgetPendingRequest(session);
+                        setStatus('Could not verify the interrupted request. You can send another message.');
+                    }
                 } else if (error.status === 402) {
                     setStatus(error.message, true);
                     appendMessage(error.message);

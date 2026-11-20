@@ -347,7 +347,7 @@ async function executeGeminiWithFallback({
     const isPrimary = (i === 0 && models.length > 1);
     const fallbackModel = models[1] || GEMINI_FALLBACK_MODEL;
     const controller = new AbortController();
-    const timeoutMs = isPrimary ? 7000 : 8000;
+    const timeoutMs = isPrimary ? 6000 : 7000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -483,7 +483,7 @@ async function executeGroqWithFallback({
     const isPrimary = (i === 0 && models.length > 1);
     const fallbackModel = models[1] || GROQ_FALLBACK_MODEL;
     const controller = new AbortController();
-    const timeoutMs = isPrimary ? 7000 : 8000;
+    const timeoutMs = isPrimary ? 5500 : 6500;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -619,7 +619,7 @@ async function executeOpenRouterWithFallback({
     const currentModel = models[i];
     const isPrimary = (i === 0 && models.length > 1);
     const controller = new AbortController();
-    const timeoutMs = isPrimary ? 7000 : 8000;
+    const timeoutMs = isPrimary ? 6000 : 7000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -1574,18 +1574,35 @@ async function handleChat(request, env) {
   } else {
     let settlementResponse;
     let settlement;
+    const safeTotalTokens = Math.max(1, Math.min(50000, Math.round(Number(totalTokens) || 1000)));
     try {
       settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
         p_user_id: user.id,
         p_request_id: requestId,
-        p_usage_tokens: totalTokens
+        p_usage_tokens: safeTotalTokens
       });
       settlement = await readJsonResponse(settlementResponse);
+      if (!settlementResponse.ok && settlementResponse.status >= 500) {
+        try {
+          const retryRes = await callCreditRpc(cfg, "jevexa_credit_settle", {
+            p_user_id: user.id,
+            p_request_id: requestId,
+            p_usage_tokens: safeTotalTokens
+          });
+          const retryData = await readJsonResponse(retryRes);
+          if (retryRes.ok && retryData?.ok) {
+            settlementResponse = retryRes;
+            settlement = retryData;
+          }
+        } catch { /* ignore retry error */ }
+      }
     } catch (error) {
       console.error("Credit settlement failed:", error?.message || "network", requestId);
       return json({
+        reply,
         error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-        requestId
+        requestId,
+        unconfirmedSettlement: true
       }, 503);
     }
     if (!settlementResponse.ok
@@ -1597,8 +1614,10 @@ async function handleChat(request, env) {
       || settlement.balance < 0) {
       console.error("Credit settlement rejected:", settlementResponse.status, requestId);
       return json({
+        reply,
         error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-        requestId
+        requestId,
+        unconfirmedSettlement: true
       }, 503);
     }
     chargedCredits = settlement.charged_credits;
@@ -2017,18 +2036,38 @@ async function handleContent(request, env) {
   } else {
     let settlementResponse;
     let settlement;
+    const maxAllowedTokens = reservation.reserved_credits
+      ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
+      : 50000;
+    const safeTotalTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1000)));
     try {
       settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
         p_user_id: user.id,
         p_request_id: parsed.requestId,
-        p_usage_tokens: totalTokens
+        p_usage_tokens: safeTotalTokens
       });
       settlement = await readJsonResponse(settlementResponse);
+      if (!settlementResponse.ok && settlementResponse.status >= 500) {
+        try {
+          const retryRes = await callCreditRpc(cfg, "jevexa_credit_settle", {
+            p_user_id: user.id,
+            p_request_id: parsed.requestId,
+            p_usage_tokens: safeTotalTokens
+          });
+          const retryData = await readJsonResponse(retryRes);
+          if (retryRes.ok && retryData?.ok) {
+            settlementResponse = retryRes;
+            settlement = retryData;
+          }
+        } catch { /* ignore retry failure */ }
+      }
     } catch (error) {
       console.error("Content credit settlement failed:", error?.message || "network", parsed.requestId);
       return json({
+        content,
         error: "Content was generated, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-        requestId: parsed.requestId
+        requestId: parsed.requestId,
+        unconfirmedSettlement: true
       }, 503);
     }
     if (!settlementResponse.ok
@@ -2040,8 +2079,10 @@ async function handleContent(request, env) {
       || settlement.balance < 0) {
       console.error("Content credit settlement rejected:", settlementResponse.status, parsed.requestId);
       return json({
+        content,
         error: "Content was generated, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-        requestId: parsed.requestId
+        requestId: parsed.requestId,
+        unconfirmedSettlement: true
       }, 503);
     }
     chargedCredits = settlement.charged_credits;
@@ -2162,7 +2203,6 @@ async function handleSupportTicket(request, env) {
     return json({ error: "Please enter a valid email address." }, 400);
   }
   const resendApiKey = String(env.RESEND_API_KEY || "").trim();
-  if (!resendApiKey) return json({ error: "Human support notifications are not configured." }, 503);
   if (!allowSupportTicketRequest(request)) {
     return json({ error: "Too many support requests. Please try again later." }, 429);
   }
@@ -2173,6 +2213,7 @@ async function handleSupportTicket(request, env) {
   } catch {
     return json({ error: "Support ticket storage is not configured." }, 503);
   }
+
   let createdTicketId = null;
   try {
     const response = await sbRequest(cfg, "/rest/v1/support_tickets?select=id", {
@@ -2193,35 +2234,35 @@ async function handleSupportTicket(request, env) {
     }
     const ticketId = tickets[0].id;
     createdTicketId = ticketId;
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${resendApiKey}`
-      },
-      body: JSON.stringify({
-        from: env.CONTACT_FROM_EMAIL || "onboarding@resend.dev",
-        to: ["maazofficial107@gmail.com"],
-        reply_to: email,
-        subject: `JEVEXA support ticket ${ticketId}: ${subject}`,
-        html: `<div style="font-family:Arial,sans-serif;line-height:1.7"><h2>New JEVEXA support ticket</h2><p><strong>Ticket:</strong> ${escapeHtml(ticketId)}</p><p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> ${escapeHtml(email)}</p><p><strong>Subject:</strong> ${escapeHtml(subject)}</p><p><strong>Message:</strong></p><p>${escapeHtml(message).replace(/\r?\n/g, "<br>")}</p></div>`
-      })
-    });
-    if (!emailResponse.ok) {
-      console.error("Support ticket notification failed:", emailResponse.status, ticketId);
-      return json({
-        error: "Your ticket was saved, but the support notification could not be sent. Please keep this ticket reference.",
-        ticketId
-      }, 502);
+
+    if (resendApiKey) {
+      try {
+        const emailResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${resendApiKey}`
+          },
+          body: JSON.stringify({
+            from: env.CONTACT_FROM_EMAIL || "onboarding@resend.dev",
+            to: ["maazofficial107@gmail.com"],
+            reply_to: email,
+            subject: `JEVEXA support ticket ${ticketId}: ${subject}`,
+            html: `<div style="font-family:Arial,sans-serif;line-height:1.7"><h2>New JEVEXA support ticket</h2><p><strong>Ticket:</strong> ${escapeHtml(ticketId)}</p><p><strong>Name:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> ${escapeHtml(email)}</p><p><strong>Subject:</strong> ${escapeHtml(subject)}</p><p><strong>Message:</strong></p><p>${escapeHtml(message).replace(/\r?\n/g, "<br>")}</p></div>`
+          })
+        });
+        if (!emailResponse.ok) {
+          console.warn("Support ticket notification email notice:", emailResponse.status, ticketId);
+        }
+      } catch (emailErr) {
+        console.warn("Support ticket notification email network notice:", emailErr?.message || emailErr, ticketId);
+      }
     }
     return json({ success: true, ticketId }, 201);
   } catch (error) {
     console.error("Support ticket persistence failed:", error?.message || "database");
     if (createdTicketId) {
-      return json({
-        error: "Your ticket was saved, but the support notification could not be sent. Please keep this ticket reference.",
-        ticketId: createdTicketId
-      }, 502);
+      return json({ success: true, ticketId: createdTicketId }, 201);
     }
     return json({ error: "Your support request could not be saved. Please try again later." }, 502);
   }
@@ -2371,7 +2412,7 @@ async function handleSupportAi(request, env) {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12_000);
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -2789,7 +2830,7 @@ async function handleCreditReconcile(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // Handle CORS preflight for everything
@@ -2798,51 +2839,51 @@ export default {
     }
 
     if (url.pathname === "/api/chat" || url.pathname === "/api/ai/chat") {
-      return handleChat(request, env);
+      return handleChat(request, env, ctx);
     }
 
     if (url.pathname === "/api/credits/reconcile" || url.pathname === "/api/credits/release") {
-      return handleCreditReconcile(request, env);
+      return handleCreditReconcile(request, env, ctx);
     }
 
     if (url.pathname === "/api/content") {
-      return handleContent(request, env);
+      return handleContent(request, env, ctx);
     }
 
     if (url.pathname === "/api/credits/quote") {
-      return handleCreditQuote(request, env);
+      return handleCreditQuote(request, env, ctx);
     }
 
     if (url.pathname === "/api/credits/pricing") {
-      return handleCreditPricing(request, env);
+      return handleCreditPricing(request, env, ctx);
     }
 
     if (url.pathname === "/api/contact") {
-      return handleContact(request, env);
+      return handleContact(request, env, ctx);
     }
 
     if (url.pathname === "/api/support-ticket" || url.pathname === "/api/support/tickets") {
-      return handleSupportTicket(request, env);
+      return handleSupportTicket(request, env, ctx);
     }
 
     if (url.pathname === "/api/support/ai") {
-      return handleSupportAi(request, env);
+      return handleSupportAi(request, env, ctx);
     }
 
     if (url.pathname === "/api/billing/checkout") {
-      return createSafepayCheckout(request, env);
+      return createSafepayCheckout(request, env, ctx);
     }
 
     if (url.pathname === "/api/safepay/webhook") {
-      return handleSafepayWebhook(request, env);
+      return handleSafepayWebhook(request, env, ctx);
     }
 
     if (url.pathname === "/api/billing/status") {
-      return billingStatus(request, env);
+      return billingStatus(request, env, ctx);
     }
 
     if (url.pathname === "/api/admin/contacts") {
-      return handleAdminContacts(request, env);
+      return handleAdminContacts(request, env, ctx);
     }
     if (url.pathname === "/api/health") {
       let pricingStatus = "active";

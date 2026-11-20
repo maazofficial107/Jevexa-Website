@@ -426,8 +426,9 @@
             }
             renderChatHistory();
         } catch (error) {
-            console.error('Could not restore chat history:', error);
-            setStatus('Saved chat history could not be restored. Start a new chat to continue.');
+            console.warn('Chat history restore notice:', error?.message || error);
+            chatSessions = [];
+            createChatSession();
         }
     }
 
@@ -696,8 +697,7 @@
             localStorage.setItem(pendingRequestKey(session.user.id), requestId);
             localStorage.setItem(pendingRequestKey(session.user.id) + '_time', String(Date.now()));
         } catch (error) {
-            console.error('Could not persist pending credit request:', error);
-            setStatus(`Request ${requestId} may still be processing. Keep this page open and check your balance/history before retrying.`);
+            console.warn('Could not persist pending credit request to storage:', error);
         }
     }
 
@@ -821,7 +821,7 @@
 
     async function requestJson(url, session, options = {}) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
         let response;
         try {
             response = await fetch(url, {
@@ -1034,6 +1034,18 @@
             } catch (error) {
                 removeTyping();
                 await refreshDisplayedCredits();
+                if (error.payload?.reply) {
+                    const replyText = String(error.payload.reply).trim();
+                    conversation.push({ role: 'user', text: displayText });
+                    conversation.push({ role: 'assistant', text: replyText });
+                    appendMessage(replyText, false, conversation.length - 1);
+                    if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
+                    persistConversation(session.user.id);
+                    forgetPendingRequest(session);
+                    setStatus('AI reply completed. (Credits will reconcile automatically).');
+                    await refreshDisplayedCredits();
+                    return;
+                }
                 if (!Number.isInteger(error.status)) {
                     rememberPendingRequest(session, requestId);
                     setStatus('Connection interrupted — checking request status…');
@@ -1055,8 +1067,23 @@
                     appendMessage(error.message);
                 } else if (error.payload?.requestId && /reservation.*held/i.test(error.message)) {
                     rememberPendingRequest(session, requestId);
-                    setStatus(`${error.message} Request ${requestId} is held for reconciliation.`);
-                    appendMessage(error.message);
+                    setStatus('Checking request status…');
+                    try {
+                        const recRes = await requestJson('/api/credits/reconcile', session, {
+                            method: 'POST',
+                            body: JSON.stringify({ requestId })
+                        });
+                        if (recRes?.released) {
+                            forgetPendingRequest(session);
+                            await refreshDisplayedCredits();
+                            setStatus('Held credits were released. You can send another message.');
+                            return;
+                        }
+                    } catch (recErr) {
+                        console.warn('Auto-reconciliation notice:', recErr);
+                    }
+                    setStatus('AI is temporarily busy. Any held credits will clear automatically.');
+                    appendMessage('The previous request was held for safety and will release automatically. Please try again shortly.');
                 } else if (error.status === 409 && error.payload?.status === 'reserved') {
                     rememberPendingRequest(session, requestId);
                     const message = `Request ${requestId} is still processing. Do not submit it again.`;
@@ -1275,8 +1302,7 @@
             try {
                 localStorage.setItem(`jevexa_${historyUserId}_chat_theme`, event.target.value);
             } catch (error) {
-                console.error('Could not save chat theme:', error);
-                setStatus('Could not save this theme in your browser.');
+                console.warn('Could not save chat theme:', error);
             }
         }
     });
@@ -1287,8 +1313,7 @@
             try {
                 localStorage.setItem(`jevexa_${historyUserId}_chat_reduced_motion`, String(event.target.checked));
             } catch (error) {
-                console.error('Could not save reduced-motion preference:', error);
-                setStatus('Could not save this motion preference in your browser.');
+                console.warn('Could not save reduced-motion preference:', error);
             }
         }
     });
@@ -1298,9 +1323,7 @@
         try {
             localStorage.removeItem(conversationKey(historyUserId));
         } catch (error) {
-            console.error('Could not clear chat sessions:', error);
-            setStatus('Could not clear saved chats from this browser.');
-            return;
+            console.warn('Could not clear chat sessions from storage:', error);
         }
         createChatSession();
     });

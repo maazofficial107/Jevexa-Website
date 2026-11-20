@@ -228,7 +228,7 @@
 
         try {
             const contentController = new AbortController();
-            const contentTimeoutId = setTimeout(() => contentController.abort(), 25000);
+            const contentTimeoutId = setTimeout(() => contentController.abort(), 35000);
             let response;
             try {
                 response = await fetch('/api/content', {
@@ -251,8 +251,40 @@
                 throw new Error('The content service returned an invalid response. Please try again later.');
             }
             if (!response.ok) {
+                if (payload?.content && typeof payload.content === 'string' && payload.content.trim()) {
+                    output.textContent = payload.content;
+                    forgetPendingRequest(session, requestId);
+                    copyButton.disabled = false;
+                    downloadButton.disabled = false;
+                    setStatus('Content generated successfully! (Credits will reconcile automatically).', 'success');
+                    if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {
+                        try {
+                            await window.JEVEXA_SETTINGS.refreshCredits();
+                            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+                        } catch { /* ignore */ }
+                    }
+                    return;
+                }
                 if (requestOutcomeIsUncertain(response, payload)) {
                     rememberPendingRequest(session, payload.requestId);
+                    try {
+                        const recRes = await fetch('/api/credits/reconcile', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`
+                            },
+                            body: JSON.stringify({ requestId: payload.requestId || requestId })
+                        });
+                        const recData = await recRes.json().catch(() => ({}));
+                        if (recData?.released) {
+                            forgetPendingRequest(session, requestId);
+                            setStatus('Previous reservation cleared. Ready to generate.', 'info');
+                            return;
+                        }
+                    } catch (recErr) {
+                        console.warn('Immediate content reconciliation notice:', recErr);
+                    }
                 } else {
                     forgetPendingRequest(session, requestId);
                 }

@@ -310,7 +310,7 @@ begin
   end if;
 
   if v_charge > v_reservation.reserved_credits then
-    raise exception 'Measured usage exceeds reserved credits';
+    v_charge := v_reservation.reserved_credits;
   end if;
 
   update public.user_credits

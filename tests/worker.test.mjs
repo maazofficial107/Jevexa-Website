@@ -3679,6 +3679,151 @@ test("stability: client pending-request recovery auto-reconciles stale hold and 
   }
 });
 
+test("stability: chatbot unconfirmed settlement delivers completed AI response without losing output", async () => {
+  const customRequestId = "00000000-0000-4000-8000-000000000888";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: 1, credits_per_1000_tokens: null, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "openrouter.ai") {
+      return Response.json({
+        choices: [{ message: { content: "Here is your full code implementation:\n```js\nconsole.log('clean recovery');\n```" } }],
+        usage: { total_tokens: 250 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      // Simulate database settlement failure
+      return Response.json({ message: "database transient timeout" }, { status: 503 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const req = makeRequest("/api/chat", {
+      headers: { "Idempotency-Key": customRequestId },
+      body: {
+        message: "Implement clean recovery",
+        tier: "lite",
+        thinkingLevel: "low",
+        requestId: customRequestId
+      }
+    });
+    const res = await worker.fetch(req, env);
+    assert.equal(res.status, 503);
+    const data = await res.json();
+    // Non-negotiable requirement: generated assistant reply MUST be delivered in full
+    assert.equal(data.reply, "Here is your full code implementation:\n```js\nconsole.log('clean recovery');\n```");
+    assert.equal(data.unconfirmedSettlement, true);
+    assert.equal(data.requestId, customRequestId);
+    assert.match(data.error, /AI completed the request, but credit settlement could not be confirmed/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("stability: content generation unconfirmed settlement delivers complete content without losing output", async () => {
+  const customRequestId = "00000000-0000-4000-8000-000000000999";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: null, credits_per_1000_tokens: 1, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 2, balance: 98 });
+    }
+    if (url.hostname === "api.groq.com") {
+      return Response.json({
+        choices: [{ message: { content: "Complete 500-word SEO article for high conversion." } }],
+        usage: { total_tokens: 650 }
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      // Simulate transient settlement rejection
+      return Response.json({ message: "settlement lock timeout" }, { status: 503 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const req = makeContentRequest({
+      topic: "High conversion B2B marketing strategies",
+      type: "blog",
+      tone: "professional",
+      length: "short",
+      requestId: customRequestId
+    });
+    const res = await worker.fetch(req, groqEnv);
+    assert.equal(res.status, 503);
+    const data = await res.json();
+    // Non-negotiable requirement: generated content MUST NOT be lost
+    assert.equal(data.content, "Complete 500-word SEO article for high conversion.");
+    assert.equal(data.unconfirmedSettlement, true);
+    assert.equal(data.requestId, customRequestId);
+    assert.match(data.error, /Content was generated, but credit settlement could not be confirmed/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("stability: support ticket saves safely to Supabase with 201 even when Resend notification is not configured", async () => {
+  const envWithoutResend = { ...env };
+  delete envWithoutResend.RESEND_API_KEY;
+
+  let ticketSaved = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/rest/v1/support_tickets") {
+      ticketSaved = true;
+      assert.equal(options.method, "POST");
+      const body = JSON.parse(options.body);
+      assert.equal(body.name, "Alex Client");
+      assert.equal(body.email, "alex@example.com");
+      assert.equal(body.subject, "Inquiry");
+      assert.equal(body.message, "Need help with enterprise billing.");
+      return Response.json([{ id: "ticket-safely-persisted-999" }], { status: 201 });
+    }
+    assert.fail(`Unexpected request to ${url.pathname}`);
+  };
+
+  try {
+    const req = makeRequest("/api/support-ticket", {
+      body: {
+        name: "Alex Client",
+        email: "alex@example.com",
+        subject: "Inquiry",
+        message: "Need help with enterprise billing."
+      }
+    });
+    const res = await worker.fetch(req, envWithoutResend);
+    assert.equal(res.status, 201);
+    const data = await res.json();
+    assert.equal(data.success, true);
+    assert.equal(data.ticketId, "ticket-safely-persisted-999");
+    assert.equal(ticketSaved, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 
 
 

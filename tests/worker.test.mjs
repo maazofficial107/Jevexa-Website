@@ -810,6 +810,36 @@ test("chat tier pricing migration is idempotent and does not change wallet balan
   assert.doesNotMatch(migration, /update public\.user_credits|insert into public\.user_credits/i);
 });
 
+test("complete credit and saas schema is self-contained, idempotent, and defines compatibility views", async () => {
+  const masterSql = await readFile(new URL("../supabase/complete_credit_and_saas_schema.sql", import.meta.url), "utf8");
+  const creditSql = await readFile(new URL("../supabase/credit_system_migration.sql", import.meta.url), "utf8");
+
+  // Guaranteed compatibility view to prevent 42P01 errors
+  assert.match(masterSql, /create or replace view public\.jevexa_credit_reservations/i);
+  assert.match(creditSql, /create or replace view public\.jevexa_credit_reservations/i);
+  assert.match(masterSql, /create or replace view public\.jevexa_credit_ledger/i);
+  assert.match(masterSql, /create or replace view public\.jevexa_user_credits/i);
+
+  // Core tables created
+  assert.match(masterSql, /create table if not exists public\.user_credits/i);
+  assert.match(masterSql, /create table if not exists public\.credit_transactions/i);
+  assert.match(masterSql, /create table if not exists public\.credit_reservations/i);
+  assert.match(masterSql, /create table if not exists public\.jevexa_service_pricing/i);
+  assert.match(masterSql, /create table if not exists public\.billing_orders/i);
+  assert.match(masterSql, /create table if not exists public\.support_tickets/i);
+
+  // Core RPC functions
+  assert.match(masterSql, /create or replace function public\.jevexa_credit_quote/i);
+  assert.match(masterSql, /create or replace function public\.jevexa_credit_reserve/i);
+  assert.match(masterSql, /create or replace function public\.jevexa_credit_settle/i);
+  assert.match(masterSql, /create or replace function public\.jevexa_credit_release/i);
+  assert.match(masterSql, /create or replace function public\.jevexa_credit_adjust/i);
+  assert.match(masterSql, /create or replace function public\.jevexa_apply_safepay_payment/i);
+
+  // Pricing seed rows
+  assert.match(masterSql, /'ai_chat'[\s\S]*?'ai_chat_pro'[\s\S]*?'ai_chat_max'[\s\S]*?'ai_chat_ultra'[\s\S]*?'content_generation'/i);
+});
+
 test("chat UI exposes tier selection, local history, and supported attachments", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const client = await readFile(new URL("../credits.js", import.meta.url), "utf8");

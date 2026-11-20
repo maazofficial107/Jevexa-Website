@@ -1,6 +1,42 @@
 -- JEVEXA credit ledger and atomic AI usage reservations.
--- Run after jevexa_saas_setup.sql and safepay_billing_migration.sql.
+-- Run after jevexa_saas_setup.sql and safepay_billing_migration.sql (or run standalone).
 -- Safe to rerun. Existing balances are not reset or granted again.
+
+create extension if not exists pgcrypto;
+
+create table if not exists public.user_credits (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  balance integer not null default 100 check (balance >= 0),
+  monthly_allowance integer not null default 100 check (monthly_allowance >= 0),
+  plan text not null default 'free',
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.credit_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  amount integer not null,
+  description text not null default 'Credit activity',
+  type text not null default 'adjustment',
+  reference text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.billing_orders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plan text not null check (plan in ('starter','pro','business')),
+  billing_cycle text not null check (billing_cycle in ('monthly','yearly')),
+  amount numeric(12,2) not null check (amount > 0),
+  currency text not null default 'USD',
+  credits integer not null check (credits > 0),
+  provider text,
+  provider_order_id text unique,
+  status text not null default 'pending' check (status in ('pending','paid','failed','refunded','cancelled')),
+  checkout_url text,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
+);
 
 create table if not exists public.jevexa_service_pricing (
   service_key text primary key,
@@ -83,6 +119,21 @@ create index if not exists credit_reservations_user_status_idx
   on public.credit_reservations(user_id, status, created_at desc);
 create index if not exists credit_reservations_user_created_idx
   on public.credit_reservations(user_id, created_at desc);
+
+-- Compatibility views: guarantees zero 42P01 errors for queries referencing jevexa_ prefix
+create or replace view public.jevexa_credit_reservations as
+  select * from public.credit_reservations;
+
+create or replace view public.jevexa_credit_ledger as
+  select * from public.credit_transactions;
+
+create or replace view public.jevexa_user_credits as
+  select * from public.user_credits;
+
+grant select on public.jevexa_credit_reservations, public.jevexa_credit_ledger,
+  public.jevexa_user_credits to authenticated;
+grant all privileges on public.jevexa_credit_reservations, public.jevexa_credit_ledger,
+  public.jevexa_user_credits to service_role;
 
 alter table public.user_credits enable row level security;
 alter table public.credit_transactions enable row level security;

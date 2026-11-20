@@ -3265,4 +3265,153 @@ test("regression 3: content generation credit settlement charges measured usage 
   }
 });
 
+test("chat message 'hi' on Jevexa Lite with Low thinking sends 1000 fixed tokens to reservation and settles exactly 1 credit", async () => {
+  const originalFetch = globalThis.fetch;
+  let reserveTokensPassed = null;
+  let reservedCredits = null;
+
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        service_key: "ai_chat",
+        display_name: "AI Chat",
+        integration_status: "available",
+        fixed_credits: null,
+        credits_per_1000_tokens: 1,
+        enabled: true
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_quote") {
+      const body = JSON.parse(options.body || "{}");
+      return Response.json(Math.ceil((body.p_estimated_tokens || 1000) * 1 / 1000));
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      const body = JSON.parse(options.body || "{}");
+      reserveTokensPassed = body.p_estimated_tokens;
+      reservedCredits = Math.ceil(body.p_estimated_tokens * 1 / 1000);
+      return Response.json({
+        ok: true,
+        duplicate: false,
+        status: "reserved",
+        reserved_credits: reservedCredits,
+        balance: 100 - reservedCredits
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Hello! How can I help you today?" }] },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 12, totalTokenCount: 27 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const res = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "hi",
+        tier: "lite",
+        thinkingLevel: "low",
+        history: [
+          { role: "user", text: "Can you help me with website automation?" },
+          { role: "assistant", text: "Certainly! JEVEXA specializes in custom AI chatbots and automated workflows." }
+        ]
+      }
+    }), geminiEnv);
+
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.reply, "Hello! How can I help you today?");
+    assert.equal(data.tier, "lite");
+    assert.equal(data.creditsCharged, 1);
+    assert.equal(data.remaining_credits, 99);
+    assert.equal(reserveTokensPassed, 1000, "Fixed Lite tier passes 1000 tokens to ensure exact 1 credit calculation in DB");
+    assert.equal(reservedCredits, 1, "Reserved exactly 1 credit in DB without pricing drift rejection");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("chat message on Jevexa Pro sends 2000 fixed tokens to reservation and settles 2 credits", async () => {
+  const originalFetch = globalThis.fetch;
+  let reserveTokensPassed = null;
+
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "pro", balance: 500 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        service_key: "ai_chat_pro",
+        display_name: "AI Chat — Pro",
+        integration_status: "available",
+        fixed_credits: 2,
+        credits_per_1000_tokens: null,
+        enabled: true
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      const body = JSON.parse(options.body || "{}");
+      reserveTokensPassed = body.p_estimated_tokens;
+      return Response.json({
+        ok: true,
+        duplicate: false,
+        status: "reserved",
+        reserved_credits: 2,
+        balance: 498
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 2, balance: 498 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{
+          content: { parts: [{ text: "Hello! Pro assistant ready." }] },
+          finishReason: "STOP"
+        }],
+        usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 20, totalTokenCount: 40 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const res = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Hello Pro",
+        tier: "pro",
+        thinkingLevel: "standard"
+      }
+    }), geminiEnv);
+
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.reply, "Hello! Pro assistant ready.");
+    assert.equal(data.tier, "pro");
+    assert.equal(data.creditsCharged, 2);
+    assert.equal(data.remaining_credits, 498);
+    assert.equal(reserveTokensPassed, 2000, "Fixed Pro tier passes 2000 tokens to reservation");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 

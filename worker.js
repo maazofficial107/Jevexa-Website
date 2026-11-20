@@ -1057,13 +1057,13 @@ async function handleCreditQuote(request, env) {
   try {
     const response = await callCreditRpc(cfg, "jevexa_credit_quote", {
       p_service: parsed.service,
-      p_estimated_tokens: parsed.estimatedTokens
+      p_estimated_tokens: fixedCredits * 1000
     });
     const result = await readJsonResponse(response);
     if (response.ok && Number.isInteger(result) && result > 0) {
       return json({
         estimatedCredits: result,
-        estimatedTokens: parsed.estimatedTokens,
+        estimatedTokens: fixedCredits * 1000,
         tier: parsed.tier,
         pricing: "Fixed credits per message for the selected tier."
       });
@@ -1074,7 +1074,7 @@ async function handleCreditQuote(request, env) {
 
   return json({
     estimatedCredits: fixedCredits,
-    estimatedTokens: parsed.estimatedTokens,
+    estimatedTokens: fixedCredits * 1000,
     tier: parsed.tier,
     pricing: "Fixed credits per message for the selected tier."
   });
@@ -1206,7 +1206,7 @@ async function handleChat(request, env) {
       p_user_id: user.id,
       p_request_id: requestId,
       p_service: parsed.service,
-      p_estimated_tokens: parsed.estimatedTokens
+      p_estimated_tokens: fixedCredits * 1000
     });
     reservation = await readJsonResponse(reservationResponse);
   } catch (error) {
@@ -1224,7 +1224,7 @@ async function handleChat(request, env) {
         p_user_id: user.id,
         p_request_id: requestId,
         p_service: "ai_chat",
-        p_estimated_tokens: parsed.estimatedTokens
+        p_estimated_tokens: fixedCredits * 1000
       });
       const fallbackReservation = await readJsonResponse(fallbackResponse);
       if (fallbackResponse.ok && fallbackReservation?.ok) {
@@ -1340,6 +1340,7 @@ async function handleChat(request, env) {
     console.error("Credit reservation returned an application error:", requestId);
     return json({ error: "Could not confirm the credit reservation. Please try again." }, 503);
   }
+
   if (reservation.reserved_credits !== fixedCredits) {
     const released = await releaseChatReservation(cfg, user.id, requestId);
     return json({
@@ -1349,6 +1350,8 @@ async function handleChat(request, env) {
       requestId
     }, 503);
   }
+
+  const reservedCredits = reservation.reserved_credits;
 
   const releaseWithError = async (message, status) => {
     if (reservation?.fallbackDirect) {
@@ -1528,12 +1531,34 @@ async function handleChat(request, env) {
   let remainingCredits = reservation.balance;
 
   if (reservation?.fallbackDirect) {
+    chargedCredits = Math.min(reservedCredits, fixedCredits);
+    const refundDiff = reservedCredits - chargedCredits;
+    let finalBal = reservation.balance;
+    if (refundDiff > 0) {
+      try {
+        finalBal += refundDiff;
+        await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: finalBal,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+      } catch (err) {
+        console.warn("Direct settlement refund difference notice:", err?.message || err, requestId);
+      }
+    }
+    remainingCredits = finalBal;
     try {
       await sbRequest(cfg, "/rest/v1/credit_transactions", {
         method: "POST",
         body: JSON.stringify({
           user_id: user.id,
-          amount: -fixedCredits,
+          amount: -chargedCredits,
           description: `AI chatbot usage (${parsed.tier.toUpperCase()})`,
           type: "usage",
           reference: `usage:${requestId}`,
@@ -1567,7 +1592,7 @@ async function handleChat(request, env) {
       || settlement?.ok !== true
       || !Number.isInteger(settlement.charged_credits)
       || settlement.charged_credits < 1
-      || settlement.charged_credits > reservation.reserved_credits
+      || settlement.charged_credits > reservedCredits
       || !Number.isInteger(settlement.balance)
       || settlement.balance < 0) {
       console.error("Credit settlement rejected:", settlementResponse.status, requestId);
@@ -2820,7 +2845,36 @@ export default {
       return handleAdminContacts(request, env);
     }
     if (url.pathname === "/api/health") {
-      return json({ ok: true, service: "jevexa-worker", time: new Date().toISOString() });
+      let pricingStatus = "active";
+      try {
+        const cfg = getSupabaseConfig(env);
+        const pricingRes = await sbRequest(cfg, "/rest/v1/jevexa_service_pricing?select=service_key,fixed_credits");
+        const rows = await readJsonResponse(pricingRes);
+        if (pricingRes.ok && Array.isArray(rows)) {
+          const requiredKeys = ["ai_chat", "ai_chat_pro", "ai_chat_max", "ai_chat_ultra", "content_generation"];
+          const missingOrUnfixed = requiredKeys.some(k => {
+            const row = rows.find(r => r.service_key === k);
+            return !row || (k.startsWith("ai_chat") && (!Number.isInteger(row.fixed_credits) || row.fixed_credits < 1));
+          });
+          if (missingOrUnfixed) {
+            await sbRequest(cfg, "/rest/v1/jevexa_service_pricing", {
+              method: "POST",
+              headers: { Prefer: "resolution=merge-duplicates" },
+              body: JSON.stringify([
+                { service_key: "ai_chat", display_name: "AI Chat — Lite", integration_status: "available", fixed_credits: 1, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat_pro", display_name: "AI Chat — Pro", integration_status: "available", fixed_credits: 2, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat_max", display_name: "AI Chat — Max", integration_status: "available", fixed_credits: 4, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat_ultra", display_name: "AI Chat — Ultra", integration_status: "available", fixed_credits: 8, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "content_generation", display_name: "Content Generation", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true }
+              ])
+            });
+            pricingStatus = "seeded";
+          }
+        }
+      } catch (err) {
+        pricingStatus = "unverified: " + (err?.message || "error");
+      }
+      return json({ ok: true, service: "jevexa-worker", pricing: pricingStatus, time: new Date().toISOString() });
     }
 
     if (url.pathname === "/config.js") {

@@ -887,7 +887,6 @@
             }
 
             loadConversation(session.user.id);
-            await refreshTierAccess(session);
             if (await reconcilePendingRequest(session)) {
                 removeTyping();
                 return;
@@ -911,28 +910,41 @@
                 history: conversation.slice(-8)
             };
 
+            const fixedTierCosts = { lite: 1, pro: 2, max: 4, ultra: 8 };
             let quote = null;
             try {
-                quote = await requestJson('/api/credits/quote', session, {
-                    method: 'POST',
-                    body: JSON.stringify(chatPayload)
-                });
+                quote = await Promise.race([
+                    requestJson('/api/credits/quote', session, {
+                        method: 'POST',
+                        body: JSON.stringify(chatPayload)
+                    }),
+                    new Promise(resolve => setTimeout(resolve, 600))
+                ]);
             } catch (quoteErr) {
                 console.warn('Credit quote lookup notice:', quoteErr?.message || quoteErr);
             }
 
-            const estimatedCredits = quote?.estimatedCredits || ({ lite: 1, pro: 2, max: 4, ultra: 8 }[selectedTier] || 1);
+            const estimatedCredits = fixedTierCosts[selectedTier] || quote?.estimatedCredits || 1;
 
             let wallet = null;
-            try {
-                const walletRes = await supabaseClient
-                    .from('user_credits')
-                    .select('balance')
-                    .eq('user_id', session.user.id)
-                    .maybeSingle();
-                wallet = walletRes.data;
-            } catch (wErr) {
-                console.warn('Wallet balance check notice:', wErr?.message || wErr);
+            const countEl = document.getElementById('creditsCount');
+            const cachedBalance = countEl ? parseInt(countEl.textContent, 10) : NaN;
+            if (!isNaN(cachedBalance)) {
+                wallet = { balance: cachedBalance };
+            } else {
+                try {
+                    const walletRes = await Promise.race([
+                        supabaseClient
+                            .from('user_credits')
+                            .select('balance')
+                            .eq('user_id', session.user.id)
+                            .maybeSingle(),
+                        new Promise(resolve => setTimeout(() => resolve({ data: null }), 600))
+                    ]);
+                    wallet = walletRes?.data;
+                } catch (wErr) {
+                    console.warn('Wallet balance check notice:', wErr?.message || wErr);
+                }
             }
 
             if (wallet && Number(wallet.balance) < estimatedCredits) {
@@ -1004,7 +1016,7 @@
                     appendMessage(message);
                 } else if (error.status === 503) {
                     setStatus(warmingMessage);
-                    const isPricingConfigNotice = error.message && /pricing.*not configured/i.test(error.message);
+                    const isPricingConfigNotice = error.message && /pricing.*not configured|tier pricing|could not be confirmed/i.test(error.message);
                     const cleanMessage = isPricingConfigNotice
                         ? 'AI assistant is temporarily busy. Please try sending your message again.'
                         : (error.message && error.message !== 'Credit service is not configured.' ? error.message : warmingMessage);

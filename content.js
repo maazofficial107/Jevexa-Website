@@ -267,7 +267,8 @@
             }
             setStatus(`Content generated. ${used} credits charged; ${remaining} remaining.${balanceMessage}`, 'success');
         } catch (error) {
-            setStatus(`${error?.message || 'The content request could not be completed.'} The outcome may be uncertain; do not retry with a new request ID until it is confirmed. Reference: ${requestId}`, 'error');
+            forgetPendingRequest(session, requestId);
+            setStatus(`${error?.message || 'The content request could not be completed.'} Reference: ${requestId}`, 'error');
         } finally {
             requestInFlight = false;
             generateButton.disabled = false;

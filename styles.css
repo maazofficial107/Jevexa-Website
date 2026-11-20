@@ -9909,3 +9909,39 @@ html[data-jevexa-theme="light"] .content-skeleton-bar {
         padding: 24px 18px;
     }
 }
+
+/* Connection status banner & offline styling */
+body.is-offline .btn:not(.offline-exempt),
+body.is-offline button[type="submit"] {
+    filter: saturate(0.7);
+    transition: filter 0.3s ease;
+}
+
+.offline-indicator {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: rgba(15, 15, 35, 0.94);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 16px rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    padding: 10px 20px;
+    border-radius: 9999px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 100000;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+    opacity: 0;
+    pointer-events: none;
+    backdrop-filter: blur(12px);
+}
+
+body.is-offline .offline-indicator {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}

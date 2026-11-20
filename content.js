@@ -239,6 +239,14 @@
         event.preventDefault();
         if (requestInFlight) return;
 
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setStatus('You are currently offline. Please check your internet connection before generating content.', 'error');
+            if (typeof window.showToast === 'function') {
+                window.showToast('You are currently offline. Please reconnect to generate content.');
+            }
+            return;
+        }
+
         let session;
         try {
             session = await getSession();
@@ -404,7 +412,10 @@
             clearContentProcessing();
             output.textContent = '';
             forgetPendingRequest(session, requestId);
-            setStatus(`${error?.message || 'The content request could not be completed.'} Reference: ${requestId}`, 'error');
+            const msg = error?.name === 'AbortError'
+                ? 'The content request timed out. Please check your network and try again.'
+                : (error?.message || 'The content request could not be completed.');
+            setStatus(`${msg} Reference: ${requestId}`, 'error');
         } finally {
             clearContentProcessing();
             requestInFlight = false;
@@ -459,4 +470,13 @@
             setStatus('Download failed. Please copy the generated text instead.', 'error');
         }
     });
+
+    window.JEVEXA_RECONCILE_CONTENT = async () => {
+        try {
+            const session = await getSession();
+            if (session) {
+                await reconcilePendingRequest(session);
+            }
+        } catch (_) {}
+    };
 })();

@@ -143,6 +143,10 @@
         event.preventDefault();
         const message = aiInput.value.trim();
         if (!message || aiBusy) return;
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            addAiMessage('⚠️ You appear to be offline. Please check your internet connection and try again.');
+            return;
+        }
         aiBusy = true;
         aiSend.disabled = true;
         aiInput.disabled = true;
@@ -200,6 +204,10 @@
     bindSafe(form, 'submit', async event => {
         event.preventDefault();
         if (ticketBusy) return;
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setTicketStatus('You appear to be offline. Please check your connection and try again.', 'error');
+            return;
+        }
         
         if (submitButton) {
             submitButton.disabled = true;

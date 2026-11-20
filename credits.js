@@ -988,6 +988,14 @@
         const text = input?.value.trim();
         if (!text && pendingAttachments.length === 0) return;
 
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setStatus('You are currently offline. Please check your internet connection before sending.', true);
+            if (typeof window.showToast === 'function') {
+                window.showToast('You are currently offline. Please reconnect to send messages.');
+            }
+            return;
+        }
+
         // Strict Login Wall: Intercept unauthenticated guest immediately BEFORE sending
         let session = null;
         try {
@@ -1608,6 +1616,16 @@
             list.replaceChildren(message);
         }
     }
+
+    window.JEVEXA_RECONCILE_PENDING = async () => {
+        try {
+            const session = await getSession();
+            if (session) {
+                await reconcilePendingRequest(session);
+                await refreshDisplayedCredits();
+            }
+        } catch (_) {}
+    };
 
     window.JEVEXA_CREDITS = {
         refreshHistory: loadCreditDetails

@@ -765,7 +765,9 @@ test("content generation UI is accessible and posts only through the authenticat
   assert.match(html, /<pre id="contentOutput"/);
   assert.match(html, /<button id="contentCopy"[^>]*disabled>Copy/);
   assert.match(html, /<button id="contentDownload"[^>]*disabled>Download/);
-  assert.ok(html.indexOf('<script src="credits.js"></script>') < html.indexOf('<script src="content.js"></script>'));
+  const creditsIdx = Math.max(html.indexOf('<script src="/credits.js"></script>'), html.indexOf('<script src="credits.js"></script>'));
+  const contentIdx = Math.max(html.indexOf('<script src="/content.js"></script>'), html.indexOf('<script src="content.js"></script>'));
+  assert.ok(creditsIdx !== -1 && contentIdx !== -1 && creditsIdx < contentIdx);
   assert.match(script, /fetch\('\/api\/content'/);
   assert.match(script, /'Authorization': `Bearer \$\{session\.access_token\}`/);
   assert.match(script, /'Idempotency-Key': requestId/);
@@ -1086,7 +1088,7 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(html, /Credit packages are one-time purchases, not subscriptions/);
   assert.match(script, /monthlyPrice: 49, annualEligible: true/);
   assert.match(html, /Start free with 100 credits/);
-  assert.match(html, /src="assets\/logo\.svg" alt="JEVEXA AI"/);
+  assert.match(html, /src="\/?assets\/logo\.svg" alt="JEVEXA AI"/);
   assert.match(html, /staticPreviewNotice/);
   assert.match(html, /location\.port === '8788'/);
   assert.match(script, /const isStaticPreview = location\.port !== '8788'/);
@@ -4206,4 +4208,118 @@ test("monetization & trust compliance: public pages exist with SEO tags and foot
   // Modal backdrop dismissal
   assert.match(scriptCode, /loginModalBackdropTarget/);
   assert.match(scriptCode, /window\.JEVEXA_SAFE_INTERACTION\.bind\(loginModalBackdropTarget/);
+});
+
+test("Worker rewrites /tools/* static asset requests to root asset URLs cleanly", async () => {
+  const assetTests = [
+    { requestPath: "/tools/styles.css", expectedAsset: "/styles.css" },
+    { requestPath: "/tools/premium.css", expectedAsset: "/premium.css" },
+    { requestPath: "/tools/script.js", expectedAsset: "/script.js" },
+    { requestPath: "/tools/credits.js", expectedAsset: "/credits.js" },
+    { requestPath: "/tools/content.js", expectedAsset: "/content.js" },
+    { requestPath: "/tools/support.js", expectedAsset: "/support.js" },
+    { requestPath: "/tools/assets/logo.svg", expectedAsset: "/assets/logo.svg" },
+    { requestPath: "/tools/chatbot", expectedAsset: "/" },
+    { requestPath: "/tools/content-generator", expectedAsset: "/" },
+    { requestPath: "/tools/content", expectedAsset: "/" }
+  ];
+
+  for (const { requestPath, expectedAsset } of assetTests) {
+    let requestedAssetUrl = null;
+    const mockEnv = {
+      ASSETS: {
+        fetch: async (req) => {
+          requestedAssetUrl = req.url;
+          return new Response("OK", {
+            headers: { "Content-Type": expectedAsset.endsWith(".css") ? "text/css" : "application/javascript" }
+          });
+        }
+      }
+    };
+
+    const res = await worker.fetch(new Request(`https://jevexa.net${requestPath}`), mockEnv);
+    assert.equal(res.status, 200, `${requestPath} should return 200`);
+    assert.equal(new URL(requestedAssetUrl).pathname, expectedAsset, `${requestPath} should fetch ${expectedAsset}`);
+    assert.equal(res.headers.get("X-Content-Type-Options"), "nosniff");
+  }
+});
+
+test("Worker normalizes trailing slashes for public pages (/privacy-policy/, /about/, /terms/, /contact/)", async () => {
+  const trailingSlashRoutes = [
+    { path: "/about/", expectedAsset: "/about.html" },
+    { path: "/contact/", expectedAsset: "/contact.html" },
+    { path: "/privacy-policy/", expectedAsset: "/privacy-policy.html" },
+    { path: "/terms/", expectedAsset: "/terms.html" }
+  ];
+
+  for (const { path, expectedAsset } of trailingSlashRoutes) {
+    let requestedUrl = null;
+    const mockEnv = {
+      ASSETS: {
+        fetch: async (req) => {
+          requestedUrl = req.url;
+          return new Response(`<html><body>${expectedAsset}</body></html>`, {
+            headers: { "Content-Type": "text/html; charset=utf-8" }
+          });
+        }
+      }
+    };
+
+    const res = await worker.fetch(new Request(`https://jevexa.net${path}`), mockEnv);
+    assert.equal(res.status, 200, `${path} should return 200`);
+    assert.equal(new URL(requestedUrl).pathname, expectedAsset, `${path} should map to ${expectedAsset}`);
+    assert.equal(res.headers.get("X-Content-Type-Options"), "nosniff");
+    assert.equal(res.headers.get("X-Frame-Options"), "SAMEORIGIN");
+  }
+});
+
+test("HTML pages enforce base href='/' and root-relative static asset resolution", async () => {
+  const htmlFiles = ["../index.html", "../about.html", "../contact.html", "../privacy-policy.html", "../terms.html"];
+  for (const fileRel of htmlFiles) {
+    const content = await readFile(new URL(fileRel, import.meta.url), "utf8");
+    assert.match(content, /<base href="\/"/i, `${fileRel} must contain <base href="/"> in head`);
+    assert.match(content, /href="\/styles\.css"/, `${fileRel} must link /styles.css root-relatively`);
+    assert.match(content, /href="\/premium\.css"/, `${fileRel} must link /premium.css root-relatively`);
+    assert.match(content, /href="\/assets\/favicon\.ico"/, `${fileRel} must link /assets/favicon.ico root-relatively`);
+  }
+
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(indexHtml, /<script src="\/script\.js"><\/script>/);
+  assert.match(indexHtml, /<script src="\/credits\.js"><\/script>/);
+  assert.match(indexHtml, /<script src="\/content\.js"><\/script>/);
+  assert.match(indexHtml, /<script src="\/premium\.js"><\/script>/);
+  assert.match(indexHtml, /<script src="\/support\.js"><\/script>/);
+
+  const manifest = JSON.parse(await readFile(new URL("../site.webmanifest", import.meta.url), "utf8"));
+  assert.ok(manifest.icons.every(icon => icon.src.startsWith("/assets/")));
+});
+
+test("Frontend connection resilience and offline error recovery", async () => {
+  const scriptCode = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const supportCode = await readFile(new URL("../support.js", import.meta.url), "utf8");
+
+  // Online / offline event listeners
+  assert.match(scriptCode, /window\.addEventListener\('offline', handleOffline\)/);
+  assert.match(scriptCode, /window\.addEventListener\('online', handleOnline\)/);
+
+  // Reconcile functions exported for connection recovery
+  assert.match(creditsCode, /window\.JEVEXA_RECONCILE_PENDING\s*=/);
+  assert.match(contentCode, /window\.JEVEXA_RECONCILE_CONTENT\s*=/);
+
+  // Offline checks before network calls
+  assert.match(creditsCode, /!navigator\.onLine/);
+  assert.match(contentCode, /!navigator\.onLine/);
+  assert.match(supportCode, /!navigator\.onLine/);
+  assert.match(scriptCode, /!navigator\.onLine/);
+
+  // AbortController timeouts on checkout and contact
+  assert.match(scriptCode, /const contactController = new AbortController\(\)/);
+  assert.match(scriptCode, /const checkoutController = new AbortController\(\)/);
+  assert.match(scriptCode, /const pollController = new AbortController\(\)/);
+
+  // Anchors (#how, #contact) close workspaces cleanly and scroll
+  assert.match(scriptCode, /const targetId = hash\.replace\(\/\^#\/, ''\);/);
+  assert.match(scriptCode, /closeChatWorkspace\(false\);/);
 });

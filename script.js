@@ -117,6 +117,17 @@ function closeAllWorkspacesAndModals() {
     const chatSidebar = document.getElementById('chatSidebar');
     if (chatSidebar) chatSidebar.classList.remove('open');
 
+    const contentWorkspace = document.getElementById('contentWorkspace');
+    if (contentWorkspace) {
+        contentWorkspace.classList.remove('open');
+        contentWorkspace.setAttribute('aria-hidden', 'true');
+        contentWorkspace.hidden = true;
+    }
+
+    if (typeof window.closeComingSoonModal === 'function') {
+        window.closeComingSoonModal();
+    }
+
     const upgradeModal = document.getElementById('upgradeModal');
     if (upgradeModal) {
         upgradeModal.classList.remove('is-open');
@@ -138,11 +149,17 @@ function closeAllWorkspacesAndModals() {
 
     if (typeof closeMobileMenu === 'function') closeMobileMenu();
 
-    document.body.classList.remove('chat-modal-open', 'login-open', 'modal-open', 'menu-open');
+    document.body.classList.remove('chat-modal-open', 'workspace-open', 'coming-soon-open', 'login-open', 'modal-open', 'menu-open');
     document.documentElement.classList.remove('login-open', 'menu-open');
     document.body.style.removeProperty('overflow');
     document.body.style.removeProperty('top');
     document.documentElement.style.removeProperty('overflow');
+
+    if (window.location.pathname.startsWith('/tools')) {
+        try {
+            window.history.pushState(null, '', '/');
+        } catch (_) {}
+    }
 }
 window.JEVEXA_CLOSE_ALL_WORKSPACES = closeAllWorkspacesAndModals;
 
@@ -260,16 +277,41 @@ if (document.readyState === 'loading') {
 }
 
 window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
-    const link = event.target instanceof Element ? event.target.closest('a[href="#pricing"]') : null;
+    const link = event.target instanceof Element ? event.target.closest('a[href^="#"]') : null;
     if (!link) return;
-    if (link.closest('#chatbotWindow, #upgradeModal, #supportModal, #jevexaAccountBackdrop') || document.body.classList.contains('chat-modal-open')) {
-        event.preventDefault();
-        const plan = link.dataset.plan || link.getAttribute('data-pricing-plan') || 'pro';
-        navigateToPricingAndHighlight(plan);
+    const href = link.getAttribute('href');
+    if (!href || href === '#' || href.startsWith('#/')) return;
+    if (link.dataset.authAction) return;
+
+    if (href === '#pricing') {
+        if (link.closest('#chatbotWindow, #contentWorkspace, #upgradeModal, #supportModal, #jevexaAccountBackdrop') || document.body.classList.contains('chat-modal-open') || document.body.classList.contains('workspace-open')) {
+            event.preventDefault();
+            const plan = link.dataset.plan || link.getAttribute('data-pricing-plan') || 'pro';
+            navigateToPricingAndHighlight(plan);
+            return;
+        }
+    }
+
+    const target = document.querySelector(href);
+    if (target) {
+        if (document.body.classList.contains('chat-modal-open') || document.body.classList.contains('workspace-open') || window.location.pathname.startsWith('/tools')) {
+            event.preventDefault();
+            closeAllWorkspacesAndModals();
+            if (window.location.pathname.startsWith('/tools')) {
+                try {
+                    window.history.pushState(null, '', '/' + href);
+                } catch (_) {
+                    window.location.hash = href;
+                }
+            }
+            setTimeout(() => {
+                target.scrollIntoView({ behavior: 'smooth' });
+            }, 60);
+        }
     }
 }, {
-    matches: event => event.target instanceof Element && Boolean(event.target.closest('a[href="#pricing"]')),
-    getKey: event => event.target instanceof Element ? event.target.closest('a[href="#pricing"]') || document : document
+    matches: event => event.target instanceof Element && Boolean(event.target.closest('a[href^="#"]')),
+    getKey: event => event.target instanceof Element ? event.target.closest('a[href^="#"]') || document : document
 });
 
 // ===============================
@@ -2735,6 +2777,11 @@ window.JEVEXA_SAFE_INTERACTION.bind(document.getElementById('contactForm'), 'sub
 
 
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        showToast('You appear to be offline. Please check your internet connection.');
+        return;
+    }
+
     const submitButton = form.querySelector('button[type="submit"]');
 
     const originalButtonText = submitButton?.innerHTML;
@@ -2757,7 +2804,8 @@ window.JEVEXA_SAFE_INTERACTION.bind(document.getElementById('contactForm'), 'sub
 
         `Automation request:\n${message}`;
 
-
+    const contactController = new AbortController();
+    const contactTimeoutId = setTimeout(() => contactController.abort(), 12000);
 
     try {
 
@@ -2770,6 +2818,7 @@ window.JEVEXA_SAFE_INTERACTION.bind(document.getElementById('contactForm'), 'sub
             {
 
                 method: 'POST',
+                signal: contactController.signal,
 
                 headers: {
 
@@ -2818,6 +2867,7 @@ window.JEVEXA_SAFE_INTERACTION.bind(document.getElementById('contactForm'), 'sub
             const emailResponse = await fetch('/api/contact', {
 
                 method: 'POST',
+                signal: contactController.signal,
 
                 headers: {
 
@@ -2867,11 +2917,17 @@ window.JEVEXA_SAFE_INTERACTION.bind(document.getElementById('contactForm'), 'sub
 
         console.error('Contact form error:', error);
 
-        showToast('✕ Something went wrong. Please try again.');
+        if (error?.name === 'AbortError') {
+            showToast('Request timed out. Please check your connection and try again.');
+        } else {
+            showToast('✕ Something went wrong. Please try again.');
+        }
 
 
 
     } finally {
+
+        clearTimeout(contactTimeoutId);
 
         if (submitButton) {
 
@@ -3727,11 +3783,18 @@ const JEVEXA_PLANS = {
             const accessToken = sessionData?.session?.access_token;
             if (!accessToken) { toast('Your session expired. Please sign in again.'); openLogin(); return; }
             const originalText = planButton.textContent;
+            if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                toast('You are currently offline. Please reconnect before proceeding to checkout.');
+                return;
+            }
             planButton.disabled = true;
             planButton.textContent = 'Opening secure checkout…';
+            const checkoutController = new AbortController();
+            const checkoutTimeoutId = setTimeout(() => checkoutController.abort(), 15000);
             try {
                 const response = await fetch('/api/billing/checkout', {
                     method: 'POST',
+                    signal: checkoutController.signal,
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
                     body: JSON.stringify({ plan: planButton.dataset.plan, cycle })
                 });
@@ -3739,9 +3802,14 @@ const JEVEXA_PLANS = {
                 if (!response.ok || !result.checkoutUrl) throw new Error(result.error || 'Could not start checkout.');
                 window.location.assign(result.checkoutUrl);
             } catch (error) {
-                toast(error?.message || 'Checkout is temporarily unavailable.');
+                const message = error?.name === 'AbortError'
+                    ? 'Checkout request timed out. Please check your connection and try again.'
+                    : (error?.message || 'Checkout is temporarily unavailable.');
+                toast(message);
                 planButton.disabled = false;
                 planButton.textContent = originalText;
+            } finally {
+                clearTimeout(checkoutTimeoutId);
             }
             return;
         }
@@ -3868,8 +3936,11 @@ const JEVEXA_PLANS = {
             return;
         }
         for (let attempt = 0; attempt < 8; attempt++) {
+            const pollController = new AbortController();
+            const pollTimeoutId = setTimeout(() => pollController.abort(), 6000);
             try {
                 const response = await fetch(`/api/billing/status?tracker=${encodeURIComponent(tracker)}`, {
+                    signal: pollController.signal,
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 const status = await response.json().catch(() => ({}));
@@ -3882,7 +3953,8 @@ const JEVEXA_PLANS = {
                     if (typeof showToast === 'function') showToast('Payment was not completed. No paid credits were added.');
                     break;
                 }
-            } catch (error) { console.warn('Payment status check failed.'); }
+            } catch (error) { console.warn('Payment status check notice:', error?.message); }
+            finally { clearTimeout(pollTimeoutId); }
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
         params.delete('payment');
@@ -4172,12 +4244,34 @@ const JEVEXA_PLANS = {
     function handleCurrentRoute() {
         const path = window.location.pathname;
         const hash = window.location.hash;
+
+        // If a section anchor is present (e.g. #how, #contact, #pricing, #features, #faq, #reviews, #home)
+        if (hash && hash !== '#' && !hash.startsWith('#/tools')) {
+            const targetId = hash.replace(/^#/, '');
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                closeChatWorkspace(false);
+                closeContentWorkspace(false);
+                closeComingSoonModal();
+                if (path.startsWith('/tools')) {
+                    try {
+                        window.history.replaceState(null, '', '/' + hash);
+                    } catch (_) {}
+                }
+                setTimeout(() => {
+                    targetEl.scrollIntoView({ behavior: 'smooth' });
+                }, 50);
+                return;
+            }
+        }
+
         if (path === '/tools/chatbot' || hash === '#/tools/chatbot') {
             openChatWorkspace(false);
-        } else if (path === '/tools/content-generator' || hash === '#/tools/content-generator') {
+        } else if (path === '/tools/content-generator' || path === '/tools/content' || hash === '#/tools/content-generator' || hash === '#/tools/content') {
             openContentWorkspace(false);
         } else if (path.startsWith('/tools/') || hash.startsWith('#/tools/')) {
-            const toolId = path.replace(/^\/tools\//, '') || hash.replace(/^#\/tools\//, '');
+            const rawId = path.replace(/^\/tools\//, '') || hash.replace(/^#\/tools\//, '');
+            const toolId = (rawId === 'content' ? 'content-generator' : rawId);
             const tool = toolsConfig.find(t => t.id === toolId || t.route === path || t.route === hash.replace(/^#/, ''));
             if (tool && tool.status === 'live') {
                 if (tool.id === 'chatbot') openChatWorkspace(false);
@@ -4338,4 +4432,38 @@ const JEVEXA_PLANS = {
     } else {
         handleCurrentRoute();
     }
+})();
+
+// ==========================================================================
+// CONNECTION RESILIENCE & ONLINE / OFFLINE EVENT RECOVERY
+// ==========================================================================
+(function initConnectionResilience() {
+    function handleOffline() {
+        document.body.classList.add('is-offline');
+        if (typeof showToast === 'function') {
+            showToast('⚠️ You are currently offline. Actions will resume when connection is restored.');
+        }
+    }
+
+    function handleOnline() {
+        document.body.classList.remove('is-offline');
+        if (typeof showToast === 'function') {
+            showToast('✅ Connection restored. You are back online!');
+        }
+        if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {
+            window.JEVEXA_SETTINGS.refreshCredits().catch(() => {});
+        }
+        if (typeof window.JEVEXA_SYNC_WORKSPACE_CREDITS === 'function') {
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS();
+        }
+        if (typeof window.JEVEXA_RECONCILE_PENDING === 'function') {
+            window.JEVEXA_RECONCILE_PENDING().catch(() => {});
+        }
+        if (typeof window.JEVEXA_RECONCILE_CONTENT === 'function') {
+            window.JEVEXA_RECONCILE_CONTENT().catch(() => {});
+        }
+    }
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
 })();

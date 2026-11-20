@@ -2269,9 +2269,13 @@ async function handleContact(request, env) {
     return json({ error: "Please enter a valid email address." }, 400);
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
   try {
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${env.RESEND_API_KEY}`
@@ -2294,6 +2298,7 @@ async function handleContact(request, env) {
         `
       })
     });
+    clearTimeout(timeoutId);
 
     if (!emailResponse.ok) {
       console.error("Resend status:", emailResponse.status);
@@ -2721,7 +2726,19 @@ async function sbRequest(cfg, path, options = {}, useService = true) {
   headers.set("apikey", key);
   if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${key}`);
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  return fetch(`${cfg.url}${path}`, { ...options, headers });
+
+  let timeoutId = null;
+  let signal = options.signal;
+  if (!signal) {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), 10000);
+    signal = controller.signal;
+  }
+  try {
+    return await fetch(`${cfg.url}${path}`, { ...options, headers, signal });
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 async function getAuthenticatedUser(request, cfg) {
@@ -2786,19 +2803,27 @@ async function createSafepayCheckout(request, env) {
     orderId = orderRows[0].id;
 
     const apiBase = "https://sandbox.api.getsafepay.com";
-    const trackerResponse = await fetch(`${apiBase}/order/payments/v3/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-SFPY-MERCHANT-SECRET": secret },
-      body: JSON.stringify({
-        merchant_api_key: publicKey,
-        intent: "CYBERSOURCE",
-        mode: "payment",
-        entry_mode: "raw",
-        currency: "USD",
-        amount: Math.round(price * 100),
-        include_fees: false,  
-      })
-    });
+    const trackerController = new AbortController();
+    const trackerTimeout = setTimeout(() => trackerController.abort(), 8000);
+    let trackerResponse;
+    try {
+      trackerResponse = await fetch(`${apiBase}/order/payments/v3/`, {
+        method: "POST",
+        signal: trackerController.signal,
+        headers: { "Content-Type": "application/json", "X-SFPY-MERCHANT-SECRET": secret },
+        body: JSON.stringify({
+          merchant_api_key: publicKey,
+          intent: "CYBERSOURCE",
+          mode: "payment",
+          entry_mode: "raw",
+          currency: "USD",
+          amount: Math.round(price * 100),
+          include_fees: false,  
+        })
+      });
+    } finally {
+      clearTimeout(trackerTimeout);
+    }
     const trackerPayload = await trackerResponse.json().catch(() => ({}));
     const tracker = trackerPayload?.data?.tracker?.token;
     if (!trackerResponse.ok || !tracker) {
@@ -2815,15 +2840,23 @@ async function createSafepayCheckout(request, env) {
       return json({ error: "Checkout order could not be linked. Please retry or contact support." }, 502);
     }
 
-    const tokenResponse = await fetch(`${apiBase}/client/passport/v1/token`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "X-SFPY-MERCHANT-SECRET": secret,
-    "X-SFPY-MERCHANT-API-KEY": publicKey
-  },
-  body: JSON.stringify({ merchant_api_key: publicKey })
-});
+    const tokenController = new AbortController();
+    const tokenTimeout = setTimeout(() => tokenController.abort(), 8000);
+    let tokenResponse;
+    try {
+      tokenResponse = await fetch(`${apiBase}/client/passport/v1/token`, {
+        method: "POST",
+        signal: tokenController.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "X-SFPY-MERCHANT-SECRET": secret,
+          "X-SFPY-MERCHANT-API-KEY": publicKey
+        },
+        body: JSON.stringify({ merchant_api_key: publicKey })
+      });
+    } finally {
+      clearTimeout(tokenTimeout);
+    }
 
     const tokenPayload = await tokenResponse.json().catch(() => ({}));
     const tbt = tokenPayload?.data;
@@ -3129,6 +3162,10 @@ export default {
     }
 
     if (env.ASSETS) {
+      const normalizedPath = url.pathname.length > 1 && url.pathname.endsWith("/")
+        ? url.pathname.slice(0, -1)
+        : url.pathname;
+
       const publicRoutes = {
         "/privacy-policy": "/privacy-policy.html",
         "/privacy": "/privacy-policy.html",
@@ -3140,8 +3177,8 @@ export default {
         "/contact-us": "/contact.html"
       };
 
-      if (publicRoutes[url.pathname]) {
-        const pageReq = new Request(new URL(publicRoutes[url.pathname], request.url), request);
+      if (publicRoutes[normalizedPath]) {
+        const pageReq = new Request(new URL(publicRoutes[normalizedPath], request.url), request);
         const assetResponse = await env.ASSETS.fetch(pageReq);
         const secured = new Response(assetResponse.body, assetResponse);
         secured.headers.set("X-Content-Type-Options", "nosniff");
@@ -3153,12 +3190,18 @@ export default {
       }
 
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
-        const spaRequest = new Request(new URL("/", request.url), request);
+        const isStaticAsset = /\.(css|js|mjs|png|jpg|jpeg|svg|ico|webp|webmanifest|json|woff2?|ttf|map)$/i.test(url.pathname) || url.pathname.includes("/assets/");
+        const targetPath = isStaticAsset
+          ? url.pathname.replace(/^\/tools(?:\/|$)/, "/")
+          : "/";
+        const spaRequest = new Request(new URL(targetPath, request.url), request);
         const assetResponse = await env.ASSETS.fetch(spaRequest);
         const secured = new Response(assetResponse.body, assetResponse);
         secured.headers.set("X-Content-Type-Options", "nosniff");
         secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-        secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+        if (!isStaticAsset) {
+          secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+        }
         secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
         secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         return secured;

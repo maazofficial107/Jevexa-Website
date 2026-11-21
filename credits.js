@@ -32,6 +32,12 @@
             trigger: document.getElementById('chatThemeTrigger'),
             menu: document.getElementById('chatThemeOptions'),
             label: 'Theme'
+        },
+        density: {
+            input: document.getElementById('chatDensity'),
+            trigger: document.getElementById('chatDensityTrigger'),
+            menu: document.getElementById('chatDensityOptions'),
+            label: 'Density'
         }
     };
     const fileInput = document.getElementById('chatFileInput');
@@ -54,6 +60,35 @@
     let currentThinkingLevel = 'low';
     const accountTiers = { free: 'lite', starter: 'lite', lite: 'lite', pro: 'pro', business: 'max', max: 'max', ultra: 'ultra' };
     const tierOrder = ['lite', 'pro', 'max', 'ultra'];
+
+    const PLAN_MEMORY_CONFIG = {
+        free: { maxMemories: 5, maxMemoryChars: 200, maxHistoryMessages: 6, label: 'Free Plan' },
+        lite: { maxMemories: 15, maxMemoryChars: 350, maxHistoryMessages: 12, label: 'Lite Plan' },
+        starter: { maxMemories: 15, maxMemoryChars: 350, maxHistoryMessages: 12, label: 'Lite Plan' },
+        pro: { maxMemories: 35, maxMemoryChars: 500, maxHistoryMessages: 20, label: 'Pro Plan' },
+        max: { maxMemories: 75, maxMemoryChars: 800, maxHistoryMessages: 32, label: 'Max Plan' },
+        business: { maxMemories: 75, maxMemoryChars: 800, maxHistoryMessages: 32, label: 'Max Plan' },
+        ultra: { maxMemories: 150, maxMemoryChars: 1200, maxHistoryMessages: 50, label: 'Ultra Plan' }
+    };
+
+    function getUserPlanMemoryLimits() {
+        const planKey = (currentUserPlan || 'free').toLowerCase();
+        return PLAN_MEMORY_CONFIG[planKey] || PLAN_MEMORY_CONFIG.free;
+    }
+
+    let chatCustomSettings = {
+        aboutUser: '',
+        responseStyle: '',
+        tone: 'default',
+        behavior: 'standard',
+        codeDepth: 'full',
+        density: 'comfortable',
+        theme: 'dark',
+        reducedMotion: false
+    };
+
+    let userMemories = [];
+    let renamingSessionId = null;
 
     function selectorOptions(name) {
         return Array.from(selectorControls[name]?.menu?.querySelectorAll('[role="option"]') || []);
@@ -265,8 +300,13 @@
     function renderChatHistory() {
         const list = document.getElementById('chatHistoryList');
         if (!list) return;
-        const query = document.getElementById('chatHistorySearch')?.value.trim().toLowerCase() || '';
+        const searchInput = document.getElementById('chatHistorySearch');
+        const query = searchInput?.value.trim().toLowerCase() || '';
         const emptyState = document.getElementById('chatHistoryEmpty');
+        const countBadge = document.getElementById('chatHistoryCount');
+        const clearBtn = document.getElementById('chatHistorySearchClear');
+        if (clearBtn) clearBtn.hidden = !query;
+
         list.replaceChildren();
         const matchingSessions = chatSessions
             .map(session => ({
@@ -275,38 +315,131 @@
             }))
             .filter(({ session, preview }) => !query
                 || `${session.title} ${preview}`.toLowerCase().includes(query))
-            .sort((a, b) => b.session.updatedAt - a.session.updatedAt)
-            .forEach(({ session, preview }) => {
-                const row = document.createElement('div');
-                row.className = `chat-history-row${session.id === activeChatId ? ' active' : ''}`;
-                row.setAttribute('role', 'listitem');
-                const select = document.createElement('button');
-                select.type = 'button';
-                select.className = 'chat-history-select';
-                select.setAttribute('aria-label', `${session.title || 'New chat'}${preview ? `: ${preview}` : ''}`);
-                select.setAttribute('aria-current', session.id === activeChatId ? 'true' : 'false');
-                const title = document.createElement('span');
-                title.className = 'chat-history-title';
-                appendSearchHighlight(title, session.title || 'New chat', query);
-                const previewText = document.createElement('span');
-                previewText.className = 'chat-history-preview';
-                appendSearchHighlight(previewText, preview.slice(0, 100), query);
-                select.append(title, previewText);
-                bindSafe(select, 'click', () => selectChatSession(session.id));
-                const remove = document.createElement('button');
-                remove.type = 'button';
-                remove.className = 'chat-history-delete';
-                remove.setAttribute('aria-label', `Delete chat: ${session.title || 'New chat'}`);
-                remove.textContent = '×';
-                bindSafe(remove, 'click', () => {
-                    if (!window.confirm('Delete this chat from this browser?')) return;
-                    chatSessions = chatSessions.filter(item => item.id !== session.id);
-                    if (session.id === activeChatId) createChatSession();
-                    else saveChatSessions();
+            .sort((a, b) => b.session.updatedAt - a.session.updatedAt);
+
+        if (countBadge) {
+            if (query) {
+                countBadge.hidden = false;
+                countBadge.textContent = matchingSessions.length === 1 ? '1 chat found' : `${matchingSessions.length} chats found`;
+            } else {
+                countBadge.hidden = true;
+            }
+        }
+
+        matchingSessions.forEach(({ session, preview }) => {
+            const row = document.createElement('div');
+            row.className = `chat-history-row${session.id === activeChatId ? ' active' : ''}`;
+            row.setAttribute('role', 'listitem');
+
+            if (renamingSessionId === session.id) {
+                // Inline rename editing mode
+                const renameBox = document.createElement('div');
+                renameBox.className = 'chat-history-rename-box';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'chat-history-rename-input';
+                input.value = session.title || 'New chat';
+                input.maxLength = 60;
+                input.setAttribute('aria-label', 'Edit chat title');
+
+                const saveBtn = document.createElement('button');
+                saveBtn.type = 'button';
+                saveBtn.className = 'chat-history-rename-btn chat-history-rename-save';
+                saveBtn.setAttribute('aria-label', 'Save title');
+                saveBtn.title = 'Save title';
+                saveBtn.innerHTML = '<i class="fas fa-check"></i>';
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.className = 'chat-history-rename-btn chat-history-rename-cancel';
+                cancelBtn.setAttribute('aria-label', 'Cancel rename');
+                cancelBtn.title = 'Cancel';
+                cancelBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+
+                const doSave = () => {
+                    const newTitle = input.value.trim() || 'New chat';
+                    session.title = newTitle;
+                    session.updatedAt = Date.now();
+                    renamingSessionId = null;
+                    saveChatSessions();
+                };
+
+                const doCancel = () => {
+                    renamingSessionId = null;
+                    renderChatHistory();
+                };
+
+                bindSafe(saveBtn, 'click', doSave);
+                bindSafe(cancelBtn, 'click', doCancel);
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') { e.preventDefault(); doSave(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); doCancel(); }
                 });
-                row.append(select, remove);
+
+                renameBox.append(input, saveBtn, cancelBtn);
+                row.appendChild(renameBox);
                 list.appendChild(row);
+
+                setTimeout(() => {
+                    input.focus();
+                    input.select();
+                }, 20);
+                return;
+            }
+
+            // Normal mode
+            const select = document.createElement('button');
+            select.type = 'button';
+            select.className = 'chat-history-select';
+            select.setAttribute('aria-label', `${session.title || 'New chat'}${preview ? `: ${preview}` : ''}`);
+            select.setAttribute('aria-current', session.id === activeChatId ? 'true' : 'false');
+            const title = document.createElement('span');
+            title.className = 'chat-history-title';
+            appendSearchHighlight(title, session.title || 'New chat', query);
+            const previewText = document.createElement('span');
+            previewText.className = 'chat-history-preview';
+            appendSearchHighlight(previewText, preview.slice(0, 100), query);
+            select.append(title, previewText);
+            bindSafe(select, 'click', () => selectChatSession(session.id));
+
+            const actions = document.createElement('div');
+            actions.className = 'chat-history-actions';
+
+            const renameBtn = document.createElement('button');
+            renameBtn.type = 'button';
+            renameBtn.className = 'chat-history-action-btn chat-history-rename';
+            renameBtn.setAttribute('aria-label', `Rename chat: ${session.title || 'New chat'}`);
+            renameBtn.title = 'Rename chat';
+            renameBtn.innerHTML = '<i class="fas fa-pencil"></i>';
+            bindSafe(renameBtn, 'click', (e) => {
+                e.stopPropagation();
+                renamingSessionId = session.id;
+                renderChatHistory();
             });
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'chat-history-action-btn chat-history-delete-btn chat-history-delete';
+            removeBtn.setAttribute('aria-label', `Delete chat: ${session.title || 'New chat'}`);
+            removeBtn.title = 'Delete chat';
+            removeBtn.innerHTML = '<i class="fas fa-trash-can"></i>';
+            bindSafe(removeBtn, 'click', (e) => {
+                e.stopPropagation();
+                if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
+                chatSessions = chatSessions.filter(item => item.id !== session.id);
+                if (session.id === activeChatId) {
+                    if (chatSessions.length > 0) selectChatSession(chatSessions[0].id);
+                    else createChatSession();
+                } else {
+                    saveChatSessions();
+                }
+            });
+
+            actions.append(renameBtn, removeBtn);
+            row.append(select, actions);
+            list.appendChild(row);
+        });
+
         if (emptyState) {
             emptyState.hidden = matchingSessions.length > 0;
             emptyState.textContent = query ? `No chats match “${query}”.` : 'No saved chats yet.';
@@ -361,6 +494,13 @@
         abortInFlightChatRequest();
         const session = chatSessions.find(item => item.id === sessionId);
         if (!session) return;
+        if (activeChatId && activeChatId !== sessionId && conversation.length > 0) {
+            const currentSession = chatSessions.find(item => item.id === activeChatId);
+            if (currentSession) {
+                currentSession.messages = conversation.slice(-100);
+                currentSession.updatedAt = Date.now();
+            }
+        }
         activeChatId = sessionId;
         conversation.splice(0, conversation.length, ...session.messages);
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
@@ -371,6 +511,11 @@
         if (emptyState) emptyState.hidden = conversation.length > 0;
         updateChatWelcome();
         renderChatHistory();
+
+        if (window.innerWidth <= 767) {
+            document.getElementById('chatSidebar')?.classList.remove('open');
+            document.getElementById('chatbotWindow')?.classList.remove('chat-history-open');
+        }
     }
 
     function persistConversation(userId) {
@@ -428,11 +573,15 @@
             } else {
                 createChatSession();
             }
+            loadCustomSettings(userId);
+            loadMemories(userId);
             renderChatHistory();
         } catch (error) {
             console.warn('Chat history restore notice:', error?.message || error);
             chatSessions = [];
             createChatSession();
+            loadCustomSettings(userId);
+            loadMemories(userId);
         }
     }
 
@@ -460,6 +609,7 @@
             }
 
             currentUserPlan = planKey || 'free';
+            renderMemoriesUI();
             if (accountTiers[currentUserPlan]) {
                 maximumTier = accountTiers[currentUserPlan];
             } else if (!planKey && data && Number.isInteger(data.balance)) {
@@ -500,6 +650,447 @@
             if (tierSelect) tierSelect.value = 'lite';
             updateSelectorDisplay('tier');
         }
+    }
+
+    function customSettingsKey(userId) {
+        return userId ? `jevexa_${userId}_chat_settings` : 'jevexa_chat_settings_global';
+    }
+
+    function memoriesKey(userId) {
+        return userId ? `jevexa_${userId}_memories` : 'jevexa_memories_global';
+    }
+
+    function loadCustomSettings(userId) {
+        try {
+            const raw = localStorage.getItem(customSettingsKey(userId)) || localStorage.getItem('jevexa_chat_settings_global');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    chatCustomSettings = { ...chatCustomSettings, ...parsed };
+                }
+            }
+        } catch (_) {}
+        applyCustomSettingsToUI();
+    }
+
+    function saveCustomSettings(userId) {
+        try {
+            const key = customSettingsKey(userId);
+            localStorage.setItem(key, JSON.stringify(chatCustomSettings));
+            localStorage.setItem('jevexa_chat_settings_global', JSON.stringify(chatCustomSettings));
+        } catch (_) {}
+    }
+
+    function applyCustomSettingsToUI() {
+        const chatbotWin = document.getElementById('chatbotWindow');
+        if (chatbotWin) {
+            chatbotWin.setAttribute('data-chat-density', chatCustomSettings.density || 'comfortable');
+            chatbotWin.setAttribute('data-chat-theme', chatCustomSettings.theme || 'dark');
+        }
+        const densityInput = document.getElementById('chatDensity');
+        if (densityInput) {
+            densityInput.value = chatCustomSettings.density || 'comfortable';
+            updateSelectorDisplay('density');
+        }
+        const themeInput = document.getElementById('chatTheme');
+        if (themeInput) {
+            themeInput.value = chatCustomSettings.theme || 'dark';
+            updateSelectorDisplay('theme');
+        }
+        const aboutEl = document.getElementById('chatCustomAbout');
+        if (aboutEl) aboutEl.value = chatCustomSettings.aboutUser || '';
+        const respEl = document.getElementById('chatCustomResponse');
+        if (respEl) respEl.value = chatCustomSettings.responseStyle || '';
+        const toneEl = document.getElementById('chatToneSelect');
+        if (toneEl) toneEl.value = chatCustomSettings.tone || 'default';
+        const behEl = document.getElementById('chatBehaviorSelect');
+        if (behEl) behEl.value = chatCustomSettings.behavior || 'standard';
+        const codeEl = document.getElementById('chatCodeDepthSelect');
+        if (codeEl) codeEl.value = chatCustomSettings.codeDepth || 'full';
+        const modalTheme = document.getElementById('chatModalThemeSelect');
+        if (modalTheme) modalTheme.value = chatCustomSettings.theme || 'dark';
+        const modalDensity = document.getElementById('chatModalDensitySelect');
+        if (modalDensity) modalDensity.value = chatCustomSettings.density || 'comfortable';
+        const modalMotion = document.getElementById('chatModalReducedMotion');
+        if (modalMotion) modalMotion.checked = Boolean(chatCustomSettings.reducedMotion);
+        const reducedCheck = document.getElementById('chatReducedMotion');
+        if (reducedCheck) reducedCheck.checked = Boolean(chatCustomSettings.reducedMotion);
+        document.documentElement.classList.toggle('jevexa-reduce-motion', Boolean(chatCustomSettings.reducedMotion));
+    }
+
+    function loadMemories(userId) {
+        try {
+            const raw = localStorage.getItem(memoriesKey(userId)) || localStorage.getItem('jevexa_memories_global');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    userMemories = parsed.filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0);
+                }
+            }
+        } catch (_) {}
+        renderMemoriesUI();
+
+        if (userId && typeof window.supabaseClient?.auth?.getSession === 'function') {
+            window.supabaseClient.auth.getSession().then(({ data: { session } }) => {
+                if (session?.access_token) {
+                    fetch('/api/memories', {
+                        headers: { 'Authorization': `Bearer ${session.access_token}` }
+                    }).then(res => res.json()).then(data => {
+                        if (data?.ok && Array.isArray(data.memories) && data.memories.length > 0) {
+                            const existingIds = new Set(userMemories.map(m => m.id));
+                            let updated = false;
+                            data.memories.forEach(serverMem => {
+                                if (!existingIds.has(serverMem.id)) {
+                                    userMemories.push(serverMem);
+                                    updated = true;
+                                }
+                            });
+                            if (updated) {
+                                saveMemories(userId);
+                            }
+                        }
+                    }).catch(() => {});
+                }
+            }).catch(() => {});
+        }
+    }
+
+    function saveMemories(userId) {
+        try {
+            const key = memoriesKey(userId);
+            localStorage.setItem(key, JSON.stringify(userMemories));
+            localStorage.setItem('jevexa_memories_global', JSON.stringify(userMemories));
+        } catch (_) {}
+        renderMemoriesUI();
+    }
+
+    function renderMemoriesUI() {
+        const limits = getUserPlanMemoryLimits();
+        const badge = document.getElementById('chatMemoryBadge');
+        const modalCount = document.getElementById('chatModalMemoryCount');
+        const planPill = document.getElementById('chatMemoryPlanPill');
+        const usageText = document.getElementById('chatMemoryUsageText');
+        const progressBar = document.getElementById('chatMemoryProgressBar');
+        const planHint = document.getElementById('chatMemoryPlanHint');
+        const list = document.getElementById('chatMemoryList');
+
+        const totalCount = userMemories.length;
+
+        if (badge) badge.textContent = String(totalCount);
+        if (modalCount) modalCount.textContent = String(totalCount);
+        if (planPill) planPill.textContent = limits.label;
+        if (usageText) usageText.textContent = `${totalCount} / ${limits.maxMemories} memories used`;
+        if (progressBar) {
+            const pct = Math.min(100, Math.round((totalCount / limits.maxMemories) * 100));
+            progressBar.style.width = `${pct}%`;
+        }
+        if (planHint) {
+            if (totalCount >= limits.maxMemories) {
+                planHint.textContent = `Memory capacity reached (${limits.maxMemories}/${limits.maxMemories}). Upgrade to unlock more slots & deeper context.`;
+                planHint.style.color = '#fca5a5';
+            } else {
+                planHint.textContent = `Max ${limits.maxMemoryChars} chars per memory. Higher plans unlock up to 150 memory slots & deeper chat context.`;
+                planHint.style.color = '';
+            }
+        }
+
+        if (!list) return;
+        list.replaceChildren();
+
+        if (userMemories.length === 0) {
+            const emptyP = document.createElement('p');
+            emptyP.className = 'chat-memory-empty';
+            emptyP.textContent = 'No memories saved yet. Add details you want Jevexa AI to remember across chats.';
+            list.appendChild(emptyP);
+            return;
+        }
+
+        userMemories.forEach(mem => {
+            const item = document.createElement('div');
+            item.className = `chat-memory-item${mem.enabled === false ? ' disabled' : ''}`;
+
+            const toggle = document.createElement('input');
+            toggle.type = 'checkbox';
+            toggle.checked = mem.enabled !== false;
+            toggle.setAttribute('aria-label', `Toggle memory: ${mem.content}`);
+            toggle.title = mem.enabled === false ? 'Click to enable' : 'Click to disable';
+            bindSafe(toggle, 'change', () => {
+                mem.enabled = toggle.checked;
+                saveMemories(historyUserId);
+                syncMemoryToServer('PUT', { id: mem.id, enabled: mem.enabled });
+            });
+
+            const textSpan = document.createElement('span');
+            textSpan.className = 'chat-memory-text';
+            textSpan.textContent = mem.content;
+
+            const actions = document.createElement('div');
+            actions.className = 'chat-memory-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'chat-memory-btn';
+            editBtn.setAttribute('aria-label', 'Edit memory');
+            editBtn.title = 'Edit memory';
+            editBtn.innerHTML = '<i class="fas fa-pencil"></i>';
+            bindSafe(editBtn, 'click', () => {
+                const updated = window.prompt('Edit saved memory:', mem.content);
+                if (updated === null) return;
+                const trimmed = updated.trim();
+                if (!trimmed) return;
+                mem.content = trimmed.slice(0, limits.maxMemoryChars);
+                mem.updatedAt = Date.now();
+                saveMemories(historyUserId);
+                syncMemoryToServer('PUT', { id: mem.id, content: mem.content });
+            });
+
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'chat-memory-btn chat-memory-del';
+            delBtn.setAttribute('aria-label', 'Delete memory');
+            delBtn.title = 'Delete memory';
+            delBtn.innerHTML = '<i class="fas fa-trash-can"></i>';
+            bindSafe(delBtn, 'click', () => {
+                userMemories = userMemories.filter(m => m.id !== mem.id);
+                saveMemories(historyUserId);
+                syncMemoryToServer('DELETE', { id: mem.id });
+            });
+
+            actions.append(editBtn, delBtn);
+            item.append(toggle, textSpan, actions);
+            list.appendChild(item);
+        });
+    }
+
+    async function syncMemoryToServer(method, body) {
+        if (!historyUserId || typeof window.supabaseClient?.auth?.getSession !== 'function') return;
+        try {
+            const { data: { session } } = await window.supabaseClient.auth.getSession();
+            if (!session?.access_token) return;
+            fetch('/api/memories', {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify(body)
+            }).catch(() => {});
+        } catch (_) {}
+    }
+
+    function getActiveMemoriesList() {
+        const limits = getUserPlanMemoryLimits();
+        return userMemories
+            .filter(m => m && m.enabled !== false && typeof m.content === 'string' && m.content.trim())
+            .slice(0, limits.maxMemories)
+            .map(m => m.content.trim());
+    }
+
+    function getActiveCustomSettings() {
+        return {
+            aboutUser: chatCustomSettings.aboutUser || '',
+            responseStyle: chatCustomSettings.responseStyle || '',
+            tone: chatCustomSettings.tone || 'default',
+            behavior: chatCustomSettings.behavior || 'standard',
+            codeDepth: chatCustomSettings.codeDepth || 'full'
+        };
+    }
+
+    function initChatSidebarResizer() {
+        const resizer = document.getElementById('chatSidebarResizer');
+        const chatbotWin = document.getElementById('chatbotWindow');
+        if (!resizer || !chatbotWin) return;
+
+        const MIN_WIDTH = 220;
+        const DEFAULT_WIDTH = 290;
+        const getMaxWidth = () => Math.min(480, Math.floor(window.innerWidth * 0.45));
+
+        try {
+            const savedWidth = parseInt(localStorage.getItem('jevexa_chat_sidebar_width'), 10);
+            if (savedWidth && savedWidth >= MIN_WIDTH && savedWidth <= getMaxWidth()) {
+                chatbotWin.style.setProperty('--chat-sidebar-width', `${savedWidth}px`);
+            }
+        } catch (_) {}
+
+        let isDragging = false;
+        let startX = 0;
+        let startWidth = DEFAULT_WIDTH;
+
+        const onPointerDown = event => {
+            if (window.innerWidth <= 767) return;
+            isDragging = true;
+            startX = event.clientX;
+            const currentComputed = parseInt(getComputedStyle(chatbotWin).getPropertyValue('--chat-sidebar-width'), 10) || DEFAULT_WIDTH;
+            startWidth = currentComputed;
+            resizer.classList.add('is-resizing');
+            document.body.classList.add('chat-is-resizing');
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerup', onPointerUp);
+        };
+
+        const onPointerMove = event => {
+            if (!isDragging) return;
+            const deltaX = event.clientX - startX;
+            const maxWidth = getMaxWidth();
+            const newWidth = Math.max(MIN_WIDTH, Math.min(maxWidth, startWidth + deltaX));
+            chatbotWin.style.setProperty('--chat-sidebar-width', `${newWidth}px`);
+        };
+
+        const onPointerUp = () => {
+            if (!isDragging) return;
+            isDragging = false;
+            resizer.classList.remove('is-resizing');
+            document.body.classList.remove('chat-is-resizing');
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            try {
+                const finalWidth = parseInt(getComputedStyle(chatbotWin).getPropertyValue('--chat-sidebar-width'), 10) || DEFAULT_WIDTH;
+                localStorage.setItem('jevexa_chat_sidebar_width', String(finalWidth));
+            } catch (_) {}
+        };
+
+        const onDoubleClick = () => {
+            if (window.innerWidth <= 767) return;
+            chatbotWin.style.setProperty('--chat-sidebar-width', `${DEFAULT_WIDTH}px`);
+            try {
+                localStorage.setItem('jevexa_chat_sidebar_width', String(DEFAULT_WIDTH));
+            } catch (_) {}
+        };
+
+        resizer.addEventListener('pointerdown', onPointerDown);
+        resizer.addEventListener('dblclick', onDoubleClick);
+    }
+
+    function initChatSidebarDrawer() {
+        const toggleBtn = document.getElementById('chatSidebarDrawerBtn');
+        const closeBtn = document.getElementById('chatSidebarClose');
+        const sidebar = document.getElementById('chatSidebar');
+        const chatbotWin = document.getElementById('chatbotWindow');
+
+        const toggleSidebar = () => {
+            if (window.innerWidth <= 767) {
+                const isOpen = sidebar?.classList.toggle('open') || false;
+                chatbotWin?.classList.toggle('chat-history-open', isOpen);
+            } else {
+                chatbotWin?.classList.toggle('chat-sidebar-collapsed');
+            }
+        };
+
+        const closeSidebar = () => {
+            if (window.innerWidth <= 767) {
+                sidebar?.classList.remove('open');
+                chatbotWin?.classList.remove('chat-history-open');
+            } else {
+                chatbotWin?.classList.add('chat-sidebar-collapsed');
+            }
+        };
+
+        bindSafe(toggleBtn, 'click', toggleSidebar);
+        bindSafe(closeBtn, 'click', closeSidebar);
+    }
+
+    function initChatCustomizationSuite() {
+        const modal = document.getElementById('chatCustomizationModal');
+        const openBtn = document.getElementById('chatOpenCustomizationBtn');
+        const closeBtn = document.getElementById('chatCustomClose');
+        const saveBtn = document.getElementById('chatCustomSaveBtn');
+        const saveStatus = document.getElementById('chatCustomSaveStatus');
+
+        if (!modal) return;
+
+        const openModal = () => {
+            applyCustomSettingsToUI();
+            renderMemoriesUI();
+            modal.hidden = false;
+            requestAnimationFrame(() => modal.classList.add('open'));
+        };
+
+        const closeModal = () => {
+            modal.classList.remove('open');
+            setTimeout(() => { modal.hidden = true; }, 220);
+        };
+
+        bindSafe(openBtn, 'click', openModal);
+        bindSafe(closeBtn, 'click', closeModal);
+        bindSafe(saveBtn, 'click', () => {
+            chatCustomSettings.aboutUser = document.getElementById('chatCustomAbout')?.value.trim() || '';
+            chatCustomSettings.responseStyle = document.getElementById('chatCustomResponse')?.value.trim() || '';
+            chatCustomSettings.tone = document.getElementById('chatToneSelect')?.value || 'default';
+            chatCustomSettings.behavior = document.getElementById('chatBehaviorSelect')?.value || 'standard';
+            chatCustomSettings.codeDepth = document.getElementById('chatCodeDepthSelect')?.value || 'full';
+            chatCustomSettings.theme = document.getElementById('chatModalThemeSelect')?.value || 'dark';
+            chatCustomSettings.density = document.getElementById('chatModalDensitySelect')?.value || 'comfortable';
+            chatCustomSettings.reducedMotion = Boolean(document.getElementById('chatModalReducedMotion')?.checked);
+
+            saveCustomSettings(historyUserId);
+            applyCustomSettingsToUI();
+
+            if (saveStatus) {
+                saveStatus.textContent = '✓ Saved';
+                setTimeout(() => { if (saveStatus) saveStatus.textContent = ''; }, 2000);
+            }
+            closeModal();
+        });
+
+        const tabs = modal.querySelectorAll('.chat-custom-tab');
+        const panes = modal.querySelectorAll('.chat-custom-pane');
+        tabs.forEach(tab => {
+            bindSafe(tab, 'click', () => {
+                const targetTab = tab.dataset.tab;
+                tabs.forEach(t => {
+                    t.classList.toggle('active', t === tab);
+                    t.setAttribute('aria-selected', String(t === tab));
+                });
+                panes.forEach(p => {
+                    const match = p.id === `pane-${targetTab}`;
+                    p.classList.toggle('active', match);
+                    p.hidden = !match;
+                });
+            });
+        });
+
+        const addMemoryBtn = document.getElementById('chatAddMemoryBtn');
+        const newMemoryInput = document.getElementById('chatNewMemoryInput');
+        const handleAddMemory = () => {
+            const limits = getUserPlanMemoryLimits();
+            const text = newMemoryInput?.value.trim();
+            if (!text) return;
+            if (userMemories.length >= limits.maxMemories) {
+                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'expanded AI memory slots');
+                } else if (typeof window.showToast === 'function') {
+                    window.showToast(`Memory limit reached (${limits.maxMemories}). Upgrade plan for more slots.`);
+                } else {
+                    alert(`Your ${limits.label} is capped at ${limits.maxMemories} memory slots. Upgrade to store more.`);
+                }
+                return;
+            }
+            const newMem = {
+                id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                content: text.slice(0, limits.maxMemoryChars),
+                enabled: true,
+                createdAt: Date.now()
+            };
+            userMemories.unshift(newMem);
+            if (newMemoryInput) newMemoryInput.value = '';
+            saveMemories(historyUserId);
+            syncMemoryToServer('POST', { content: newMem.content });
+        };
+        bindSafe(addMemoryBtn, 'click', handleAddMemory);
+        newMemoryInput?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddMemory();
+            }
+        });
+
+        bindSafe(modal, 'click', e => {
+            if (e.target === modal) closeModal();
+        });
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !modal.hidden) closeModal();
+        });
     }
 
     async function initializeChatSession() {
@@ -1318,12 +1909,15 @@
                 return;
             }
 
+            const planLimits = getUserPlanMemoryLimits();
             const chatPayload = {
                 message: text,
                 tier: selectedTier,
                 thinkingLevel: thinkingSelect?.value || 'low',
                 attachments,
-                history: conversation.slice(-8)
+                history: conversation.slice(-planLimits.maxHistoryMessages),
+                customSettings: getActiveCustomSettings(),
+                memories: getActiveMemoriesList()
             };
 
             // Dynamic token-weighted credit calculation:
@@ -1735,14 +2329,21 @@
     });
 
     document.getElementById('chatHistorySearch')?.addEventListener('input', renderChatHistory);
-    bindSafe(document.getElementById('chatSidebarToggle'), 'click', () => {
-        const sidebar = document.getElementById('chatSidebar');
-        const open = sidebar?.classList.toggle('open') || false;
-        document.getElementById('chatbotWindow')?.classList.toggle('chat-history-open', open);
+    bindSafe(document.getElementById('chatHistorySearchClear'), 'click', () => {
+        const searchInput = document.getElementById('chatHistorySearch');
+        if (searchInput) searchInput.value = '';
+        renderChatHistory();
+        searchInput?.focus();
     });
-    bindSafe(document.getElementById('chatSidebarClose'), 'click', () => {
-        document.getElementById('chatSidebar')?.classList.remove('open');
-        document.getElementById('chatbotWindow')?.classList.remove('chat-history-open');
+    initChatSidebarDrawer();
+    initChatSidebarResizer();
+    initChatCustomizationSuite();
+    loadCustomSettings(null);
+    loadMemories(null);
+    document.getElementById('chatDensity')?.addEventListener('change', event => {
+        document.getElementById('chatbotWindow')?.setAttribute('data-chat-density', event.target.value);
+        chatCustomSettings.density = event.target.value;
+        saveCustomSettings(historyUserId);
     });
     document.getElementById('chatTier')?.addEventListener('change', () => {
         const tier = tierSelect.value;

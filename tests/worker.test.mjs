@@ -5172,3 +5172,160 @@ test("Response Quality & Markdown: Structured headings, bullet points, fenced co
   assert.match(stylesCode, /\.chat-code-copy\s*\{/);
   assert.match(stylesCode, /\.msg-body\s*\{/);
 });
+
+test("Chatbot upgrade: Complete removal of non-working ☰ button and seamless top-bar alignment", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Dead hamburger toggle button completely removed from markup, scripts, and stylesheets
+  assert.doesNotMatch(html, /id="chatSidebarToggle"/);
+  assert.doesNotMatch(html, /class="chat-sidebar-toggle"/);
+  assert.doesNotMatch(html, />☰</);
+  assert.doesNotMatch(script, /chatSidebarToggle/);
+  assert.doesNotMatch(credits, /chatSidebarToggle/);
+  assert.doesNotMatch(styles, /#chatSidebarToggle/);
+  assert.doesNotMatch(styles, /\.chat-sidebar-toggle/);
+
+  // Modern drawer toggle button exists for mobile/compact viewports
+  assert.match(html, /id="chatSidebarDrawerBtn"/);
+  assert.match(html, /class="chat-sidebar-drawer-btn"/);
+  assert.match(credits, /initChatSidebarDrawer/);
+  assert.match(styles, /\.chat-sidebar-drawer-btn\s*\{/);
+});
+
+test("Chatbot upgrade: Luxury spacious interface & resizable divider handle with persistence", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Resizer divider element in DOM
+  assert.match(html, /id="chatSidebarResizer"/);
+  assert.match(html, /class="chat-sidebar-resizer"/);
+
+  // Resizer logic in credits.js
+  assert.match(credits, /function initChatSidebarResizer\(\)/);
+  assert.match(credits, /localStorage\.getItem\('jevexa_chat_sidebar_width'\)/);
+  assert.match(credits, /localStorage\.setItem\('jevexa_chat_sidebar_width'/);
+  assert.match(credits, /MIN_WIDTH\s*=\s*220/);
+  assert.match(credits, /DEFAULT_WIDTH\s*=\s*290/);
+  assert.match(credits, /dblclick/);
+
+  // Resizer styles in styles.css
+  assert.match(styles, /\.chat-sidebar-resizer\s*\{/);
+  assert.match(styles, /cursor:\s*col-resize/);
+  assert.match(styles, /\.chat-resizer-line\s*\{/);
+  assert.match(styles, /\.is-resizing/);
+  assert.match(styles, /body\.chat-is-resizing/);
+});
+
+test("Chatbot upgrade: Editable chat history with inline rename, delete, search count and clear", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Search input with clear button and count badge
+  assert.match(html, /id="chatHistorySearch"/);
+  assert.match(html, /id="chatHistorySearchClear"/);
+  assert.match(html, /id="chatHistoryCount"/);
+
+  // Inline rename and delete in credits.js
+  assert.match(credits, /renamingSessionId/);
+  assert.match(credits, /chat-history-rename-box/);
+  assert.match(credits, /chat-history-rename-input/);
+  assert.match(credits, /chat-history-rename-save/);
+  assert.match(credits, /chat-history-delete-btn/);
+  assert.match(credits, /chatSessions = chatSessions\.filter/);
+  assert.match(credits, /chatHistorySearchClear/);
+  assert.match(credits, /chatHistoryCount/);
+
+  // Seamless switching preserves prior conversation context
+  assert.match(credits, /function selectChatSession\(sessionId\)/);
+  assert.match(credits, /currentSession\.messages = conversation\.slice\(-100\)/);
+
+  // Styling for actions and inputs
+  assert.match(styles, /\.chat-history-actions/);
+  assert.match(styles, /\.chat-history-rename-input/);
+  assert.match(styles, /\.chat-search-clear/);
+  assert.match(styles, /\.chat-history-count-badge/);
+});
+
+test("Chatbot upgrade: Customization, tone, personality & UI density controls suite", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Modal dialog and tabs in HTML
+  assert.match(html, /id="chatCustomizationModal"/);
+  assert.match(html, /id="chatCustomAbout"/);
+  assert.match(html, /id="chatCustomResponse"/);
+  assert.match(html, /id="chatToneSelect"/);
+  assert.match(html, /id="chatBehaviorSelect"/);
+  assert.match(html, /id="chatCodeDepthSelect"/);
+  assert.match(html, /id="chatModalDensitySelect"/);
+
+  // Custom settings storage & management in credits.js
+  assert.match(credits, /function loadCustomSettings/);
+  assert.match(credits, /function saveCustomSettings/);
+  assert.match(credits, /function applyCustomSettingsToUI/);
+  assert.match(credits, /getActiveCustomSettings/);
+  assert.match(credits, /initChatCustomizationSuite/);
+
+  // Worker parses customSettings and injects them into system prompt
+  assert.match(worker, /body\?\.customSettings && typeof body\.customSettings === "object"/);
+  assert.match(worker, /CUSTOM USER PREFERENCES & INSTRUCTIONS/);
+  assert.match(worker, /USER REQUESTED TONE/);
+  assert.match(worker, /USER REQUESTED BEHAVIOR/);
+
+  // Styles for modal, tabs, density
+  assert.match(styles, /\.chat-custom-modal/);
+  assert.match(styles, /\.chat-custom-tab/);
+  assert.match(styles, /\[data-chat-density="compact"\]/);
+});
+
+test("Chatbot upgrade: Plan-scaled persistent memory & context window limits (Supabase safe)", async () => {
+  const worker = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../supabase/user_memories_migration.sql", import.meta.url), "utf8");
+
+  // Worker defines tier plan limits scaling progressively from free to ultra
+  assert.match(worker, /const TIER_PLAN_LIMITS = Object\.freeze\(\{/);
+  assert.match(worker, /free:\s*\{\s*maxMemories:\s*5,\s*maxMemoryChars:\s*200,\s*maxHistoryMessages:\s*6/);
+  assert.match(worker, /lite:\s*\{\s*maxMemories:\s*15,\s*maxMemoryChars:\s*350,\s*maxHistoryMessages:\s*12/);
+  assert.match(worker, /pro:\s*\{\s*maxMemories:\s*35,\s*maxMemoryChars:\s*500,\s*maxHistoryMessages:\s*20/);
+  assert.match(worker, /max:\s*\{\s*maxMemories:\s*75,\s*maxMemoryChars:\s*800,\s*maxHistoryMessages:\s*32/);
+  assert.match(worker, /ultra:\s*\{\s*maxMemories:\s*150,\s*maxMemoryChars:\s*1200,\s*maxHistoryMessages:\s*50/);
+
+  // Worker injects memories into system prompt and clamps context window by plan
+  assert.match(worker, /PERSISTENT USER MEMORIES/);
+  assert.match(worker, /parsed\.history\.slice\(-planCaps\.maxHistoryMessages\)/);
+
+  // Worker /api/memories endpoint handles CRUD safely
+  assert.match(worker, /async function handleMemories\(request, env\)/);
+  assert.match(worker, /pathname === ["']\/api\/memories["']/);
+
+  // Client-side limits and memory UI in credits.js
+  assert.match(credits, /PLAN_MEMORY_CONFIG/);
+  assert.match(credits, /function getUserPlanMemoryLimits\(\)/);
+  assert.match(credits, /function renderMemoriesUI\(\)/);
+  assert.match(credits, /syncMemoryToServer/);
+
+  // Supabase migration creates indexed table with RLS
+  assert.match(migration, /create table if not exists public\.user_memories/i);
+  assert.match(migration, /idx_user_memories_user_id/i);
+  assert.match(migration, /row level security/i);
+});
+
+test("Chatbot upgrade: Strict exact language mirroring instruction in system prompt", async () => {
+  const worker = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Strict language mirroring requirement across multiple languages
+  assert.match(worker, /EXACT LANGUAGE MATCHING \(STRICT RULE\):/);
+  assert.match(worker, /Always reply in the EXACT SAME LANGUAGE and script the user writes in/);
+  assert.match(worker, /If the user writes in Roman Urdu \(e\.g\. "kese ho", "mujhe yeh samjha do", "code chahiye"\), reply in fluent, natural Roman Urdu\. Never force English\./);
+  assert.match(worker, /If the user writes in Urdu script/);
+  assert.match(worker, /If the user writes in Hindi, Arabic, Spanish, French, German/);
+  assert.match(worker, /If the user mixes languages/);
+});

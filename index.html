@@ -1732,42 +1732,76 @@
         </button>
         <div class="chatbot-window" id="chatbotWindow" role="dialog" aria-modal="true" aria-labelledby="chatbotTitle" aria-hidden="true">
             <aside class="chat-sidebar" id="chatSidebar" aria-label="Chat history and settings">
+                <div class="chat-sidebar-top-bar">
+                    <div class="chat-sidebar-brand-tag">
+                        <i class="fas fa-wand-magic-sparkles"></i> <span>Jevexa AI</span>
+                    </div>
+                    <button type="button" class="chat-sidebar-close" id="chatSidebarClose" aria-label="Close chat sidebar">×</button>
+                </div>
                 <button type="button" class="chat-new-button" id="chatNewConversation">＋ New Chat</button>
-                <label class="chat-history-search">
-                    <span class="visually-hidden">Search chats</span>
-                    <i class="fas fa-search" aria-hidden="true"></i>
-                    <input type="text" id="chatHistorySearch" placeholder="Search chats...">
-                </label>
+                <div class="chat-history-search-wrap">
+                    <label class="chat-history-search">
+                        <span class="visually-hidden">Search chats</span>
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                        <input type="text" id="chatHistorySearch" placeholder="Search chats...">
+                        <button type="button" id="chatHistorySearchClear" class="chat-search-clear" aria-label="Clear search" hidden>×</button>
+                    </label>
+                    <div class="chat-history-count-badge" id="chatHistoryCount" hidden></div>
+                </div>
                 <div class="chat-history-heading">Recent chats</div>
                 <div class="chat-history-list" id="chatHistoryList" role="list"></div>
                 <p class="chat-history-empty" id="chatHistoryEmpty" role="status" hidden></p>
-                <details class="chat-settings" id="chatSettings">
-                    <summary>⚙ Settings</summary>
-                    <input type="hidden" id="chatTheme" value="dark">
-                    <div class="chat-select chat-setting-select" data-chat-select="theme">
-                        <span class="chat-select-label" id="chatThemeLabel">Theme</span>
-                        <button type="button" class="chat-select-trigger" id="chatThemeTrigger" role="combobox" aria-labelledby="chatThemeLabel chatThemeValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatThemeOptions">
-                            <span class="chat-select-value" id="chatThemeValue">Dark</span>
-                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
-                        </button>
-                        <div class="chat-select-menu" id="chatThemeOptions" role="listbox" aria-labelledby="chatThemeLabel" hidden>
-                            <div class="chat-select-option" role="option" tabindex="-1" data-value="dark" data-label="Dark" aria-selected="true"><span>Dark</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
-                            <div class="chat-select-option" role="option" tabindex="-1" data-value="light" data-label="Light" aria-selected="false"><span>Light</span><span class="chat-option-state" aria-hidden="true"></span></div>
-                            <div class="chat-select-option" role="option" tabindex="-1" data-value="system" data-label="System" aria-selected="false"><span>System</span><span class="chat-option-state" aria-hidden="true"></span></div>
+                <div class="chat-sidebar-footer">
+                    <button type="button" class="chat-personalize-trigger" id="chatOpenCustomizationBtn" aria-label="Open personality, instructions, and memory settings">
+                        <i class="fas fa-sliders"></i>
+                        <span>Personalization &amp; Memory</span>
+                        <span class="chat-memory-indicator" id="chatMemoryBadge">0</span>
+                    </button>
+                    <details class="chat-settings" id="chatSettings">
+                        <summary>⚙ Quick Settings</summary>
+                        <input type="hidden" id="chatTheme" value="dark">
+                        <div class="chat-select chat-setting-select" data-chat-select="theme">
+                            <span class="chat-select-label" id="chatThemeLabel">Theme</span>
+                            <button type="button" class="chat-select-trigger" id="chatThemeTrigger" role="combobox" aria-labelledby="chatThemeLabel chatThemeValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatThemeOptions">
+                                <span class="chat-select-value" id="chatThemeValue">Dark</span>
+                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                            </button>
+                            <div class="chat-select-menu" id="chatThemeOptions" role="listbox" aria-labelledby="chatThemeLabel" hidden>
+                                <div class="chat-select-option" role="option" tabindex="-1" data-value="dark" data-label="Dark" aria-selected="true"><span>Dark</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
+                                <div class="chat-select-option" role="option" tabindex="-1" data-value="light" data-label="Light" aria-selected="false"><span>Light</span><span class="chat-option-state" aria-hidden="true"></span></div>
+                                <div class="chat-select-option" role="option" tabindex="-1" data-value="system" data-label="System" aria-selected="false"><span>System</span><span class="chat-option-state" aria-hidden="true"></span></div>
+                            </div>
                         </div>
-                    </div>
-                    <label class="chat-motion-setting"><input type="checkbox" id="chatReducedMotion"> Reduced motion</label>
-                    <button type="button" id="chatClearAll">Clear all chats</button>
-                </details>
-                <button type="button" class="chat-sidebar-close" id="chatSidebarClose" aria-label="Close chat history">×</button>
+                        <div class="chat-select chat-setting-select" data-chat-select="density">
+                            <input type="hidden" id="chatDensity" value="comfortable">
+                            <span class="chat-select-label" id="chatDensityLabel">Density</span>
+                            <button type="button" class="chat-select-trigger" id="chatDensityTrigger" role="combobox" aria-labelledby="chatDensityLabel chatDensityValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatDensityOptions">
+                                <span class="chat-select-value" id="chatDensityValue">Comfortable</span>
+                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                            </button>
+                            <div class="chat-select-menu" id="chatDensityOptions" role="listbox" aria-labelledby="chatDensityLabel" hidden>
+                                <div class="chat-select-option" role="option" tabindex="-1" data-value="comfortable" data-label="Comfortable" aria-selected="true"><span>Comfortable</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
+                                <div class="chat-select-option" role="option" tabindex="-1" data-value="compact" data-label="Compact" aria-selected="false"><span>Compact</span><span class="chat-option-state" aria-hidden="true"></span></div>
+                            </div>
+                        </div>
+                        <label class="chat-motion-setting"><input type="checkbox" id="chatReducedMotion"> Reduced motion</label>
+                        <button type="button" id="chatClearAll">Clear all chats</button>
+                    </details>
+                </div>
             </aside>
+            <div class="chat-sidebar-resizer" id="chatSidebarResizer" role="separator" aria-orientation="vertical" tabindex="0" title="Drag to resize sidebar • Double-click to reset" aria-label="Resize chat sidebar">
+                <div class="chat-resizer-line"></div>
+            </div>
             <main class="chat-main">
             <div class="chatbot-header">
                 <div class="chatbot-header-left">
                     <button type="button" class="workspace-back-btn" id="chatBackToStudio" aria-label="Back to Studio">
                         <i class="fas fa-arrow-left"></i> <span>Back to Studio</span>
                     </button>
-                    <button type="button" class="chat-sidebar-toggle" id="chatSidebarToggle" aria-label="Toggle chat history">☰</button>
+                    <button type="button" class="chat-sidebar-drawer-btn" id="chatSidebarDrawerBtn" aria-label="Toggle sidebar drawer" title="Toggle chat history &amp; settings">
+                        <i class="fas fa-bars-staggered"></i>
+                        <span class="chat-drawer-btn-label">Chats</span>
+                    </button>
                 </div>
                 <div class="chatbot-header-center">
                     <div class="chatbot-avatar">
@@ -1871,6 +1905,118 @@
                 <a id="chatCreditUpgrade" href="#pricing" hidden>View plans</a>
             </div>
             </main>
+            <!-- Complete Customization, Behavior & Memory Suite Modal -->
+            <div class="chat-custom-modal" id="chatCustomizationModal" role="dialog" aria-modal="true" aria-labelledby="chatCustomTitle" hidden>
+                <div class="chat-custom-dialog">
+                    <div class="chat-custom-header">
+                        <div class="chat-custom-header-title">
+                            <i class="fas fa-sliders"></i>
+                            <h3 id="chatCustomTitle">Personalization, Behavior &amp; Memory</h3>
+                        </div>
+                        <button type="button" class="chat-custom-close" id="chatCustomClose" aria-label="Close personalization settings">×</button>
+                    </div>
+                    <div class="chat-custom-nav" role="tablist">
+                        <button type="button" class="chat-custom-tab active" data-tab="instructions" role="tab" aria-selected="true"><i class="fas fa-user-gear"></i> Custom Instructions</button>
+                        <button type="button" class="chat-custom-tab" data-tab="personality" role="tab" aria-selected="false"><i class="fas fa-palette"></i> Tone &amp; Style</button>
+                        <button type="button" class="chat-custom-tab" data-tab="memory" role="tab" aria-selected="false"><i class="fas fa-brain"></i> Memory (<span id="chatModalMemoryCount">0</span>)</button>
+                        <button type="button" class="chat-custom-tab" data-tab="display" role="tab" aria-selected="false"><i class="fas fa-display"></i> UI Controls</button>
+                    </div>
+                    <div class="chat-custom-body">
+                        <!-- TAB 1: Instructions -->
+                        <div class="chat-custom-pane active" id="pane-instructions" role="tabpanel">
+                            <div class="chat-form-group">
+                                <label for="chatCustomAbout"><strong>What would you like Jevexa AI to know about you?</strong></label>
+                                <p class="chat-form-hint">Your role, industry, preferences, or technical background (e.g. "Full-stack developer building SaaS in Node.js &amp; Python").</p>
+                                <textarea id="chatCustomAbout" rows="3" maxlength="1000" placeholder="e.g. Lead engineer, prefers modular clean architecture, direct answers..."></textarea>
+                            </div>
+                            <div class="chat-form-group">
+                                <label for="chatCustomResponse"><strong>How would you like Jevexa AI to respond?</strong></label>
+                                <p class="chat-form-hint">Preferred formatting, detail preferences, constraints, or coding conventions.</p>
+                                <textarea id="chatCustomResponse" rows="3" maxlength="1000" placeholder="e.g. Be concise, provide copy-pasteable code, omit boilerplate, explain trade-offs..."></textarea>
+                            </div>
+                        </div>
+                        <!-- TAB 2: Tone & Personality -->
+                        <div class="chat-custom-pane" id="pane-personality" role="tabpanel" hidden>
+                            <div class="chat-form-group">
+                                <label for="chatToneSelect"><strong>Tone &amp; Style</strong></label>
+                                <select id="chatToneSelect" class="chat-input-select">
+                                    <option value="default">Default — Balanced, natural, and helpful</option>
+                                    <option value="concise">Concise — Ultra-brief, direct answers without fluff</option>
+                                    <option value="detailed">Detailed — In-depth explanations with deep background &amp; examples</option>
+                                    <option value="technical">Technical — Developer-focused, precise terminology, code-first</option>
+                                    <option value="professional">Professional — Polished, business-ready executive tone</option>
+                                    <option value="friendly">Friendly — Warm, approachable, and encouraging</option>
+                                    <option value="casual">Casual — Conversational, easygoing, relaxed</option>
+                                </select>
+                            </div>
+                            <div class="chat-form-group">
+                                <label for="chatBehaviorSelect"><strong>Response Behavior &amp; Personality</strong></label>
+                                <select id="chatBehaviorSelect" class="chat-input-select">
+                                    <option value="standard">Standard — Balanced reasoning assistant</option>
+                                    <option value="analytical">Analytical — Systematic, pros/cons, data-driven, edge cases</option>
+                                    <option value="creative">Creative — Innovative, brainstormer, out-of-the-box ideas</option>
+                                    <option value="tutor">Tutor — Step-by-step pedagogical explanations, checks for understanding</option>
+                                    <option value="direct">Direct / No-fluff — Straight to the code/solution, zero preamble</option>
+                                </select>
+                            </div>
+                            <div class="chat-form-group">
+                                <label for="chatCodeDepthSelect"><strong>Code &amp; Formatting Depth</strong></label>
+                                <select id="chatCodeDepthSelect" class="chat-input-select">
+                                    <option value="full">Full Code — Complete runnable files, scripts, and configs</option>
+                                    <option value="snippets">Snippets — Focused blocks showing only the exact edits</option>
+                                    <option value="architecture">Architecture — High-level interfaces, schemas, and diagrams</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- TAB 3: Plan-Scaled Memory -->
+                        <div class="chat-custom-pane" id="pane-memory" role="tabpanel" hidden>
+                            <div class="chat-memory-status-banner">
+                                <div class="chat-memory-plan-info">
+                                    <span class="chat-plan-pill" id="chatMemoryPlanPill">Free Plan</span>
+                                    <span class="chat-memory-usage-text" id="chatMemoryUsageText">0 / 5 memories used</span>
+                                </div>
+                                <div class="chat-memory-progress-track">
+                                    <div class="chat-memory-progress-bar" id="chatMemoryProgressBar" style="width: 0%;"></div>
+                                </div>
+                                <p class="chat-memory-plan-hint" id="chatMemoryPlanHint">Starter memory capacity for Supabase Free tier. Higher plans unlock up to 150 memory slots &amp; deeper chat context.</p>
+                            </div>
+                            <div class="chat-memory-add-box">
+                                <input type="text" id="chatNewMemoryInput" placeholder="Add a memory (e.g. 'I deploy to Cloudflare Workers using Wrangler')..." maxlength="300">
+                                <button type="button" class="chat-memory-add-btn" id="chatAddMemoryBtn">＋ Add Memory</button>
+                            </div>
+                            <div class="chat-memory-list" id="chatMemoryList"></div>
+                        </div>
+                        <!-- TAB 4: UI Controls -->
+                        <div class="chat-custom-pane" id="pane-display" role="tabpanel" hidden>
+                            <div class="chat-form-group">
+                                <label for="chatModalThemeSelect"><strong>Color Theme</strong></label>
+                                <select id="chatModalThemeSelect" class="chat-input-select">
+                                    <option value="dark">Dark Theme (Default)</option>
+                                    <option value="light">Light Theme</option>
+                                    <option value="system">Follow System</option>
+                                </select>
+                            </div>
+                            <div class="chat-form-group">
+                                <label for="chatModalDensitySelect"><strong>Chat Density</strong></label>
+                                <select id="chatModalDensitySelect" class="chat-input-select">
+                                    <option value="comfortable">Comfortable — Spacious flagship breathing room</option>
+                                    <option value="compact">Compact — High-density developer view</option>
+                                </select>
+                            </div>
+                            <div class="chat-form-group">
+                                <label class="chat-checkbox-label">
+                                    <input type="checkbox" id="chatModalReducedMotion">
+                                    <span>Reduce UI Animations &amp; Motion</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-custom-footer">
+                        <span class="chat-custom-save-status" id="chatCustomSaveStatus" aria-live="polite"></span>
+                        <button type="button" class="chat-custom-save-btn" id="chatCustomSaveBtn">Done</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>

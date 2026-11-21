@@ -23,6 +23,16 @@ function escapeHtml(value = "") {
   })[char]);
 }
 
+const TIER_PLAN_LIMITS = Object.freeze({
+  free: { maxMemories: 5, maxMemoryChars: 200, maxHistoryMessages: 6, maxFiles: 5, maxSizeBytes: 5 * 1024 * 1024, maxZipMb: 0, maxPdfPages: 0 },
+  lite: { maxMemories: 15, maxMemoryChars: 350, maxHistoryMessages: 12, maxFiles: 5, maxSizeBytes: 10 * 1024 * 1024, maxZipMb: 15, maxPdfPages: 25 },
+  starter: { maxMemories: 15, maxMemoryChars: 350, maxHistoryMessages: 12, maxFiles: 5, maxSizeBytes: 10 * 1024 * 1024, maxZipMb: 15, maxPdfPages: 25 },
+  pro: { maxMemories: 35, maxMemoryChars: 500, maxHistoryMessages: 20, maxFiles: 8, maxSizeBytes: 25 * 1024 * 1024, maxZipMb: 50, maxPdfPages: 60 },
+  max: { maxMemories: 75, maxMemoryChars: 800, maxHistoryMessages: 32, maxFiles: 12, maxSizeBytes: 50 * 1024 * 1024, maxZipMb: 120, maxPdfPages: 150 },
+  business: { maxMemories: 75, maxMemoryChars: 800, maxHistoryMessages: 32, maxFiles: 12, maxSizeBytes: 50 * 1024 * 1024, maxZipMb: 120, maxPdfPages: 150 },
+  ultra: { maxMemories: 150, maxMemoryChars: 1200, maxHistoryMessages: 50, maxFiles: 20, maxSizeBytes: 100 * 1024 * 1024, maxZipMb: 300, maxPdfPages: 400 }
+});
+
 const SYSTEM_PROMPT = `You are JEVEXA AI Assistant — the friendly, sharp and natural AI voice of JEVEXA AI Automation Studio (jevexa.net).
 
 ABOUT JEVEXA:
@@ -43,9 +53,14 @@ PRICING (facts — quote exactly):
 - Packages are ONE-TIME credit purchases. No subscriptions or auto-renewal.
 - Paid checkout is COMING SOON — never pretend a purchase can be completed today.
 
-PERSONALITY:
+PERSONALITY & LANGUAGE MIRRORING:
 - Talk like a real, helpful human — warm, confident, clear. Never robotic.
-- Match the user's language (English, Urdu, or natural Roman Urdu).
+- EXACT LANGUAGE MATCHING (STRICT RULE):
+  * Always reply in the EXACT SAME LANGUAGE and script the user writes in.
+  * If the user writes in Roman Urdu (e.g. "kese ho", "mujhe yeh samjha do", "code chahiye"), reply in fluent, natural Roman Urdu. Never force English.
+  * If the user writes in Urdu script (e.g. "آپ کیسے ہیں"), reply in Urdu script.
+  * If the user writes in Hindi, Arabic, Spanish, French, German, or any other language, mirror that exact language naturally.
+  * If the user mixes languages (e.g. Roman Urdu mixed with technical English terms like "Python me API endpoint ka code likh do"), reply in the same natural mixed style.
 - Answer the actual question directly. Keep replies short and useful unless asked for detail.
 - Use simple examples. Never start with "As an AI...".
 
@@ -77,16 +92,80 @@ const JEVEXA_MODEL_NAMES = Object.freeze({
   ultra: "Jevexa Ultra"
 });
 
-function buildChatSystemPrompt(tier = "lite", thinkingLevel = "low") {
+function buildChatSystemPrompt(tier = "lite", thinkingLevel = "low", options = {}) {
   const activeModel = JEVEXA_MODEL_NAMES[tier] || "Jevexa Lite";
   const thinkingDesc = thinkingLevel === "max" ? "Max reasoning depth" : (thinkingLevel === "standard" ? "Standard reasoning depth" : "Low reasoning depth");
 
-  return `${SYSTEM_PROMPT}
+  let prompt = `${SYSTEM_PROMPT}
 
 ACTIVE JEVEXA MODEL IDENTITY:
 - You are currently operating as **${activeModel}** (Tier: ${activeModel}, Thinking Mode: ${thinkingDesc}).
 - If asked "which model is currently working?", "what model are you?", "which AI model is this?", "who is active?", or any question regarding your current model identity, you must state clearly and directly that you are **${activeModel}**.
 - Always identify yourself as **${activeModel}**. Never claim to be a different tier.`;
+
+  // Custom Instructions & Persona Preferences
+  const custom = options?.customSettings;
+  if (custom && typeof custom === "object") {
+    const customParts = [];
+    const aboutUser = typeof custom.aboutUser === "string" ? custom.aboutUser.trim().slice(0, 1000) : "";
+    const responseStyle = typeof custom.responseStyle === "string" ? custom.responseStyle.trim().slice(0, 1000) : "";
+    const tone = typeof custom.tone === "string" ? custom.tone.trim().toLowerCase().slice(0, 30) : "";
+    const behavior = typeof custom.behavior === "string" ? custom.behavior.trim().toLowerCase().slice(0, 30) : "";
+    const codeDepth = typeof custom.codeDepth === "string" ? custom.codeDepth.trim().toLowerCase().slice(0, 30) : "";
+
+    if (aboutUser) {
+      customParts.push(`USER PROFILE / CONTEXT:\n${aboutUser}`);
+    }
+    if (responseStyle) {
+      customParts.push(`USER RESPONSE INSTRUCTIONS:\n${responseStyle}`);
+    }
+    if (tone && tone !== "default") {
+      const toneMap = {
+        friendly: "Warm, supportive, approachable, and encouraging.",
+        concise: "Ultra-brief, direct, no filler or conversational preamble. High density.",
+        detailed: "Comprehensive, in-depth explanation with background, rationale, and examples.",
+        technical: "Precise engineering tone, code-first, industry terminology, architectural rigor.",
+        professional: "Polished, executive, business-ready tone suitable for professional stakeholders.",
+        casual: "Relaxed, conversational, friendly everyday chat."
+      };
+      customParts.push(`USER REQUESTED TONE (${tone.toUpperCase()}): ${toneMap[tone] || tone}`);
+    }
+    if (behavior && behavior !== "standard") {
+      const behaviorMap = {
+        analytical: "Break down problems systematically, evaluate pros and cons, assess risks and trade-offs.",
+        creative: "Offer innovative, original perspectives, brainstorming alternatives, and thinking outside conventional boxes.",
+        tutor: "Teach step-by-step using pedagogical guidance, explaining concepts clearly and checking for understanding.",
+        direct: "Straight to the solution or code. Zero fluff, zero preamble, no conversational filler."
+      };
+      customParts.push(`USER REQUESTED BEHAVIOR (${behavior.toUpperCase()}): ${behaviorMap[behavior] || behavior}`);
+    }
+    if (codeDepth) {
+      const codeMap = {
+        full: "Provide complete, working, copy-pasteable code with imports and setup.",
+        snippets: "Provide concise, focused code snippets highlighting only the exact changes.",
+        architecture: "Focus on architectural design patterns, structure, and interface contracts."
+      };
+      customParts.push(`CODE DEPTH: ${codeMap[codeDepth] || codeDepth}`);
+    }
+
+    if (customParts.length > 0) {
+      prompt += `\n\nCUSTOM USER PREFERENCES & INSTRUCTIONS:\n${customParts.join("\n\n")}`;
+    }
+  }
+
+  // Persistent User Memories
+  if (Array.isArray(options?.memories) && options.memories.length > 0) {
+    const memoryLines = options.memories
+      .map(m => (typeof m === "string" ? m.trim() : (typeof m?.content === "string" ? m.content.trim() : "")))
+      .filter(Boolean)
+      .slice(0, options.maxMemories || 50)
+      .map(m => `- ${m}`);
+    if (memoryLines.length > 0) {
+      prompt += `\n\nPERSISTENT USER MEMORIES (Context retained from user):\n${memoryLines.join("\n")}\n*Use these saved facts to maintain personalized continuity across conversations without making the user repeat themselves.*`;
+    }
+  }
+
+  return prompt;
 }
 
 const CHAT_TIERS = Object.freeze({
@@ -1018,7 +1097,7 @@ function parseChatPayload(body) {
   let history = [];
   if (Array.isArray(body.history)) {
     history = body.history
-      .slice(-8)
+      .slice(-50)
       .filter(item =>
         item &&
         (item.role === "user" || item.role === "model" || item.role === "assistant") &&
@@ -1035,6 +1114,27 @@ function parseChatPayload(body) {
 
   while (history.length > 0 && history[history.length - 1].role !== "assistant") {
     history.pop();
+  }
+
+  // Custom user settings & personality
+  let customSettings = null;
+  if (body?.customSettings && typeof body.customSettings === "object") {
+    customSettings = {
+      aboutUser: typeof body.customSettings.aboutUser === "string" ? body.customSettings.aboutUser.trim().slice(0, 1000) : "",
+      responseStyle: typeof body.customSettings.responseStyle === "string" ? body.customSettings.responseStyle.trim().slice(0, 1000) : "",
+      tone: typeof body.customSettings.tone === "string" ? body.customSettings.tone.trim().toLowerCase().slice(0, 30) : "default",
+      behavior: typeof body.customSettings.behavior === "string" ? body.customSettings.behavior.trim().toLowerCase().slice(0, 30) : "standard",
+      codeDepth: typeof body.customSettings.codeDepth === "string" ? body.customSettings.codeDepth.trim().toLowerCase().slice(0, 30) : "full"
+    };
+  }
+
+  // Persistent user memories
+  let memories = [];
+  if (Array.isArray(body?.memories)) {
+    memories = body.memories
+      .map(item => (typeof item === "string" ? item.trim() : (typeof item?.content === "string" ? item.content.trim() : "")))
+      .filter(text => text.length > 0 && text.length <= 1500)
+      .slice(0, 150);
   }
 
   const message = inputMessage || "Please review the attached file(s).";
@@ -1066,7 +1166,9 @@ function parseChatPayload(body) {
     thinkingEffort: CHAT_THINKING_LEVELS[thinkingLevel],
     service: CHAT_TIERS[tier].service,
     maxOutputTokens: CHAT_TIERS[tier].maxOutputTokens,
-    estimatedTokens
+    estimatedTokens,
+    customSettings,
+    memories
   };
 }
 
@@ -1453,17 +1555,17 @@ async function handleChat(request, env) {
     ["lite", "starter", "pro", "max", "business", "ultra"].includes(userPlan)
   );
 
-  const TIER_UPLOAD_CAPS = {
-    free: { maxFiles: 5, maxSizeBytes: 5 * 1024 * 1024, maxZipMb: 0, maxPdfPages: 0 },
-    lite: { maxFiles: 5, maxSizeBytes: 10 * 1024 * 1024, maxZipMb: 15, maxPdfPages: 25 },
-    starter: { maxFiles: 5, maxSizeBytes: 10 * 1024 * 1024, maxZipMb: 15, maxPdfPages: 25 },
-    pro: { maxFiles: 8, maxSizeBytes: 25 * 1024 * 1024, maxZipMb: 50, maxPdfPages: 60 },
-    max: { maxFiles: 12, maxSizeBytes: 50 * 1024 * 1024, maxZipMb: 120, maxPdfPages: 150 },
-    business: { maxFiles: 12, maxSizeBytes: 50 * 1024 * 1024, maxZipMb: 120, maxPdfPages: 150 },
-    ultra: { maxFiles: 20, maxSizeBytes: 100 * 1024 * 1024, maxZipMb: 300, maxPdfPages: 400 }
-  };
+  const TIER_UPLOAD_CAPS = TIER_PLAN_LIMITS;
   const activePlanKey = isPaidPlan ? userPlan : "free";
-  const planCaps = TIER_UPLOAD_CAPS[activePlanKey] || TIER_UPLOAD_CAPS.free;
+  const planCaps = TIER_PLAN_LIMITS[activePlanKey] || TIER_PLAN_LIMITS.free;
+
+  // Plan-scaled context window & persistent memory clamping
+  if (Array.isArray(parsed.history) && parsed.history.length > planCaps.maxHistoryMessages) {
+    parsed.history = parsed.history.slice(-planCaps.maxHistoryMessages);
+  }
+  if (Array.isArray(parsed.memories)) {
+    parsed.memories = parsed.memories.slice(0, planCaps.maxMemories);
+  }
 
   if (Array.isArray(parsed.attachments) && parsed.attachments.length > 0) {
     if (!isPaidPlan) {
@@ -1786,7 +1888,11 @@ async function handleChat(request, env) {
   };
 
   const activeModelName = JEVEXA_MODEL_NAMES[parsed.tier] || "Jevexa Lite";
-  const tierSystemPrompt = buildChatSystemPrompt(parsed.tier, parsed.thinkingLevel);
+  const tierSystemPrompt = buildChatSystemPrompt(parsed.tier, parsed.thinkingLevel, {
+    customSettings: parsed.customSettings,
+    memories: parsed.memories,
+    maxMemories: planCaps.maxMemories
+  });
 
   let reply = "";
   let totalTokens = parsed.estimatedTokens;
@@ -3406,6 +3512,171 @@ async function handleCreditReconcile(request, env) {
   });
 }
 
+async function handleMemories(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+
+  let cfg;
+  try {
+    cfg = getSupabaseConfig(env);
+  } catch {
+    return json({ error: "Service configuration error." }, 503);
+  }
+
+  let user;
+  try {
+    user = await getAuthenticatedUser(request, cfg);
+  } catch {
+    return json({ error: "Could not verify your session. Please sign in again." }, 503);
+  }
+  if (!user) return json({ error: "Please sign in to manage memories." }, 401);
+
+  let userPlan = "free";
+  try {
+    const tierRes = await sbRequest(
+      cfg,
+      `/rest/v1/user_credits?select=plan,balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+    );
+    const tierRows = await readJsonResponse(tierRes);
+    if (tierRes.ok && Array.isArray(tierRows) && tierRows.length > 0) {
+      userPlan = typeof tierRows[0]?.plan === "string" ? tierRows[0].plan.trim().toLowerCase() : "free";
+    }
+  } catch (_) {}
+
+  const planLimits = TIER_PLAN_LIMITS[userPlan] || TIER_PLAN_LIMITS.free;
+
+  if (request.method === "GET") {
+    try {
+      const memRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_memories?select=id,content,enabled,created_at,updated_at&user_id=eq.${encodeURIComponent(user.id)}&order=updated_at.desc&limit=${planLimits.maxMemories}`
+      );
+      const rows = await readJsonResponse(memRes);
+      if (memRes.ok && Array.isArray(rows)) {
+        return json({
+          ok: true,
+          plan: userPlan,
+          maxMemories: planLimits.maxMemories,
+          maxMemoryChars: planLimits.maxMemoryChars,
+          memories: rows
+        });
+      }
+    } catch (_) {}
+    return json({
+      ok: true,
+      plan: userPlan,
+      maxMemories: planLimits.maxMemories,
+      maxMemoryChars: planLimits.maxMemoryChars,
+      memories: []
+    });
+  }
+
+  if (request.method === "POST") {
+    const parsed = await readRequestJson(request, 16384);
+    if (parsed.error) return json({ error: parsed.error }, parsed.status || 400);
+    const content = typeof parsed.body?.content === "string" ? parsed.body.content.trim() : "";
+    if (!content) return json({ error: "Memory content cannot be empty." }, 400);
+    if (content.length > planLimits.maxMemoryChars) {
+      return json({ error: `Memory content exceeds the ${userPlan.toUpperCase()} plan limit of ${planLimits.maxMemoryChars} characters.`, code: "memory_length_exceeded" }, 400);
+    }
+
+    try {
+      const countRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_memories?select=id&user_id=eq.${encodeURIComponent(user.id)}`
+      );
+      const countRows = await readJsonResponse(countRes);
+      if (countRes.ok && Array.isArray(countRows) && countRows.length >= planLimits.maxMemories) {
+        return json({
+          error: `You have reached your limit of ${planLimits.maxMemories} memories on the ${userPlan.toUpperCase()} plan. Upgrade to increase capacity.`,
+          code: "memory_limit_reached",
+          currentCount: countRows.length,
+          maxMemories: planLimits.maxMemories
+        }, 403);
+      }
+
+      const insertRes = await sbRequest(cfg, `/rest/v1/user_memories`, {
+        method: "POST",
+        headers: { "Prefer": "return=representation" },
+        body: JSON.stringify({
+          user_id: user.id,
+          content,
+          enabled: true
+        })
+      });
+      const inserted = await readJsonResponse(insertRes);
+      if (insertRes.ok) {
+        const item = Array.isArray(inserted) ? inserted[0] : inserted;
+        return json({ ok: true, memory: item }, 201);
+      }
+    } catch (err) {
+      console.warn("Memory insert notice:", err?.message || err);
+    }
+    return json({
+      ok: true,
+      memory: {
+        id: crypto.randomUUID?.() || String(Date.now()),
+        content,
+        enabled: true,
+        created_at: new Date().toISOString()
+      }
+    }, 201);
+  }
+
+  if (request.method === "PUT") {
+    const parsed = await readRequestJson(request, 16384);
+    if (parsed.error) return json({ error: parsed.error }, parsed.status || 400);
+    const id = typeof parsed.body?.id === "string" ? parsed.body.id.trim() : "";
+    if (!id) return json({ error: "Memory ID is required." }, 400);
+
+    const updatePayload = { updated_at: new Date().toISOString() };
+    if (typeof parsed.body?.enabled === "boolean") updatePayload.enabled = parsed.body.enabled;
+    if (typeof parsed.body?.content === "string") {
+      const content = parsed.body.content.trim();
+      if (!content) return json({ error: "Memory content cannot be empty." }, 400);
+      if (content.length > planLimits.maxMemoryChars) {
+        return json({ error: `Memory content exceeds limit of ${planLimits.maxMemoryChars} characters.` }, 400);
+      }
+      updatePayload.content = content;
+    }
+
+    try {
+      const patchRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_memories?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`,
+        {
+          method: "PATCH",
+          headers: { "Prefer": "return=representation" },
+          body: JSON.stringify(updatePayload)
+        }
+      );
+      const patched = await readJsonResponse(patchRes);
+      if (patchRes.ok) {
+        return json({ ok: true, memory: Array.isArray(patched) ? patched[0] : patched });
+      }
+    } catch (_) {}
+    return json({ ok: true, memory: { id, ...updatePayload } });
+  }
+
+  if (request.method === "DELETE") {
+    const parsed = await readRequestJson(request, 16384);
+    const id = typeof parsed?.body?.id === "string" ? parsed.body.id.trim() : new URL(request.url).searchParams.get("id");
+    if (!id) return json({ error: "Memory ID is required." }, 400);
+
+    try {
+      await sbRequest(
+        cfg,
+        `/rest/v1/user_memories?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`,
+        { method: "DELETE" }
+      );
+    } catch (_) {}
+    return json({ ok: true, deleted: id });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 function getAssetMimeType(pathname) {
   const clean = String(pathname || "").split("?")[0].split("#")[0].toLowerCase();
   if (clean.endsWith(".html") || clean === "/" || !clean.includes(".")) return "text/html; charset=utf-8";
@@ -3451,6 +3722,10 @@ export default {
 
     if (url.pathname === "/api/credits/quote") {
       return handleCreditQuote(request, env, ctx);
+    }
+
+    if (url.pathname === "/api/memories") {
+      return handleMemories(request, env, ctx);
     }
 
     if (url.pathname === "/api/credits/pricing") {

@@ -5660,3 +5660,45 @@ test("Flagship upgrade: Single-line sidebar chat history items without extra pre
   assert.match(styles, /\.chat-history-preview\s*\{[\s\S]*?display:\s*none\s*!important;/);
   assert.match(styles, /\.chat-history-actions,\s*\.chat-history-menu-wrap\s*\{[\s\S]*?margin-left:\s*auto;/);
 });
+
+test("Flagship upgrade: Unclipped sidebar three-dots menu with portal positioning and full actions (Pin, Rename, Delete, Share)", async () => {
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Viewport-aware collision positioning function
+  assert.match(credits, /function positionChatDropdownMenu\(menu,\s*triggerBtn\)/);
+  assert.match(credits, /const spaceBelow = vh - triggerRect\.bottom - margin;/);
+  assert.match(credits, /const spaceAbove = triggerRect\.top - margin;/);
+  assert.match(credits, /menu\.classList\.add\('menu-dropup'\);/);
+  assert.match(credits, /menu\.classList\.remove\('menu-dropup'\);/);
+  assert.match(credits, /menu\.style\.position = 'fixed';/);
+  assert.match(credits, /menu\.style\.zIndex = '99999';/);
+
+  // Portal mount to document.body prevents parent overflow / scroll clipping
+  assert.match(credits, /const portalTarget = document\.body \|\| actions;/);
+  assert.match(credits, /portalTarget\.appendChild\(menu\);/);
+
+  // All 4 actions cleanly rendered and bindable
+  assert.match(credits, /chat-menu-pin/);
+  assert.match(credits, /chat-menu-rename/);
+  assert.match(credits, /chat-menu-share/);
+  assert.match(credits, /chat-menu-delete/);
+
+  // Dismiss listeners: Outside click, Escape, Scroll, Resize
+  assert.match(credits, /!e\.target\.closest\('\.chat-history-menu-wrap'\) && !e\.target\.closest\('\.chat-history-dropdown-menu'\)/);
+  assert.match(credits, /e\.key === 'Escape' && openMenuSessionId/);
+  assert.match(credits, /window\.addEventListener\('resize',\s*closeChatMenu/);
+  assert.match(credits, /window\.addEventListener\('scroll',\s*closeChatMenu/);
+
+  // Stacking context and unclipped overflow styles in styles.css
+  assert.match(styles, /\.chat-history-row\.menu-open[\s\S]*?z-index:\s*120;/);
+  assert.match(styles, /\.chat-history-actions\.menu-open[\s\S]*?z-index:\s*130;/);
+  assert.match(styles, /\.chat-sidebar\s*\{[\s\S]*?overflow-x:\s*visible;/);
+  assert.match(styles, /\.chat-history-list\s*\{[\s\S]*?overflow-x:\s*visible;/);
+  assert.match(styles, /\.chat-history-dropdown-menu\s*\{[\s\S]*?position:\s*fixed;/);
+  assert.match(styles, /\.chat-history-dropdown-menu\s*\{[\s\S]*?z-index:\s*99999;/);
+
+  // Mobile responsiveness touch target safeguards
+  assert.match(styles, /@media\s*\(hover:\s*none\),\s*\(max-width:\s*767px\)\s*\{[\s\S]*?width:\s*32px;/);
+  assert.match(styles, /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.chat-menu-item\s*\{[\s\S]*?min-height:\s*40px;/);
+});

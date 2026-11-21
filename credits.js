@@ -329,9 +329,68 @@
         return null;
     }
 
+    function positionChatDropdownMenu(menu, triggerBtn) {
+        if (!menu || !triggerBtn) return;
+        const triggerRect = triggerBtn.getBoundingClientRect();
+        const menuWidth = Math.max(154, menu.offsetWidth || 154);
+        const menuHeight = Math.max(168, menu.offsetHeight || 168);
+        const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 640;
+        const margin = 8;
+
+        const spaceBelow = vh - triggerRect.bottom - margin;
+        const spaceAbove = triggerRect.top - margin;
+
+        let top;
+        if (spaceBelow < menuHeight && spaceAbove >= spaceBelow) {
+            menu.classList.add('menu-dropup');
+            top = triggerRect.top - menuHeight - 4;
+        } else {
+            menu.classList.remove('menu-dropup');
+            top = triggerRect.bottom + 4;
+        }
+
+        let left = triggerRect.right - menuWidth;
+
+        // Viewport collision bounds enforcement
+        if (left + menuWidth > vw - margin) {
+            left = vw - menuWidth - margin;
+        }
+        if (left < margin) {
+            left = margin;
+        }
+        top = Math.max(margin, Math.min(vh - menuHeight - margin, top));
+
+        menu.style.position = 'fixed';
+        menu.style.top = `${Math.round(top)}px`;
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.zIndex = '99999';
+    }
+
+    function closeChatMenu() {
+        if (openMenuSessionId) {
+            openMenuSessionId = null;
+            document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
+            document.querySelectorAll('.chat-history-row.menu-open, .chat-history-actions.menu-open').forEach(el => el.classList.remove('menu-open'));
+            renderChatHistory();
+        }
+    }
+
     function renderChatHistory() {
+        // Clean up any stale floating portal menus
+        document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
+
         const list = document.getElementById('chatHistoryList');
         if (!list) return;
+        if (!list.dataset.menuScrollBound) {
+            list.dataset.menuScrollBound = 'true';
+            list.addEventListener('scroll', closeChatMenu, { passive: true });
+        }
+        const sidebar = document.getElementById('chatSidebar');
+        if (sidebar && !sidebar.dataset.menuScrollBound) {
+            sidebar.dataset.menuScrollBound = 'true';
+            sidebar.addEventListener('scroll', closeChatMenu, { passive: true });
+        }
         const searchInput = document.getElementById('chatHistorySearch');
         const query = searchInput?.value.trim().toLowerCase() || '';
         const emptyState = document.getElementById('chatHistoryEmpty');
@@ -365,7 +424,7 @@
 
         matchingSessions.forEach(({ session, preview }) => {
             const row = document.createElement('div');
-            row.className = `chat-history-row${session.id === activeChatId ? ' active' : ''}${session.pinned ? ' is-pinned' : ''}`;
+            row.className = `chat-history-row${session.id === activeChatId ? ' active' : ''}${session.pinned ? ' is-pinned' : ''}${openMenuSessionId === session.id ? ' menu-open' : ''}`;
             row.setAttribute('role', 'listitem');
 
             if (renamingSessionId === session.id) {
@@ -487,6 +546,7 @@
                     session.pinned = !session.pinned;
                     session.updatedAt = Date.now();
                     openMenuSessionId = null;
+                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
                     saveChatSessions();
                     if (typeof window.showToast === 'function') {
                         window.showToast(session.pinned ? 'Chat pinned to top' : 'Chat unpinned');
@@ -502,6 +562,7 @@
                 bindSafe(renameBtn, 'click', (e) => {
                     e.stopPropagation();
                     openMenuSessionId = null;
+                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
                     renamingSessionId = session.id;
                     renderChatHistory();
                 });
@@ -515,6 +576,7 @@
                 bindSafe(shareBtn, 'click', async (e) => {
                     e.stopPropagation();
                     openMenuSessionId = null;
+                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
                     renderChatHistory();
                     const shareUrl = `${window.location.origin}/tools/chatbot`;
                     const shareTitle = session.title || 'Jevexa AI Chat';
@@ -566,6 +628,7 @@
                 bindSafe(deleteBtn, 'click', (e) => {
                     e.stopPropagation();
                     openMenuSessionId = null;
+                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
                     if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
                     chatSessions = chatSessions.filter(item => item.id !== session.id);
                     if (session.id === activeChatId) {
@@ -583,14 +646,15 @@
                 });
 
                 menu.append(pinBtn, renameBtn, shareBtn, deleteBtn);
-                actions.appendChild(menu);
 
+                // Mount as floating portal to body to guarantee zero parent clipping/overflow cutoffs
+                const portalTarget = document.body || actions;
+                portalTarget.appendChild(menu);
+
+                // Viewport-aware collision positioning with auto flip above / below
+                positionChatDropdownMenu(menu, menuBtn);
                 requestAnimationFrame(() => {
-                    const wrapRect = actions.getBoundingClientRect();
-                    const listRect = list.getBoundingClientRect();
-                    if (wrapRect.bottom + 160 > Math.min(window.innerHeight, listRect.bottom + 30)) {
-                        menu.classList.add('menu-dropup');
-                    }
+                    positionChatDropdownMenu(menu, menuBtn);
                 });
             }
 
@@ -606,17 +670,21 @@
     }
 
     bindSafe(document, 'click', (e) => {
-        if (openMenuSessionId && !e.target.closest('.chat-history-menu-wrap')) {
+        if (openMenuSessionId && !e.target.closest('.chat-history-menu-wrap') && !e.target.closest('.chat-history-dropdown-menu')) {
             openMenuSessionId = null;
+            document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
             renderChatHistory();
         }
     }, { getKey: () => document, preventDefaultOnDebounce: false });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && openMenuSessionId) {
             openMenuSessionId = null;
+            document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
             renderChatHistory();
         }
     });
+    window.addEventListener('resize', closeChatMenu, { passive: true });
+    window.addEventListener('scroll', closeChatMenu, { passive: true });
 
     function saveChatSessions() {
         if (!historyUserId) return true;

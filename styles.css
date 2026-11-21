@@ -8304,6 +8304,8 @@ body.chat-is-resizing {
     border-right: 1px solid rgba(255,255,255,.08);
     background: rgba(12, 12, 30, .98);
     overflow-y: auto;
+    overflow-x: visible;
+    position: relative;
 }
 .chat-sidebar-top-bar {
     display: flex;
@@ -8392,7 +8394,15 @@ body.chat-is-resizing {
     padding: 0 4px;
 }
 .chat-history-heading { color: #a0a0c0; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-top: 4px; }
-.chat-history-list { display: grid; align-content: start; gap: 4px; overflow-y: auto; min-height: 0; }
+.chat-history-list {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    overflow-y: auto;
+    overflow-x: visible;
+    min-height: 0;
+    position: relative;
+}
 .chat-history-row {
     display: flex;
     gap: 4px;
@@ -8407,6 +8417,13 @@ body.chat-is-resizing {
 }
 .chat-history-row:hover {
     background: rgba(255, 255, 255, 0.07);
+}
+.chat-history-row.menu-open,
+.chat-history-row:has(.chat-history-dropdown-menu),
+.chat-history-row:has(.chat-history-menu-wrap.menu-open) {
+    z-index: 120;
+    position: relative;
+    background: rgba(255, 255, 255, 0.09);
 }
 .chat-history-row.active {
     background: rgba(139, 92, 246, 0.2);
@@ -8477,6 +8494,11 @@ body.chat-is-resizing {
     flex-shrink: 0;
     margin-left: auto;
 }
+.chat-history-actions.menu-open,
+.chat-history-menu-wrap.menu-open {
+    z-index: 130;
+    position: relative;
+}
 .chat-history-action-btn,
 .chat-history-menu-btn {
     width: 28px;
@@ -8507,6 +8529,15 @@ body.chat-is-resizing {
         opacity: 0.85;
     }
 }
+@media (hover: none), (max-width: 767px) {
+    .chat-history-action-btn,
+    .chat-history-menu-btn {
+        opacity: 0.9;
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+    }
+}
 .chat-history-action-btn:hover,
 .chat-history-menu-btn:hover,
 .chat-history-action-btn:focus-visible,
@@ -8522,28 +8553,30 @@ body.chat-is-resizing {
 }
 .chat-history-delete { width: 28px; border-radius: 7px; color: #a0a0c0; }
 
-/* Crisp ChatGPT / Gemini style Dropdown Menu */
+/* Crisp ChatGPT / Gemini / Flagship style Dropdown Menu (Portal / Viewport-aware) */
 .chat-history-dropdown-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 4px);
-    z-index: 150;
-    min-width: 144px;
-    background: rgba(18, 20, 32, 0.98);
-    border: 1px solid rgba(167, 139, 250, 0.3);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 5px;
+    position: fixed;
+    z-index: 99999;
+    min-width: 154px;
+    max-width: calc(100vw - 20px);
+    background: rgba(18, 20, 34, 0.98);
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.09);
+    border-radius: 11px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    gap: 3px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     animation: chatMenuFadeIn 130ms cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top right;
+    box-sizing: border-box;
 }
 .chat-history-dropdown-menu.menu-dropup {
     top: auto;
-    bottom: calc(100% + 4px);
+    bottom: auto;
+    transform-origin: bottom right;
 }
 @keyframes chatMenuFadeIn {
     from {
@@ -8558,24 +8591,26 @@ body.chat-is-resizing {
 .chat-menu-item {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     width: 100%;
-    padding: 7px 10px;
+    min-height: 36px;
+    padding: 8px 12px;
     border: 0;
-    border-radius: 7px;
+    border-radius: 8px;
     background: transparent;
     color: #e2e8f0;
     font: inherit;
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 12.5px;
+    font-weight: 550;
     cursor: pointer;
     text-align: left;
     transition: background 140ms ease, color 140ms ease;
     white-space: nowrap;
+    box-sizing: border-box;
 }
 .chat-menu-item i {
-    font-size: 12px;
-    width: 14px;
+    font-size: 13px;
+    width: 16px;
     text-align: center;
     color: #a78bfa;
     flex-shrink: 0;
@@ -8596,6 +8631,13 @@ body.chat-is-resizing {
 .chat-menu-item.chat-menu-delete:focus-visible {
     background: rgba(239, 68, 68, 0.2);
     color: #fca5a5;
+}
+@media (max-width: 767px) {
+    .chat-menu-item {
+        min-height: 40px;
+        font-size: 13px;
+        padding: 9px 12px;
+    }
 }
 
 .chat-history-rename-box {

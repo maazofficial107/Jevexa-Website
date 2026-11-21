@@ -287,6 +287,10 @@
         historyUserId = null;
         ambiguousRequestId = null;
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
+        const welcome = messages?.querySelector('[data-chat-welcome]');
+        if (welcome) welcome.hidden = false;
+        const emptyState = document.getElementById('chatEmptyState');
+        if (emptyState) emptyState.hidden = false;
         pendingAttachments.length = 0;
         renderAttachments();
         lockChatTiers();
@@ -296,6 +300,32 @@
 
     function conversationKey(userId) {
         return `jevexa_${userId}_chat_sessions`;
+    }
+
+    function activeChatKey(userId) {
+        return `jevexa_${userId}_active_chat_id`;
+    }
+
+    function getPersistedUserId() {
+        try {
+            const cached = localStorage.getItem('jevexa_persisted_session');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed?.user?.id) return parsed.user.id;
+            }
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                    const val = localStorage.getItem(key);
+                    if (val) {
+                        const parsed = JSON.parse(val);
+                        const user = parsed?.user || parsed?.currentSession?.user;
+                        if (user?.id) return user.id;
+                    }
+                }
+            }
+        } catch (_) {}
+        return null;
     }
 
     function renderChatHistory() {
@@ -479,6 +509,11 @@
         activeChatId = id;
         conversation.length = 0;
         chatSessions.unshift({ id, title: 'New chat', updatedAt: Date.now(), messages: [] });
+        if (historyUserId) {
+            try {
+                localStorage.setItem(activeChatKey(historyUserId), id);
+            } catch (_) {}
+        }
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = false;
@@ -503,6 +538,11 @@
             }
         }
         activeChatId = sessionId;
+        if (historyUserId) {
+            try {
+                localStorage.setItem(activeChatKey(historyUserId), sessionId);
+            } catch (_) {}
+        }
         conversation.splice(0, conversation.length, ...session.messages);
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
@@ -527,9 +567,14 @@
             }
             const session = chatSessions.find(item => item.id === activeChatId);
             if (!session) return false;
-            session.messages = conversation.slice(-16);
+            session.messages = conversation.slice(-100);
             session.updatedAt = Date.now();
             session.title = session.messages.find(item => item.role === 'user')?.text.slice(0, 48) || 'New chat';
+            if (userId) {
+                try {
+                    localStorage.setItem(activeChatKey(userId), activeChatId);
+                } catch (_) {}
+            }
             return saveChatSessions();
         } catch (error) {
             console.error('Could not save chat history:', error);
@@ -537,9 +582,19 @@
         }
     }
 
-    function loadConversation(userId) {
-        if (historyUserId === userId) return;
+    function loadConversation(userId, force = false) {
+        if (!userId) return;
+        if (historyUserId === userId && !force && chatSessions.length > 0) {
+            if (activeChatId) {
+                const active = chatSessions.find(item => item.id === activeChatId);
+                if (active && (!conversation.length && active.messages.length)) {
+                    selectChatSession(activeChatId);
+                }
+            }
+            return;
+        }
         historyUserId = userId;
+        activeAuthUserId = userId;
         conversation.length = 0;
         activeChatId = null;
         chatSessions = [];
@@ -554,9 +609,9 @@
                     id: item.id,
                     title: typeof item.title === 'string' ? item.title.slice(0, 48) : 'New chat',
                     updatedAt: item.updatedAt,
-                    messages: item.messages.slice(-16).filter(message =>
+                    messages: item.messages.slice(-100).filter(message =>
                         message && ['user', 'assistant'].includes(message.role)
-                        && typeof message.text === 'string' && message.text.length <= 3000
+                        && typeof message.text === 'string' && message.text.length <= 4000
                     )
                 }));
             const legacy = JSON.parse(localStorage.getItem(`jevexa_${userId}_chat_history`) || '[]');
@@ -566,11 +621,17 @@
                     title: legacy.find(item => item?.role === 'user')?.text?.slice(0, 48) || 'Previous chat',
                     updatedAt: Date.now(),
                     messages: legacy.filter(item => item && ['user', 'assistant'].includes(item.role)
-                        && typeof item.text === 'string' && item.text.length <= 3000).slice(-16)
+                        && typeof item.text === 'string' && item.text.length <= 4000).slice(-100)
                 }];
             }
+            let savedActiveId = null;
+            try {
+                savedActiveId = localStorage.getItem(activeChatKey(userId));
+            } catch (_) {}
             if (chatSessions.length) {
-                selectChatSession([...chatSessions].sort((a, b) => b.updatedAt - a.updatedAt)[0].id);
+                const targetSession = (savedActiveId && chatSessions.find(item => item.id === savedActiveId))
+                    || [...chatSessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+                selectChatSession(targetSession.id);
             } else {
                 createChatSession();
             }
@@ -1089,6 +1150,7 @@
                 localStorage.removeItem(conversationKey(historyUserId));
                 localStorage.removeItem(historyKey(historyUserId));
                 localStorage.removeItem(sessionsKey(historyUserId));
+                localStorage.removeItem(activeChatKey(historyUserId));
             } catch (error) {
                 console.warn('Could not clear chat sessions from storage:', error);
             }
@@ -1439,7 +1501,14 @@
     }
 
     function setStatus(message, showUpgrade = false) {
-        if (status) status.textContent = message;
+        if (!status) return;
+        const creditMatch = typeof message === 'string' && message.match(/^(⚡\s*[^•]+)\s*•\s*Credits used:\s*(\d+)\s*•\s*Remaining:\s*(\d+)\s*•\s*(Token-weighted.*)$/i);
+        if (creditMatch) {
+            const [, tierPart, usedVal, remainingVal, methodPart] = creditMatch;
+            status.innerHTML = `<span class="chat-status-tier">${tierPart.trim()}</span> <span class="chat-status-sep">•</span> <span class="chat-status-stat">Credits used: <strong class="chat-credit-val chat-credit-used-val">${usedVal}</strong></span> <span class="chat-status-sep">•</span> <span class="chat-status-stat">Remaining: <strong class="chat-credit-val chat-credit-rem-val">${remainingVal}</strong></span> <span class="chat-status-sep">•</span> <span class="chat-status-method">${methodPart.trim()}</span>`;
+        } else {
+            status.textContent = message;
+        }
         if (upgradeLink) upgradeLink.hidden = !showUpgrade;
     }
 
@@ -2454,8 +2523,58 @@
             messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
         });
     }
+    function resumeChatSession(force = false) {
+        const uid = historyUserId || activeAuthUserId || getPersistedUserId();
+        if (uid) {
+            loadConversation(uid, force);
+            renderChatHistory();
+            const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+            if (statusText && statusText.textContent.includes('Sign-in')) {
+                statusText.textContent = 'AI chat • Online';
+            }
+            const signInPrompt = document.getElementById('chatSignInPrompt');
+            if (signInPrompt) signInPrompt.hidden = true;
+        }
+    }
+    window.JEVEXA_RESUME_CHAT = resumeChatSession;
+
+    // Early synchronous hydration from persisted auth to prevent blank/stale hydration flash
+    const earlyPersistedUid = getPersistedUserId();
+    if (earlyPersistedUid) {
+        try {
+            historyUserId = earlyPersistedUid;
+            activeAuthUserId = earlyPersistedUid;
+            loadConversation(earlyPersistedUid, false);
+            const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+            if (statusText) statusText.textContent = 'AI chat • Online';
+            const signInPrompt = document.getElementById('chatSignInPrompt');
+            if (signInPrompt) signInPrompt.hidden = true;
+        } catch (e) {
+            console.warn('Early chat hydration notice:', e);
+        }
+    }
+
+    window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            const chatbotWin = document.getElementById('chatbotWindow');
+            if (chatbotWin && chatbotWin.classList.contains('open')) {
+                resumeChatSession(false);
+            }
+        }
+    });
+
+    window.addEventListener('storage', event => {
+        if (event.key && historyUserId && (event.key.includes(historyUserId) || event.key === 'jevexa_persisted_credits' || event.key === 'jevexa_last_workspace')) {
+            const chatbotWin = document.getElementById('chatbotWindow');
+            if (chatbotWin && chatbotWin.classList.contains('open')) {
+                resumeChatSession(false);
+            }
+        }
+    });
+
     bindSafe(document.getElementById('chatbotToggle'), 'click', () => {
         updateChatWelcome();
+        resumeChatSession(false);
         void initializeChatSession();
     });
     if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth?.onAuthStateChange) {

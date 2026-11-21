@@ -3079,6 +3079,10 @@ function setChatbotToggleHidden(hidden) {
 function closeChatbot() {
     window.abortChatRequest?.();
     window.removeChatTyping?.();
+    try {
+        localStorage.removeItem('jevexa_last_workspace');
+        sessionStorage.removeItem('jevexa_last_workspace');
+    } catch (_) {}
     chatbotWindow?.classList.remove('open', 'chat-history-open');
     chatbotWindow?.setAttribute('aria-hidden', 'true');
     setChatbotToggleHidden(false);
@@ -3101,9 +3105,18 @@ window.JEVEXA_SAFE_INTERACTION.bind(chatbotToggle, 'click', () => {
     );
     if (badge) badge.style.display = 'none';
     if (isOpen) {
+        try {
+            localStorage.setItem('jevexa_last_workspace', 'chatbot');
+            sessionStorage.setItem('jevexa_last_workspace', 'chatbot');
+        } catch (_) {}
+        window.JEVEXA_RESUME_CHAT?.();
         window.JEVEXA_UPDATE_VIEWPORT?.();
         document.getElementById('chatInput')?.focus();
     } else {
+        try {
+            localStorage.removeItem('jevexa_last_workspace');
+            sessionStorage.removeItem('jevexa_last_workspace');
+        } catch (_) {}
         chatbotToggle.focus();
     }
 });
@@ -4238,6 +4251,10 @@ const JEVEXA_PLANS = {
     function openChatWorkspace(pushState = true) {
         closeContentWorkspace(false);
         closeComingSoonModal();
+        try {
+            localStorage.setItem('jevexa_last_workspace', 'chatbot');
+            sessionStorage.setItem('jevexa_last_workspace', 'chatbot');
+        } catch (_) {}
         if (chatbotWindow) {
             chatbotWindow.classList.add('open');
             chatbotWindow.setAttribute('aria-hidden', 'false');
@@ -4245,6 +4262,7 @@ const JEVEXA_PLANS = {
             if (typeof setChatbotToggleHidden === 'function') setChatbotToggleHidden(true);
             syncWorkspaceCredits();
             window.JEVEXA_UPDATE_VIEWPORT?.();
+            window.JEVEXA_RESUME_CHAT?.();
             document.getElementById('chatInput')?.focus();
         }
         if (pushState) {
@@ -4255,6 +4273,10 @@ const JEVEXA_PLANS = {
     function closeChatWorkspace(pushState = true) {
         window.abortChatRequest?.();
         window.removeChatTyping?.();
+        try {
+            localStorage.removeItem('jevexa_last_workspace');
+            sessionStorage.removeItem('jevexa_last_workspace');
+        } catch (_) {}
         if (chatbotWindow) {
             chatbotWindow.classList.remove('open', 'chat-history-open');
             chatbotWindow.setAttribute('aria-hidden', 'true');
@@ -4363,6 +4385,8 @@ const JEVEXA_PLANS = {
         }
 
         if (cleanPath === '/tools/chatbot' || cleanHash === '#/tools/chatbot') {
+            openChatWorkspace(false);
+        } else if ((cleanPath === '/' || cleanPath === '') && !cleanHash && localStorage.getItem('jevexa_last_workspace') === 'chatbot') {
             openChatWorkspace(false);
         } else if (cleanPath === '/tools/content-generator' || cleanPath === '/tools/content' || cleanHash === '#/tools/content-generator' || cleanHash === '#/tools/content') {
             openContentWorkspace(false);

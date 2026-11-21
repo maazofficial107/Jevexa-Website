@@ -5426,10 +5426,10 @@ test("Flagship upgrade: Modern Settings interface with Personalization & Memory 
   // Dedicated Personalization & Memory tab inside Settings
   assert.match(html, /<span>Personalization &amp; Memory<\/span>\s*<span class="chat-memory-modal-badge" id="chatModalMemoryCount">/);
 
-  // Sidebar footer Settings trigger with non-colliding layout
+  // Sidebar footer Settings trigger with clean single-line layout and standard icon
   assert.match(html, /id="chatOpenCustomizationBtn"/);
-  assert.match(html, /<span class="chat-personalize-title">Settings<\/span>/);
-  assert.match(html, /<span class="chat-personalize-subtitle">Personalization &amp; Memory<\/span>/);
+  assert.match(html, /<i class="fas fa-gear"[^>]*><\/i>\s*<span class="chat-personalize-title">Settings<\/span>/);
+  assert.doesNotMatch(html, /class="chat-personalize-subtitle"/);
   assert.match(html, /id="chatMemoryBadge"/);
 
   // Chatbot header settings button
@@ -5501,10 +5501,10 @@ test("Flagship upgrade: Single unified settings and bottom-end credit detail in 
   assert.doesNotMatch(html, /Quick Settings/i, "Quick Settings block must be removed from sidebar");
   assert.doesNotMatch(html, /id="chatSettings"/, "#chatSettings details element must be removed");
 
-  // Single clean Settings entry at bottom of sidebar
+  // Single clean Settings entry at bottom of sidebar with standard icon and no subtext
   assert.match(html, /id="chatOpenCustomizationBtn"/);
-  assert.match(html, /<span class="chat-personalize-title">Settings<\/span>/);
-  assert.match(html, /<span class="chat-personalize-subtitle">Personalization &amp; Memory<\/span>/);
+  assert.match(html, /<i class="fas fa-gear"[^>]*><\/i>\s*<span class="chat-personalize-title">Settings<\/span>/);
+  assert.doesNotMatch(html, /class="chat-personalize-subtitle"/);
   assert.match(html, /id="chatMemoryBadge"/);
 
   // All 5 standard chatbot settings categories in one cohesive flagship modal
@@ -5528,4 +5528,35 @@ test("Flagship upgrade: Single unified settings and bottom-end credit detail in 
   // Clear all conversations unified handler in credits.js
   assert.match(credits, /function clearAllConversations\(\)/);
   assert.match(credits, /chatSettingsClearAllBtn/);
+});
+
+test("Flagship upgrade: Session resumption continuity, highlighted bottom credits, and single-line Settings", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. Session Resumption & Chat Continuity
+  assert.match(credits, /function activeChatKey\(userId\)/);
+  assert.match(credits, /function getPersistedUserId\(\)/);
+  assert.match(credits, /function resumeChatSession\(force = false\)/);
+  assert.match(credits, /window\.JEVEXA_RESUME_CHAT\s*=\s*resumeChatSession/);
+  assert.match(credits, /earlyPersistedUid/);
+  assert.match(credits, /visibilitychange/);
+  assert.match(script, /localStorage\.setItem\('jevexa_last_workspace',\s*'chatbot'\)/);
+  assert.match(script, /localStorage\.removeItem\('jevexa_last_workspace'\)/);
+  assert.match(script, /window\.JEVEXA_RESUME_CHAT\?\.\(\)/);
+
+  // 2. Clear Bottom Credit Highlighting
+  assert.match(credits, /chat-credit-used-val/);
+  assert.match(credits, /chat-credit-rem-val/);
+  assert.match(styles, /\.chat-credit-used-val\s*\{[\s\S]*?color:\s*#f472b6;/);
+  assert.match(styles, /\.chat-credit-rem-val\s*\{[\s\S]*?color:\s*#38bdf8;/);
+  assert.match(styles, /\.chat-credit-val\s*\{[\s\S]*?tabular-nums;/);
+
+  // 3. Clean Single-line Settings Button with Standard Icon (No Subtext)
+  assert.match(html, /<button type="button" class="chat-personalize-trigger" id="chatOpenCustomizationBtn" aria-label="Open Settings" title="Settings">/);
+  assert.match(html, /<i class="fas fa-gear" aria-hidden="true"><\/i>/);
+  assert.match(html, /<span class="chat-personalize-title">Settings<\/span>/);
+  assert.doesNotMatch(html, /chat-personalize-subtitle/);
 });

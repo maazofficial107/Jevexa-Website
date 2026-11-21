@@ -1415,27 +1415,31 @@ function openProfileView(user) {
     const profileCreditsValue = backdrop.querySelector('#profileCreditsValue');
     const profilePlanValue = backdrop.querySelector('#profilePlanValue');
     if (profileCreditsValue || profilePlanValue) {
-        supabaseClient.from('user_credits').select('balance, plan')
-            .eq('user_id', user.id).maybeSingle()
-            .then(({ data, error }) => {
-                if (error || !data) {
-                    if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = 'Unavailable';
-                    if (profilePlanValue?.isConnected) profilePlanValue.textContent = 'Unavailable';
-                    return;
+        Promise.allSettled([
+            supabaseClient.from('user_credits').select('balance, plan').eq('user_id', user.id).maybeSingle(),
+            supabaseClient.from('profiles').select('plan, credits').eq('id', user.id).maybeSingle()
+        ]).then(([ucRes, profRes]) => {
+            const ucData = ucRes.status === 'fulfilled' ? ucRes.value?.data : null;
+            const profData = profRes.status === 'fulfilled' ? profRes.value?.data : null;
+            const balance = ucData?.balance ?? profData?.credits ?? null;
+            if (profileCreditsValue?.isConnected) {
+                profileCreditsValue.textContent = balance !== null ? String(balance) : 'Unavailable';
+            }
+            if (profilePlanValue?.isConnected) {
+                let rawPlan = (ucData?.plan || profData?.plan || 'free').trim().toLowerCase();
+                const paidPlans = ['lite', 'starter', 'pro', 'max', 'business', 'ultra'];
+                if (paidPlans.includes((profData?.plan || '').trim().toLowerCase())) {
+                    rawPlan = profData.plan.trim().toLowerCase();
                 }
-                if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = String(data.balance);
-                if (profilePlanValue?.isConnected) {
-                    const planKey = String(data.plan || '').trim().toLowerCase();
-                    const planLabels = { free: 'Free', starter: 'Lite', lite: 'Lite', pro: 'Pro', business: 'Max', max: 'Max', ultra: 'Ultra' };
-                    profilePlanValue.textContent = planLabels[planKey]
-                        || (planKey ? planKey.replace(/[_-]+/g, ' ') : 'Unavailable');
-                }
-            })
-            .catch(error => {
-                console.error('Profile account summary error:', error);
-                if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = 'Unavailable';
-                if (profilePlanValue?.isConnected) profilePlanValue.textContent = 'Unavailable';
-            });
+                const planLabels = { free: 'Free', starter: 'Lite', lite: 'Lite', pro: 'Pro', business: 'Max', max: 'Max', ultra: 'Ultra' };
+                profilePlanValue.textContent = planLabels[rawPlan]
+                    || (rawPlan ? rawPlan.replace(/[_-]+/g, ' ') : 'Free');
+            }
+        }).catch(error => {
+            console.error('Profile account summary error:', error);
+            if (profileCreditsValue?.isConnected) profileCreditsValue.textContent = 'Unavailable';
+            if (profilePlanValue?.isConnected) profilePlanValue.textContent = 'Unavailable';
+        });
     }
 
     // Close profile
@@ -2490,7 +2494,14 @@ const packagePriceFormatters = [
     new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }),
     new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 ];
-const formatPackagePrice = (value, showCents = false) => packagePriceFormatters[Number(showCents)].format(value);
+const formatPackagePrice = (value, showCents = false) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '0';
+    if (!showCents || num % 1 === 0) {
+        return packagePriceFormatters[0].format(num);
+    }
+    return packagePriceFormatters[1].format(num);
+};
 
 function initializePackagePricing() {
     Object.entries(PRICING_CONFIG.plans).forEach(([planName, plan]) => {
@@ -2518,7 +2529,8 @@ function initializePackagePricing() {
         }
         original.textContent = `$${formatPackagePrice(plan.monthlyPrice)} / mo`;
         original.hidden = true;
-        annualNote.textContent = `${formatPackagePrice(annualEquivalent * 12, true)} for 12 months, paid once`;
+        const annualTotal = annualEquivalent * 12;
+        annualNote.textContent = `$${formatPackagePrice(annualTotal, true)} for 12 months, paid once`;
         annualNote.hidden = true;
         const badge20 = card.querySelector('[data-badge-20-off]');
         if (badge20) badge20.hidden = true;
@@ -2566,6 +2578,7 @@ if (document.readyState === 'loading') {
 const billingToggle = document.getElementById('billingToggle');
 const monthlyToggleLabel = document.getElementById('monthlyToggleLabel');
 const annualToggleLabel = document.getElementById('annualToggleLabel');
+const pricingSwitch = document.querySelector('.pricing-toggle .switch');
 const priceAnimationFrames = new WeakMap();
 
 function syncPricingDisplay() {
@@ -2602,7 +2615,7 @@ function syncPricingDisplay() {
 
         el.dataset.animated = '0';
         const start = performance.now();
-        const duration = 350;
+        const duration = 250;
 
         const update = (now) => {
             const progress = Math.min((now - start) / duration, 1);
@@ -2621,24 +2634,55 @@ function syncPricingDisplay() {
     });
 }
 
+function setBillingCycle(yearly) {
+    if (!billingToggle) return;
+    if (billingToggle.checked !== yearly) {
+        billingToggle.checked = yearly;
+    }
+    syncPricingDisplay();
+}
+
+function toggleBillingCycle() {
+    if (!billingToggle) return;
+    setBillingCycle(!billingToggle.checked);
+}
+
 billingToggle?.addEventListener('change', syncPricingDisplay);
+billingToggle?.addEventListener('input', syncPricingDisplay);
+
 if (window.JEVEXA_SAFE_INTERACTION) {
-    if (monthlyToggleLabel) {
-        window.JEVEXA_SAFE_INTERACTION.bind(monthlyToggleLabel, 'click', () => {
-            if (billingToggle && billingToggle.checked) {
-                billingToggle.checked = false;
-                syncPricingDisplay();
+    if (pricingSwitch) {
+        window.JEVEXA_SAFE_INTERACTION.bind(pricingSwitch, 'click', (event) => {
+            if (event.target !== billingToggle) {
+                event.preventDefault();
+                toggleBillingCycle();
             }
-        });
+        }, { debounceMs: 0 });
     }
+
     if (annualToggleLabel) {
-        window.JEVEXA_SAFE_INTERACTION.bind(annualToggleLabel, 'click', () => {
-            if (billingToggle && !billingToggle.checked) {
-                billingToggle.checked = true;
-                syncPricingDisplay();
-            }
-        });
+        window.JEVEXA_SAFE_INTERACTION.bind(annualToggleLabel, 'click', (event) => {
+            event?.preventDefault?.();
+            setBillingCycle(true);
+        }, { debounceMs: 0 });
     }
+
+    if (monthlyToggleLabel) {
+        window.JEVEXA_SAFE_INTERACTION.bind(monthlyToggleLabel, 'click', (event) => {
+            event?.preventDefault?.();
+            setBillingCycle(false);
+        }, { debounceMs: 0 });
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initializePackagePricing();
+        syncPricingDisplay();
+    }, { once: true });
+} else {
+    initializePackagePricing();
+    syncPricingDisplay();
 }
 
 // FAQ Accordion
@@ -4261,6 +4305,19 @@ const JEVEXA_PLANS = {
                 }
                 setTimeout(() => {
                     targetEl.scrollIntoView({ behavior: 'smooth' });
+                }, 50);
+                return;
+            }
+        }
+
+        if (path === '/pricing' || path === '/pricing/' || hash === '#pricing') {
+            const pricingEl = document.getElementById('pricing');
+            if (pricingEl) {
+                closeChatWorkspace(false);
+                closeContentWorkspace(false);
+                closeComingSoonModal();
+                setTimeout(() => {
+                    pricingEl.scrollIntoView({ behavior: 'smooth' });
                 }, 50);
                 return;
             }

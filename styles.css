@@ -870,15 +870,25 @@ section { padding: 100px 0; position: relative; }
 /* Pricing */
 .pricing-toggle {
     display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 48px;
+    cursor: pointer;
 }
-.toggle-label { font-size: 15px; font-weight: 600; color: var(--text-muted); transition: color 0.25s ease; }
+.toggle-label {
+    font-size: 15px; font-weight: 600; color: var(--text-muted); transition: color 0.25s ease;
+    cursor: pointer; user-select: none;
+}
 .toggle-label.active { color: #fff; font-weight: 700; text-shadow: 0 0 12px rgba(139,92,246,0.5); }
 .save-badge {
     background: var(--gradient); color: #fff; font-size: 11px; padding: 3px 10px;
     border-radius: 20px; margin-left: 6px; font-weight: 700;
+    pointer-events: none;
 }
-.switch { position: relative; width: 56px; height: 30px; }
-.switch input { opacity: 0; width: 0; height: 0; }
+.switch {
+    display: inline-block; position: relative; width: 56px; height: 30px; cursor: pointer;
+    vertical-align: middle;
+}
+.switch input {
+    opacity: 0; width: 0; height: 0; position: absolute; pointer-events: none;
+}
 .slider {
     position: absolute; inset: 0; background: rgba(139,92,246,0.3);
     border-radius: 30px; cursor: pointer; transition: 0.3s;

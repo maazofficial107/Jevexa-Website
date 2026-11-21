@@ -442,16 +442,33 @@
             const { data, error } = await supabaseClient.from('user_credits')
                 .select('plan,balance').eq('user_id', session.user.id).maybeSingle();
             let maximumTier = 'lite';
-            currentUserPlan = (data?.plan || 'free').toLowerCase();
-            if (data && typeof data.plan === 'string' && data.plan.trim()) {
-                const planKey = data.plan.trim().toLowerCase();
-                if (accountTiers[planKey]) {
-                    maximumTier = accountTiers[planKey];
-                }
-            } else if (data && Number.isInteger(data.balance)) {
+            let planKey = (data?.plan || '').trim().toLowerCase();
+
+            // Reconcile with profiles table if user_credits has no plan or is free
+            if (!planKey || planKey === 'free') {
+                try {
+                    const profRes = await supabaseClient.from('profiles')
+                        .select('plan').eq('id', session.user.id).maybeSingle();
+                    const profPlan = (profRes?.data?.plan || '').trim().toLowerCase();
+                    if (profPlan) {
+                        const paidPlans = ['lite', 'starter', 'pro', 'max', 'business', 'ultra'];
+                        if (!planKey || paidPlans.includes(profPlan)) {
+                            planKey = profPlan;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            currentUserPlan = planKey || 'free';
+            if (accountTiers[currentUserPlan]) {
+                maximumTier = accountTiers[currentUserPlan];
+            } else if (!planKey && data && Number.isInteger(data.balance)) {
+                // Only use balance fallback if plan is completely unknown/empty (never override explicit free)
                 if (data.balance >= 30000) maximumTier = 'max';
                 else if (data.balance >= 10000) maximumTier = 'pro';
                 else maximumTier = 'lite';
+            } else {
+                maximumTier = 'lite';
             }
             const maximumIndex = Math.max(0, tierOrder.indexOf(maximumTier));
             maximumChatTier = maximumTier;
@@ -1241,7 +1258,7 @@
                 return;
             }
 
-            setStatus(`⚡ ${selectedTier.toUpperCase()} • Token-weighted (~${estimatedCredits} cr est. • 1 cr / 500 tok)`);
+            setStatus(`⚡ ${selectedTier.toUpperCase()} • Token-weighted`);
 
             try {
                 const result = await requestJson('/api/chat', session, {
@@ -1450,35 +1467,8 @@
             : messages
     });
 
-    bindSafe(attachButton, 'click', async (event) => {
+    bindSafe(attachButton, 'click', async () => {
         try {
-            let session = null;
-            try { session = await getSession(); } catch { session = null; }
-            if (!session) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (typeof window.showToast === 'function') {
-                    window.showToast('Please create an account or sign in to upload files.');
-                }
-                if (typeof window.openAuthModal === 'function') {
-                    window.openAuthModal('signup');
-                } else if (typeof window.openLogin === 'function') {
-                    window.openLogin();
-                }
-                return;
-            }
-            // Lock file uploads for free tier (lite) users
-            if (maximumChatTier === 'lite') {
-                event.preventDefault();
-                event.stopPropagation();
-                const requiredPlan = 'Pro';
-                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                    window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlan, 'file uploads', attachButton);
-                } else if (typeof window.showToast === 'function') {
-                    window.showToast(`Upgrade to ${requiredPlan} Plan to unlock file uploads.`);
-                }
-                return;
-            }
             fileInput?.click();
         } catch (error) {
             console.error('Attach button error:', error);
@@ -1585,7 +1575,7 @@
         currentTier = tier;
         updateSelectorDisplay('tier');
         const tierMultipliers = { lite: '1.0x', pro: '1.5x', max: '2.0x', ultra: '2.0x' };
-        setStatus(`⚡ ${tier[0].toUpperCase()}${tier.slice(1)} • Token-weighted (1 cr / 500 tok • ${tierMultipliers[tier] || '1.0x'})`);
+        setStatus(`⚡ ${tier[0].toUpperCase()}${tier.slice(1)} • Token-weighted`);
     });
     document.getElementById('chatThinking')?.addEventListener('change', () => {
         const selected = thinkingSelect.value;

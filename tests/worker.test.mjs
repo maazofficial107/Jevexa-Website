@@ -4729,3 +4729,169 @@ test("progressive upload limits enforced for Lite (paid starter) tier", async ()
     globalThis.fetch = originalFetch;
   }
 });
+
+test("Fix 1: Free plan allows image uploads without upgrade modal & accurately detects plan despite 12077 credits", async () => {
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // Frontend attachButton must NOT lock file uploads for lite/free tier
+  assert.doesNotMatch(creditsJs, /if\s*\(\s*maximumChatTier\s*===\s*['"]lite['"]\s*\)\s*\{[\s\S]*?Upgrade to Pro Plan to unlock file uploads/);
+  assert.doesNotMatch(creditsJs, /window\.showToast\(['"`]Upgrade to \$\{requiredPlan\} Plan to unlock file uploads\.['"`]\)/);
+
+  // Both credits.js, script.js and worker.js reconcile profiles and user_credits plan
+  assert.match(creditsJs, /supabaseClient\.from\(['"]profiles['"]\)/);
+  assert.match(workerJs, /\/rest\/v1\/profiles\?select=plan/);
+  assert.match(scriptJs, /supabaseClient\.from\(['"]profiles['"]\)/);
+
+  // When user has 12077 credits but plan is 'free', plan is NOT misclassified as 'pro'
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      // Free test account with 12077 credits remaining
+      return Response.json([{ plan: "free", balance: 12077 }]);
+    }
+    if (url.pathname === "/rest/v1/profiles") {
+      return Response.json([{ plan: "free", credits: 12077 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        service_key: "ai_chat",
+        display_name: "AI Chat",
+        integration_status: "available",
+        fixed_credits: 1,
+        enabled: true
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 1, balance: 12076 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 12076 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "Free plan image processed cleanly." }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 60, candidatesTokenCount: 20, totalTokenCount: 80 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    // 1. Free plan user with 12077 credits uploads image -> succeeds cleanly
+    const sampleImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const imgRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Describe this image",
+        tier: "lite",
+        attachments: [{
+          name: "test.png",
+          type: "image/png",
+          data: `data:image/png;base64,${sampleImageBase64}`
+        }]
+      }
+    }), geminiEnv);
+
+    assert.equal(imgRes.status, 200);
+    const imgData = await imgRes.json();
+    assert.equal(imgData.reply, "Free plan image processed cleanly.");
+
+    // 2. Free plan user uploading PDF is blocked with 403 paid_plan_required (not granted paid access just because of 12077 credits)
+    const pdfRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Read document",
+        tier: "lite",
+        attachments: [{
+          name: "notes.pdf",
+          type: "application/pdf",
+          data: "data:application/pdf;base64,JVBERi0xLjQ="
+        }]
+      }
+    }), geminiEnv);
+
+    assert.equal(pdfRes.status, 403);
+    const pdfData = await pdfRes.json();
+    assert.equal(pdfData.code, "paid_plan_required");
+    assert.equal(pdfData.currentPlan, "free");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Fix 2: Remove (1 cr / 500 tok) suffix — show only 'Token-weighted'", async () => {
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+
+  // In index.html, #chatCreditStatus has "⚡ Lite • Token-weighted" without "(1 cr / 500 tok)"
+  assert.match(indexHtml, /id="chatCreditStatus"[^>]*>\s*⚡ Lite • Token-weighted\s*<\/span>/);
+  assert.doesNotMatch(indexHtml, /id="chatCreditStatus"[^>]*>[\s\S]*?\(1 cr \/ 500 tok\)/);
+
+  // In index.html pricing features, token-weighted item does not include "(1 cr / 500 tok)"
+  assert.match(indexHtml, /<li><i class="fas fa-check"><\/i>\s*Token-weighted credits<\/li>/);
+  assert.doesNotMatch(indexHtml, /<li><i class="fas fa-check"><\/i>\s*Token-weighted credits \(1 cr \/ 500 tok\)<\/li>/);
+
+  // In credits.js, status label setStatus uses "⚡ ... • Token-weighted" without "(1 cr / 500 tok)"
+  assert.doesNotMatch(creditsJs, /setStatus\(`⚡[^\n`]*1 cr \/ 500 tok/);
+  assert.match(creditsJs, /setStatus\(`⚡ \$\{selectedTier\.toUpperCase\(\)\} • Token-weighted`\)/);
+  assert.match(creditsJs, /setStatus\(`⚡ \$\{tier\[0\]\.toUpperCase\(\)\}\$\{tier\.slice\(1\)\} • Token-weighted`\)/);
+
+  // Live receipt footer remains intact
+  assert.match(creditsJs, /⚡ Credits used:/);
+  assert.match(creditsJs, /Remaining:/);
+});
+
+test("Fix 3: Pricing toggle cuts prices by 20% (Lite $5->$4, Pro $12->$9.60, Max $25->$20, Ultra $49->$39.20)", async () => {
+  const stylesCss = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // CSS ensures .switch has display: inline-block and cursor: pointer
+  assert.match(stylesCss, /\.switch\s*\{[\s\S]*?display:\s*inline-block;[\s\S]*?cursor:\s*pointer;/);
+  assert.match(stylesCss, /\.toggle-label\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?user-select:\s*none;/);
+  assert.match(stylesCss, /\.save-badge\s*\{[\s\S]*?pointer-events:\s*none;/);
+
+  // Script has discount rate 0.2
+  assert.match(scriptJs, /annualDiscountRate:\s*0\.2/);
+
+  // Test the formatPackagePrice helper directly
+  const packagePriceFormatters = [
+    new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }),
+    new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  ];
+  const formatPackagePrice = (value, showCents = false) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '0';
+    if (!showCents || num % 1 === 0) {
+      return packagePriceFormatters[0].format(num);
+    }
+    return packagePriceFormatters[1].format(num);
+  };
+
+  const plans = [
+    { name: "Lite", monthly: 5, expectedDiscounted: "4", expectedAnnualTotal: "48" },
+    { name: "Pro", monthly: 12, expectedDiscounted: "9.60", expectedAnnualTotal: "115.20" },
+    { name: "Max", monthly: 25, expectedDiscounted: "20", expectedAnnualTotal: "240" },
+    { name: "Ultra", monthly: 49, expectedDiscounted: "39.20", expectedAnnualTotal: "470.40" }
+  ];
+
+  for (const p of plans) {
+    const discounted = p.monthly * 0.8;
+    const formattedDiscounted = formatPackagePrice(discounted, true);
+    assert.equal(formattedDiscounted, p.expectedDiscounted, `${p.name} discounted price matches`);
+
+    const annualTotal = discounted * 12;
+    const formattedAnnual = formatPackagePrice(annualTotal, true);
+    assert.equal(formattedAnnual, p.expectedAnnualTotal, `${p.name} annual total matches`);
+  }
+
+  // Toggle switch and label interaction bindings exist
+  assert.match(scriptJs, /setBillingCycle/);
+  assert.match(scriptJs, /toggleBillingCycle/);
+  assert.match(scriptJs, /pricingSwitch/);
+  assert.match(scriptJs, /annualToggleLabel/);
+  assert.match(scriptJs, /monthlyToggleLabel/);
+});

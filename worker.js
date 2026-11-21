@@ -1090,21 +1090,46 @@ async function callCreditRpc(cfg, name, args) {
 
 async function getAccountChatTier(cfg, userId) {
   try {
+    let plan = "";
+    let balance = 0;
     const response = await sbRequest(
       cfg,
       `/rest/v1/user_credits?select=plan,balance&user_id=eq.${encodeURIComponent(userId)}&limit=1`
     );
     const rows = await readJsonResponse(response);
     if (response.ok && Array.isArray(rows) && rows.length > 0) {
-      const plan = typeof rows[0]?.plan === "string" ? rows[0].plan.trim().toLowerCase() : "";
-      if (plan && Object.hasOwn(ACCOUNT_PLAN_TIER, plan) && ACCOUNT_PLAN_TIER[plan]) {
-        return ACCOUNT_PLAN_TIER[plan];
-      }
-      const balance = Number.isInteger(rows[0]?.balance) ? rows[0].balance : 0;
+      plan = typeof rows[0]?.plan === "string" ? rows[0].plan.trim().toLowerCase() : "";
+      balance = Number.isInteger(rows[0]?.balance) ? rows[0].balance : 0;
+    }
+
+    if (!plan || plan === "free") {
+      try {
+        const profRes = await sbRequest(
+          cfg,
+          `/rest/v1/profiles?select=plan&id=eq.${encodeURIComponent(userId)}&limit=1`
+        );
+        const profRows = await readJsonResponse(profRes);
+        if (profRes.ok && Array.isArray(profRows) && profRows.length > 0) {
+          const profPlan = typeof profRows[0]?.plan === "string" ? profRows[0].plan.trim().toLowerCase() : "";
+          if (profPlan) {
+            const paidPlans = ["lite", "starter", "pro", "max", "business", "ultra"];
+            if (!plan || paidPlans.includes(profPlan)) {
+              plan = profPlan;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (plan && Object.hasOwn(ACCOUNT_PLAN_TIER, plan) && ACCOUNT_PLAN_TIER[plan]) {
+      return ACCOUNT_PLAN_TIER[plan];
+    }
+    // Only fall back to balance heuristics if plan is completely unknown/empty (never override explicit free)
+    if (!plan && balance > 0) {
       if (balance >= 30000) return "max";
       if (balance >= 10000) return "pro";
-      return "lite";
     }
+    return "lite";
   } catch (err) {
     console.warn("Account chat tier lookup warning:", err?.message || err, userId);
   }
@@ -1338,21 +1363,46 @@ async function handleChat(request, env) {
   let accountTier = "lite";
   let userPlan = "free";
   try {
+    let bal = 0;
     const tierRes = await sbRequest(
       cfg,
       `/rest/v1/user_credits?select=plan,balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
     );
     const tierRows = await readJsonResponse(tierRes);
     if (tierRes.ok && Array.isArray(tierRows) && tierRows.length > 0) {
-      userPlan = typeof tierRows[0]?.plan === "string" ? tierRows[0].plan.trim().toLowerCase() : "free";
-      if (userPlan && Object.hasOwn(ACCOUNT_PLAN_TIER, userPlan) && ACCOUNT_PLAN_TIER[userPlan]) {
-        accountTier = ACCOUNT_PLAN_TIER[userPlan];
-      } else {
-        const bal = Number.isInteger(tierRows[0]?.balance) ? tierRows[0].balance : 0;
-        if (bal >= 30000) accountTier = "max";
-        else if (bal >= 10000) accountTier = "pro";
-        else accountTier = "lite";
-      }
+      userPlan = typeof tierRows[0]?.plan === "string" ? tierRows[0].plan.trim().toLowerCase() : "";
+      bal = Number.isInteger(tierRows[0]?.balance) ? tierRows[0].balance : 0;
+    }
+
+    if (!userPlan || userPlan === "free") {
+      try {
+        const profRes = await sbRequest(
+          cfg,
+          `/rest/v1/profiles?select=plan&id=eq.${encodeURIComponent(user.id)}&limit=1`
+        );
+        const profRows = await readJsonResponse(profRes);
+        if (profRes.ok && Array.isArray(profRows) && profRows.length > 0) {
+          const profPlan = typeof profRows[0]?.plan === "string" ? profRows[0].plan.trim().toLowerCase() : "";
+          if (profPlan) {
+            const paidPlans = ["lite", "starter", "pro", "max", "business", "ultra"];
+            if (!userPlan || paidPlans.includes(profPlan)) {
+              userPlan = profPlan;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!userPlan) userPlan = "free";
+
+    if (Object.hasOwn(ACCOUNT_PLAN_TIER, userPlan) && ACCOUNT_PLAN_TIER[userPlan]) {
+      accountTier = ACCOUNT_PLAN_TIER[userPlan];
+    } else if (bal > 0 && userPlan !== "free") {
+      if (bal >= 30000) accountTier = "max";
+      else if (bal >= 10000) accountTier = "pro";
+      else accountTier = "lite";
+    } else {
+      accountTier = "lite";
     }
   } catch (error) {
     console.warn("Chat tier lookup notice, defaulting to lite:", error?.message || "database", requestId);

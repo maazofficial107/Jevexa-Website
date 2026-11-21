@@ -858,11 +858,21 @@ section { padding: 100px 0; position: relative; }
     width: 2px; background: linear-gradient(to bottom, var(--primary), transparent);
 }
 
+/* Anti-Flash Session Hydration Guard */
+.jevexa-authenticated-pending .nav-cta-group,
+.jevexa-authenticated-pending .nav-link-mobile {
+    display: none !important;
+}
+.jevexa-authenticated-pending .credits-badge {
+    display: inline-flex !important;
+}
+
 /* Pricing */
 .pricing-toggle {
     display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 48px;
 }
-.toggle-label { font-size: 15px; font-weight: 600; color: var(--text-muted); }
+.toggle-label { font-size: 15px; font-weight: 600; color: var(--text-muted); transition: color 0.25s ease; }
+.toggle-label.active { color: #fff; font-weight: 700; text-shadow: 0 0 12px rgba(139,92,246,0.5); }
 .save-badge {
     background: var(--gradient); color: #fff; font-size: 11px; padding: 3px 10px;
     border-radius: 20px; margin-left: 6px; font-weight: 700;
@@ -883,10 +893,19 @@ section { padding: 100px 0; position: relative; }
 .switch input:checked + .slider::before { transform: translateX(26px); }
 
 .pricing-grid {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px;
+}
+@media (min-width: 1280px) {
+    .pricing-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 16px;
+    }
+    .price-card {
+        padding: 32px 18px;
+    }
 }
 .price-card {
-    padding: 40px 32px; position: relative; overflow: hidden;
+    padding: 36px 24px; position: relative; overflow: hidden;
     transition: transform 0.4s, box-shadow 0.4s;
     display: flex; flex-direction: column;
 }
@@ -930,6 +949,9 @@ section { padding: 100px 0; position: relative; }
 }
 .discount-tag.gold {
     background: rgba(251,191,36,0.15); color: var(--gold);
+}
+.discount-tag.free-tag {
+    background: rgba(34,211,238,0.15); color: var(--cyan);
 }
 .price-features { margin-bottom: 32px; flex: 1; }
 .price-features li {

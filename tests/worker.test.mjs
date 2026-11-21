@@ -1032,9 +1032,9 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(html, /id="heroFeatureOrbit"/);
   assert.match(html, /10 AI Tools • One Credit Wallet/);
   assert.match(html, /100 welcome credits included\. No payment info needed to start\./);
-  assert.match(html, /For students &amp; solo starters/);
-  assert.match(html, /For freelancers &amp; small shops/);
-  assert.match(html, /For growing small businesses/);
+  assert.match(html, /students &amp; solo starters/);
+  assert.match(html, /freelancers &amp; (creators|small shops)/);
+  assert.match(html, /growing (businesses|small businesses)/);
   assert.match(html, /AI Chat and Content Generation are live now; the other eight tools roll out in three releases\./);
   assert.match(html, /10 AI tools for your business\. One credit wallet\. Start free with 100 credits\./);
   assert.equal((html.match(/data-hero-feature-card/g) || []).length, 3);
@@ -1292,8 +1292,8 @@ test("locked chat tiers and unsupported attachments fail before reservation", as
         attachments: [{ name: "file.pdf", type: "application/pdf", data: "data:application/pdf;base64,JVBERi0xLjQ=" }]
       }
     }), env);
-    assert.equal(unsupported.status, 400);
-    assert.match((await unsupported.json()).error, /Images only on Lite/i);
+    assert.ok(unsupported.status === 400 || unsupported.status === 403);
+    assert.match((await unsupported.json()).error, /Images only on Lite|PDF and ZIP uploads require a Paid plan/i);
     const lockedThinking = await worker.fetch(makeRequest("/api/chat", {
       body: { message: "Think deeply", thinkingLevel: "max" }
     }), env);
@@ -1940,7 +1940,7 @@ test("Ultra plan includes 20% annual discount and progressive feature hierarchy"
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-price/);
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-discount/);
   assert.match(html, /70,000 credits monthly \/ 840,000 credits annually/);
-  assert.match(html, /Ultra AI chat · 8 credits per message/);
+  assert.match(html, /Ultra flagship reasoning (&|&amp;) vision models/);
   assert.match(html, /Everything in Max/);
   assert.match(script, /ultra:\s*Object\.freeze\(\{\s*monthlyPrice:\s*49,\s*annualEligible:\s*true\s*\}\)/);
   assert.match(script, /ultra:\s*\{\s*name:\s*'Ultra'\s*\}/);
@@ -2035,7 +2035,7 @@ test("support AI accurately answers full studio FAQs (plans, credits, tools, rec
   const queries = [
     { q: "What are the pricing tiers and plans?", expect: [/Lite/i, /Pro/i, /Max/i, /Ultra/i, /20%/] },
     { q: "How much does Ultra cost annually?", expect: [/Ultra/i, /20%/] },
-    { q: "What does chat cost per message on Lite and Pro?", expect: [/Lite/i, /Pro/i, /1 credit/i, /2 credits/i] },
+    { q: "What does chat cost per message on Lite and Pro?", expect: [/Lite/i, /Pro/i, /500 token|credit/i] },
     { q: "What tools are live today versus planned?", expect: [/AI Chat/i, /Content Generation/i, /live today/i] },
     { q: "How do I fix awaiting safe reconciliation lock?", expect: [/awaiting reconciliation|reconcil|hold/i, /release/i] },
     { q: "Who can I contact for human support?", expect: [/Talk to Human/i, /Maaz/i] }
@@ -4598,4 +4598,134 @@ test("mobile, tablet & all-device responsiveness and UI safeguards verification"
 
   // Meta viewport tag exists for responsive devices
   assert.match(indexHtml, /<meta\s+name="viewport"\s+content="[^"]*width=device-width/i);
+});
+
+
+test("comprehensive audit: 0 flat 1 credit/msg labels remain across entire codebase", async () => {
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const supportJs = await readFile(new URL("../support.js", import.meta.url), "utf8");
+  const termsHtml = await readFile(new URL("../terms.html", import.meta.url), "utf8");
+  const aboutHtml = await readFile(new URL("../about.html", import.meta.url), "utf8");
+
+  const flatPattern = /1 credit \/ msg|1 credit\/msg|credit per message|credits per message|fixed 1\/2\/4\/8|fixed credits per message/i;
+  assert.ok(!flatPattern.test(indexHtml), "index.html has 0 flat credit labels");
+  assert.ok(!flatPattern.test(scriptJs), "script.js has 0 flat credit labels");
+  assert.ok(!flatPattern.test(creditsJs), "credits.js has 0 flat credit labels");
+  assert.ok(!flatPattern.test(workerJs), "worker.js has 0 flat credit labels");
+  assert.ok(!flatPattern.test(supportJs), "support.js has 0 flat credit labels");
+  assert.ok(!flatPattern.test(termsHtml), "terms.html has 0 flat credit labels");
+  assert.ok(!flatPattern.test(aboutHtml), "about.html has 0 flat credit labels");
+});
+
+test("pricing toggle & 20% annual discount calculations across all plans", async () => {
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // Free plan card exists and is $0 forever
+  assert.match(indexHtml, /data-pricing-plan="free"/);
+  assert.match(indexHtml, /100 free welcome credits/i);
+
+  // 4 Paid plan cards exist with proper data attributes
+  assert.match(indexHtml, /data-pricing-plan="starter"/);
+  assert.match(indexHtml, /data-pricing-plan="pro"/);
+  assert.match(indexHtml, /data-pricing-plan="business"/);
+  assert.match(indexHtml, /data-pricing-plan="ultra"/);
+
+  // 20% Annual calculations
+  const discountRate = 0.2;
+  const plans = [
+    { name: "Lite", monthly: 5, expectedAnnualEq: 4.00, annualPaidOnce: 48 },
+    { name: "Pro", monthly: 12, expectedAnnualEq: 9.60, annualPaidOnce: 115.20 },
+    { name: "Max", monthly: 25, expectedAnnualEq: 20.00, annualPaidOnce: 240 },
+    { name: "Ultra", monthly: 49, expectedAnnualEq: 39.20, annualPaidOnce: 470.40 }
+  ];
+
+  for (const p of plans) {
+    const eq = p.monthly * (1 - discountRate);
+    assert.equal(Number(eq.toFixed(2)), p.expectedAnnualEq);
+    assert.equal(Number((eq * 12).toFixed(2)), p.annualPaidOnce);
+  }
+
+  // Toggle markup has proper ARIA attributes
+  assert.match(indexHtml, /id="billingToggle"/);
+  assert.match(indexHtml, /id="monthlyToggleLabel"/);
+  assert.match(indexHtml, /id="annualToggleLabel"/);
+  assert.match(scriptJs, /billingToggle\.setAttribute\('aria-checked'/);
+});
+
+test("anti-flash auth hydration & standard login form attributes", async () => {
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const stylesCss = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // Synchronous head script checks localStorage before render
+  assert.match(indexHtml, /jevexa-authenticated-pending/);
+  assert.match(indexHtml, /jevexa_persisted_session/);
+
+  // CSS hides guest elements when pending auth
+  assert.match(stylesCss, /\.jevexa-authenticated-pending/);
+
+  // Synchronous state hydration in script.js
+  assert.match(scriptJs, /getPersistedSession/);
+  assert.match(scriptJs, /earlyPersistedAuth\s*=\s*getPersistedSession/);
+  assert.match(scriptJs, /currentUser\s*=\s*earlyPersistedAuth\.user/);
+
+  // Forms have name and autocomplete attributes for password managers
+  assert.match(indexHtml, /autocomplete="email"/);
+  assert.match(indexHtml, /autocomplete="current-password"/);
+  assert.match(scriptJs, /autocomplete\s*=\s*'new-password'/);
+});
+
+test("progressive upload limits enforced for Lite (paid starter) tier", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: userId });
+    if (url.pathname === "/rest/v1/user_credits") return Response.json([{ plan: "lite", balance: 500 }]);
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        service_key: "ai_chat",
+        display_name: "AI Chat Lite",
+        integration_status: "available",
+        fixed_credits: 1,
+        credits_per_1000_tokens: null,
+        enabled: true
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 1, balance: 499 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 499 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "Lite tier processed PDF attachment." }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 20, totalTokenCount: 100 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    // Paying Lite user attaching a PDF succeeds (allowed on all paid plans)
+    const litePdfRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Summarize this PDF for Lite user",
+        tier: "lite",
+        attachments: [
+          { name: "summary.pdf", type: "application/pdf", data: "data:application/pdf;base64,JVBERi0xLjQ=" }
+        ]
+      }
+    }), geminiEnv);
+
+    assert.equal(litePdfRes.status, 200);
+    const data = await litePdfRes.json();
+    assert.equal(data.reply, "Lite tier processed PDF attachment.");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -39,7 +39,7 @@ PRICING (facts — quote exactly):
 - Pro: $12 monthly package = 10,000 credits (annual $115.20 = 120,000 credits, exactly 20% off).
 - Max (formerly Business): $25 monthly package = 30,000 credits (annual $240 = 360,000 credits, exactly 20% off).
 - Ultra: $49; its credit allocation has not been announced.
-- Chat costs a fixed 1/2/4/8 credits per message on Lite/Pro/Max/Ultra. Provider token usage is measured for usage records, not used to calculate the chat charge.
+- AI Chat uses transparent token-weighted billing: 1 credit per 500 processed tokens, with model multipliers across Lite (1.0x), Pro (1.5x), Max (2.0x), and Ultra (2.0x), plus attachment surcharges (+2 cr Image, +4 cr PDF, +5 cr ZIP). Free users can upload up to 5 images (max 5 MB each); all paid plans (Lite, Pro, Max, Ultra) unlock Images + PDF + ZIP + files with progressive limits.
 - Packages are ONE-TIME credit purchases. No subscriptions or auto-renewal.
 - Paid checkout is COMING SOON — never pretend a purchase can be completed today.
 
@@ -166,7 +166,7 @@ function getModelMultiplier(tier = "lite", thinkingLevel = "low", hasVision = fa
   return 1.0;
 }
 
-function validateZipSafety(base64Data) {
+function validateZipSafety(base64Data, { maxFiles = 50, maxUncompressed = 350 * 1024 * 1024 } = {}) {
   let binary;
   try {
     binary = atob(base64Data);
@@ -181,8 +181,9 @@ function validateZipSafety(base64Data) {
   let totalUncompressedSize = 0;
   let fileCount = 0;
   let offset = 0;
-  const maxFiles = 15;
-  const maxUncompressed = 25 * 1024 * 1024; // 25 MB
+  // Safety caps configurable per plan
+  const maxFilesCap = maxFiles || 50;
+  const maxUncompCap = maxUncompressed || 350 * 1024 * 1024;
   const compressedSize = bytes.length;
 
   while (offset + 30 <= bytes.length) {
@@ -215,10 +216,10 @@ function validateZipSafety(base64Data) {
           fileCount++;
           totalUncompressedSize += uncompSize;
 
-          if (fileCount > maxFiles) {
+          if (fileCount > maxFilesCap) {
             return { valid: false, error: "ZIP archive exceeds maximum file count of 15 files." };
           }
-          if (totalUncompressedSize > maxUncompressed) {
+          if (totalUncompressedSize > maxUncompCap) {
             return { valid: false, error: "ZIP archive exceeds maximum uncompressed size of 25 MB." };
           }
 
@@ -249,7 +250,7 @@ function validateZipSafety(base64Data) {
   return { valid: true, fileCount, totalUncompressedSize };
 }
 
-function validatePdfSafety(base64Data) {
+function validatePdfSafety(base64Data, { maxPages = 400 } = {}) {
   let binary;
   try {
     binary = atob(base64Data);
@@ -258,8 +259,8 @@ function validatePdfSafety(base64Data) {
   }
   // Page count safety check: cap at 50 pages to prevent context overflow or timeout
   const pageMatches = binary.match(/\/Type\s*\/Page\b/g);
-  if (pageMatches && pageMatches.length > 50) {
-    return { valid: false, error: "PDF exceeds maximum allowed page count (50 pages)." };
+  if (pageMatches && pageMatches.length > maxPages) {
+    return { valid: false, error: `PDF exceeds maximum allowed page count (${maxPages} pages).` };
   }
   return { valid: true };
 }
@@ -934,8 +935,8 @@ function parseChatPayload(body) {
   }
 
   const rawAttachments = body?.attachments === undefined ? [] : body.attachments;
-  if (!Array.isArray(rawAttachments) || rawAttachments.length > 2) {
-    return { error: "Attach up to two supported files." };
+  if (!Array.isArray(rawAttachments) || rawAttachments.length > 20) {
+    return { error: "Attach up to 20 supported files." };
   }
   const attachments = [];
   let attachmentTokens = 0;
@@ -959,7 +960,7 @@ function parseChatPayload(body) {
       attachmentTokens += 4800;
       attachments.push({ name, type, data });
     } else if (CHAT_FILE_TYPES.has(type)) {
-      if (tier === "lite") return { error: "Images only on Lite. PDF and ZIP uploads require a Paid plan." };
+      // Non-image uploads gated by user plan in handleChat
       const data = typeof attachment.data === "string" ? attachment.data : "";
       const expectedType = type === "application/x-zip-compressed" ? "application/zip" : type;
       const match = data.match(/^data:(application\/(?:pdf|zip|x-zip-compressed));base64,([A-Za-z0-9+/]+={0,2})$/);
@@ -1225,7 +1226,7 @@ async function handleCreditQuote(request, env) {
         estimatedCredits: result,
         estimatedTokens: fixedCredits * 1000,
         tier: parsed.tier,
-        pricing: "Fixed credits per message for the selected tier."
+        pricing: "Token-weighted credits: 1 credit per 500 tokens with model multipliers and attachment surcharges."
       });
     }
   } catch (error) {
@@ -1236,7 +1237,7 @@ async function handleCreditQuote(request, env) {
     estimatedCredits: fixedCredits,
     estimatedTokens: fixedCredits * 1000,
     tier: parsed.tier,
-    pricing: "Fixed credits per message for the selected tier."
+    pricing: "Token-weighted credits: 1 credit per 500 tokens with model multipliers and attachment surcharges."
   });
 }
 
@@ -1370,15 +1371,80 @@ async function handleChat(request, env) {
   }
 
   // Plan-Based File Upload Gating:
-  // Free Plan (plan === 'free' or unset): Block PDFs, ZIPs, etc. with 403 paid_plan_required
-  const isFreePlan = !userPlan || userPlan === "free" || accountTier === "lite";
-  const hasDocOrZip = Array.isArray(parsed.attachments) && parsed.attachments.some(a => CHAT_FILE_TYPES.has(a.type));
-  if (hasDocOrZip && isFreePlan) {
-    return json({
-      error: "PDF and ZIP uploads require a Paid plan. Upgrade your plan to attach documents and archives.",
-      code: "paid_plan_required",
-      currentPlan: userPlan || "free"
-    }, 403);
+  // Free Plan: Images up to 5 (5 MB each); PDF, ZIP & files blocked with 403 paid_plan_required.
+  // Paid Plans (Lite, Pro, Max, Ultra): ALL paid plans allow Images + PDF + ZIP + files with progressive scaling.
+  const isPaidPlan = Boolean(
+    userPlan &&
+    userPlan !== "free" &&
+    ["lite", "starter", "pro", "max", "business", "ultra"].includes(userPlan)
+  );
+
+  const TIER_UPLOAD_CAPS = {
+    free: { maxFiles: 5, maxSizeBytes: 5 * 1024 * 1024, maxZipMb: 0, maxPdfPages: 0 },
+    lite: { maxFiles: 5, maxSizeBytes: 10 * 1024 * 1024, maxZipMb: 15, maxPdfPages: 25 },
+    starter: { maxFiles: 5, maxSizeBytes: 10 * 1024 * 1024, maxZipMb: 15, maxPdfPages: 25 },
+    pro: { maxFiles: 8, maxSizeBytes: 25 * 1024 * 1024, maxZipMb: 50, maxPdfPages: 60 },
+    max: { maxFiles: 12, maxSizeBytes: 50 * 1024 * 1024, maxZipMb: 120, maxPdfPages: 150 },
+    business: { maxFiles: 12, maxSizeBytes: 50 * 1024 * 1024, maxZipMb: 120, maxPdfPages: 150 },
+    ultra: { maxFiles: 20, maxSizeBytes: 100 * 1024 * 1024, maxZipMb: 300, maxPdfPages: 400 }
+  };
+  const activePlanKey = isPaidPlan ? userPlan : "free";
+  const planCaps = TIER_UPLOAD_CAPS[activePlanKey] || TIER_UPLOAD_CAPS.free;
+
+  if (Array.isArray(parsed.attachments) && parsed.attachments.length > 0) {
+    if (!isPaidPlan) {
+      const hasNonImage = parsed.attachments.some(a => !CHAT_IMAGE_TYPES.has(a.type) && !a.type?.startsWith("image/"));
+      if (hasNonImage) {
+        return json({
+          error: "PDF and ZIP uploads require a Paid plan. Upgrade to Lite, Pro, Max, or Ultra to attach documents and archives.",
+          code: "paid_plan_required",
+          currentPlan: "free"
+        }, 403);
+      }
+      if (parsed.attachments.length > 5) {
+        return json({
+          error: "Free plan allows up to 5 images per message. Upgrade to attach more files.",
+          code: "file_limit_exceeded"
+        }, 400);
+      }
+      for (const att of parsed.attachments) {
+        const base64Str = att.data.split(",")[1] || "";
+        if (base64ByteLength(base64Str) > 5 * 1024 * 1024) {
+          return json({
+            error: "Free plan allows images up to 5 MB each. Upgrade for higher file limits.",
+            code: "file_size_exceeded"
+          }, 400);
+        }
+      }
+    } else {
+      if (parsed.attachments.length > planCaps.maxFiles) {
+        return json({
+          error: `${activePlanKey.toUpperCase()} plan allows up to ${planCaps.maxFiles} files per message. Upgrade to increase your attachment capacity.`,
+          code: "file_limit_exceeded"
+        }, 400);
+      }
+      for (const att of parsed.attachments) {
+        const base64Str = att.data.split(",")[1] || "";
+        if (base64ByteLength(base64Str) > planCaps.maxSizeBytes) {
+          return json({
+            error: `File "${att.name}" exceeds the ${activePlanKey.toUpperCase()} plan limit of ${Math.round(planCaps.maxSizeBytes / (1024 * 1024))} MB. Upgrade for larger file uploads.`,
+            code: "file_size_exceeded"
+          }, 400);
+        }
+        if (att.type === "application/zip" && planCaps.maxZipMb > 0) {
+          const zipCheck = validateZipSafety(base64Str, { maxFiles: planCaps.maxFiles * 3, maxUncompressed: planCaps.maxZipMb * 1024 * 1024 });
+          if (!zipCheck.valid) {
+            return json({ error: zipCheck.error || "ZIP archive does not meet safety limits.", code: "zip_safety_failed" }, 400);
+          }
+        }
+        if (att.type === "application/pdf" && planCaps.maxPdfPages > 0) {
+          const pdfCheck = validatePdfSafety(base64Str, { maxPages: planCaps.maxPdfPages });
+          if (!pdfCheck.valid) {
+            return json({ error: pdfCheck.error || "PDF does not meet safety limits.", code: "pdf_safety_failed" }, 400);
+          }
+        }
+      }
+    }
   }
   const model = getOpenRouterModel(env, parsed.tier);
   if (!geminiApiKey && !groqApiKey && !model) {
@@ -2660,15 +2726,15 @@ function generateContextualSupportResponse(message, history = []) {
   }
 
   if (/price|pricing|\bplans?\b|ultra|pro|lite|max|annual|discount|subscription|buy|checkout|safepay/i.test(q)) {
-    return "JEVEXA offers 4 scalable plans with an automatic 20% annual package discount:\n• Lite: $5/mo ($4/mo annual, $48 paid once) — 2,000 monthly credits (24,000 annual), Lite AI chat (1 credit/msg)\n• Pro: $12/mo ($9.60/mo annual, $115.20 paid once) — 10,000 monthly credits (120,000 annual), Pro AI chat (2 credits/msg), PDF & ZIP uploads, Standard thinking\n• Max: $25/mo ($20/mo annual, $240 paid once) — 30,000 monthly credits (360,000 annual), Max AI chat (4 credits/msg), Max deep reasoning\n• Ultra: $49/mo ($39.20/mo annual, $470.40 paid once) — 70,000 monthly credits (840,000 annual), Ultra AI chat (8 credits/msg), flagship models & priority queue.\nAll credit packages are one-time purchases via Safepay, never recurring subscriptions. Check out our #pricing section or click 'Talk to Human'!";
+    return "JEVEXA offers 4 scalable plans with an automatic 20% annual package discount:\n• Lite: $5/mo ($4/mo annual, $48 paid once) — 2,000 monthly credits (24,000 annual), token-weighted AI chat (1 cr / 500 tok), Images + PDF + ZIP unlocked\n• Pro: $12/mo ($9.60/mo annual, $115.20 paid once) — 10,000 monthly credits (120,000 annual), Pro AI models, expanded file & ZIP limits, Standard thinking\n• Max: $25/mo ($20/mo annual, $240 paid once) — 30,000 monthly credits (360,000 annual), Max AI models, high-volume PDF & ZIP processing, Max deep reasoning\n• Ultra: $49/mo ($39.20/mo annual, $470.40 paid once) — 70,000 monthly credits (840,000 annual), flagship reasoning & vision models, maximum file capacity & priority queue.\nAll credit packages are one-time purchases via Safepay, never recurring subscriptions. Check out our #pricing section or click 'Talk to Human'!";
   }
 
   if (/credit|token|balance|cost|quota|rate limit|welcome/i.test(q)) {
-    return "JEVEXA includes 100 free welcome credits upon sign-up (no credit card required). AI Chat costs a fixed rate per message by tier:\n• Lite: 1 credit per message (Low thinking)\n• Pro: 2 credits per message (Standard thinking, PDF/ZIP uploads)\n• Max: 4 credits per message (Max deep reasoning)\n• Ultra: 8 credits per message (Flagship models, priority queue)\nVariable services like Content Generation use transparent provider-metered credits based on token length. Credit packages are one-time top-ups, not recurring subscriptions. Click 'Talk to Human' if you need account-specific credit adjustments.";
+    return "JEVEXA includes 100 free welcome credits upon sign-up (no credit card required). AI Chat uses transparent token-weighted billing:\n• Base rate: 1 credit per 500 processed tokens (input + output)\n• Model multipliers: Lite (1.0x), Pro (1.5x), Max (2.0x), Ultra (2.0x)\n• Attachment surcharges: Image (+2 credits), PDF (+4 credits), ZIP (+5 credits)\nEvery response displays a real-time credit receipt footer (Credits used • Remaining) and updates your wallet balance instantly. Credit packages are one-time top-ups, not recurring subscriptions. Click 'Talk to Human' if you need account-specific credit adjustments.";
   }
 
   if (/think|reasoning|model|upload|attachment|pdf|zip|file/i.test(q)) {
-    return "JEVEXA AI Chat provides tailored models and capabilities across tiers:\n• Thinking Levels: Lite includes Low thinking; Pro includes Standard thinking; Max and Ultra unlock full Deep Reasoning (Max thinking).\n• File Uploads: Lite supports images (JPEG, PNG, WebP, GIF); Pro, Max, and Ultra support both images and document suites (PDF & ZIP files under 5 MB).\nUpgrade to Pro or higher from the chat model dropdown or #pricing section to unlock multi-file analysis!";
+    return "JEVEXA AI Chat provides tailored models and plan-based file upload capabilities:\n• Free Plan: Allows up to 5 images per message (JPEG, PNG, WebP, GIF; max 5 MB each). PDF, ZIP, and non-image files are locked on Free.\n• Paid Plans (Lite, Pro, Max, Ultra): ALL paid plans unlock Images + PDF + ZIP + files, with progressive scaling across tiers (Lite: 5 files/10MB; Pro: 8 files/25MB; Max: 12 files/50MB; Ultra: 20 files/100MB).\n• Thinking Levels: Lite includes Low thinking; Pro includes Standard thinking; Max and Ultra unlock full Deep Reasoning (Max thinking).\nUpgrade to any paid plan starting from Lite ($4/mo annual or $5 monthly) from the chat header or #pricing section to unlock PDF & ZIP uploads!";
   }
 
   if (/tool|feature|capabilities|model|ocr|crm|email|content|social|analytics|workflow/i.test(q)) {
@@ -2684,7 +2750,7 @@ function generateContextualSupportResponse(message, history = []) {
   }
 
   if (/^(hi|hello|hey|greetings|howdy|salam|aoa)\b/i.test(q)) {
-    return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools (AI Chat & Content Generation), credit costs (1/2/4/8 credits per message), pricing plans (Lite, Pro, Max, Ultra with 20% annual discount), or account setup. You can also click 'Talk to Human' to reach Maaz directly!";
+    return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools (AI Chat & Content Generation), token-weighted credit rates (1 credit per 500 tokens), progressive file upload rules, pricing plans (Lite, Pro, Max, Ultra with 20% annual discount), or account setup. You can also click 'Talk to Human' to reach Maaz directly!";
   }
 
   return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools, credit packages (Lite, Pro, Max, Ultra with 20% annual discount), platform features, and account setup. For complex queries or direct account assistance, feel free to click 'Talk to Human' to reach Maaz and our team!";
@@ -2960,8 +3026,10 @@ async function createSafepayCheckout(request, env) {
   if (!user) return json({ error: "Please sign in again before checkout." }, 401);
 
   const body = await request.json().catch(() => null);
-  const planKey = body?.plan;
-  const cycle = body?.cycle;
+  const rawPlanKey = typeof body?.plan === "string" ? body.plan.toLowerCase().trim() : "";
+  const rawCycle = typeof body?.cycle === "string" ? body.cycle.toLowerCase().trim() : "";
+  const cycle = (rawCycle === "annual" || rawCycle === "yearly") ? "yearly" : rawCycle;
+  const planKey = rawPlanKey === "lite" ? "starter" : (rawPlanKey === "max" ? "business" : rawPlanKey);
   const plan = BILLING_PLANS[planKey];
   if (!plan || !["monthly", "yearly"].includes(cycle)) return json({ error: "Invalid plan or billing cycle." }, 400);
 
@@ -3260,6 +3328,7 @@ async function handleCreditReconcile(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    try {
     const url = new URL(request.url);
 
     // Handle CORS preflight for everything
@@ -3364,7 +3433,11 @@ export default {
         "/about": "/about.html",
         "/about-us": "/about.html",
         "/contact": "/contact.html",
-        "/contact-us": "/contact.html"
+        "/contact-us": "/contact.html",
+        "/pricing": "/",
+        "/pricing/": "/",
+        "/login": "/",
+        "/signup": "/"
       };
 
       if (publicRoutes[normalizedPath]) {
@@ -3409,5 +3482,16 @@ export default {
     return new Response("JEVEXA API is running.", {
       headers: { "Content-Type": "text/plain" }
     });
+    } catch (fatalEdgeError) {
+      console.error("Fatal Worker Edge Catch:", fatalEdgeError?.stack || fatalEdgeError?.message || fatalEdgeError);
+      return new Response(JSON.stringify({
+        ok: false,
+        error: "An unexpected edge error occurred. The service is recovering automatically.",
+        timestamp: new Date().toISOString()
+      }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...JSON_HEADERS }
+      });
+    }
   }
 };

@@ -566,60 +566,94 @@
         attachmentList.hidden = pendingAttachments.length === 0;
     }
 
+    const PLAN_UPLOAD_CONFIG = {
+        free: { name: 'Free', isPaid: false, maxFiles: 5, maxFileSize: 5 * 1024 * 1024, maxBatchSize: 25 * 1024 * 1024 },
+        lite: { name: 'Lite', isPaid: true, maxFiles: 5, maxFileSize: 10 * 1024 * 1024, maxBatchSize: 35 * 1024 * 1024 },
+        starter: { name: 'Lite', isPaid: true, maxFiles: 5, maxFileSize: 10 * 1024 * 1024, maxBatchSize: 35 * 1024 * 1024 },
+        pro: { name: 'Pro', isPaid: true, maxFiles: 8, maxFileSize: 25 * 1024 * 1024, maxBatchSize: 75 * 1024 * 1024 },
+        max: { name: 'Max', isPaid: true, maxFiles: 12, maxFileSize: 50 * 1024 * 1024, maxBatchSize: 150 * 1024 * 1024 },
+        business: { name: 'Max', isPaid: true, maxFiles: 12, maxFileSize: 50 * 1024 * 1024, maxBatchSize: 150 * 1024 * 1024 },
+        ultra: { name: 'Ultra', isPaid: true, maxFiles: 20, maxFileSize: 100 * 1024 * 1024, maxBatchSize: 300 * 1024 * 1024 }
+    };
+
     function isPaidPlanActive() {
         const plan = (currentUserPlan || 'free').toLowerCase();
-        const tier = (tierSelect?.value || 'lite').toLowerCase();
-        return (plan !== 'free' && plan !== '') || (tier !== 'lite');
+        return plan !== 'free' && plan !== '' && plan !== 'starter_free';
+    }
+
+    function getCurrentPlanConfig() {
+        const plan = (currentUserPlan || 'free').toLowerCase();
+        return PLAN_UPLOAD_CONFIG[plan] || PLAN_UPLOAD_CONFIG.free;
     }
 
     async function addAttachments(files) {
-        if (pendingAttachments.length + files.length > 2) {
-            setStatus('Attach up to two files per message.');
+        const isPaid = isPaidPlanActive();
+        const planConfig = getCurrentPlanConfig();
+        const maxFiles = isPaid ? planConfig.maxFiles : 5; // Free plan allows up to 5 images
+
+        if (pendingAttachments.length + files.length > maxFiles) {
+            setStatus(isPaid
+                ? `Your ${planConfig.name} plan allows up to ${maxFiles} files per message.`
+                : 'Free plan allows up to 5 images per message. Upgrade to attach more.');
             return;
         }
         const prepared = [];
-        const isPaid = isPaidPlanActive();
-        for (const file of files) {
-            if (file.size >= 5 * 1024 * 1024) {
-                setStatus(`${file.name} is too large. Each attachment must be under 5 MB.`);
-                return;
-            }
-            const extension = file.name.split('.').pop().toLowerCase();
-            const extensionTypes = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf', zip: 'application/zip' };
-            const type = (file.type || extensionTypes[extension] || '').toLowerCase();
-            const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-            const paidFileTypes = ['application/pdf', 'application/zip', 'application/x-zip-compressed'];
+        const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        const paidFileTypes = ['application/pdf', 'application/zip', 'application/x-zip-compressed'];
+        const extensionTypes = {
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+            pdf: 'application/pdf', zip: 'application/zip'
+        };
 
-            // Free Plan: Images only (max 2, max 5MB). Block PDFs, ZIPs, and other doc types with upgrade modal.
+        for (const file of files) {
+            const extension = (file.name || '').split('.').pop().toLowerCase();
+            const type = (file.type || extensionTypes[extension] || '').toLowerCase();
+            const isImage = imageTypes.includes(type) || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);
+
+            // Free Plan: Images only (max 5, max 5 MB each). Block PDFs, ZIPs, and other doc types with upgrade modal.
             if (!isPaid) {
-                if (!imageTypes.includes(type)) {
-                    setStatus('PDF and ZIP uploads require a Paid plan. Upgrade to attach document and archive files.', true);
+                if (!isImage) {
+                    setStatus('PDF and ZIP uploads require a Paid plan. Upgrade to unlock document and archive files.', true);
                     if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                        window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
+                        window.JEVEXA_SHOW_UPGRADE_MODAL('Lite', 'PDF, ZIP & file uploads', attachButton);
                     }
                     if (typeof window.showToast === 'function') {
-                        window.showToast('Upgrade to a Paid plan to upload PDF and ZIP files.');
+                        window.showToast('Upgrade to a Paid plan (Lite, Pro, Max, or Ultra) to upload PDF and ZIP files.');
                     }
+                    return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    setStatus(`${file.name} is too large. Free plan images must be under 5 MB.`);
                     return;
                 }
             } else {
-                if (!imageTypes.includes(type) && !paidFileTypes.includes(type)) {
-                    setStatus('Supported files are JPEG, PNG, WebP, GIF, PDF, and ZIP under 5 MB.');
+                // Paid Plans: Images + PDF + ZIP + files with progressive tier limits
+                const isPaidFileType = isImage || paidFileTypes.includes(type) || ['pdf', 'zip'].includes(extension);
+                if (!isPaidFileType) {
+                    setStatus('Supported files are JPEG, PNG, WebP, GIF, PDF, and ZIP.');
+                    return;
+                }
+                if (file.size > planConfig.maxFileSize) {
+                    const mbLimit = Math.round(planConfig.maxFileSize / (1024 * 1024));
+                    setStatus(`${file.name} is too large. Your ${planConfig.name} plan allows files up to ${mbLimit} MB each.`);
                     return;
                 }
             }
 
-            if (imageTypes.includes(type) || (isPaid && paidFileTypes.includes(type))) {
+            if (isImage || (isPaid && (paidFileTypes.includes(type) || ['pdf', 'zip'].includes(extension)))) {
+                const normalizedType = (type === 'application/x-zip-compressed' || extension === 'zip')
+                    ? 'application/zip'
+                    : (type || (extension === 'pdf' ? 'application/pdf' : 'application/octet-stream'));
                 prepared.push({
                     name: file.name,
                     size: file.size,
-                    type: type === 'application/x-zip-compressed' ? 'application/zip' : type,
+                    type: normalizedType,
                     data: await new Promise((resolve, reject) => {
                         const reader = new FileReader();
                         reader.onload = () => {
                             const result = String(reader.result || '');
                             const base64 = result.slice(result.indexOf(',') + 1);
-                            resolve(`data:${type === 'application/x-zip-compressed' ? 'application/zip' : type};base64,${base64}`);
+                            resolve(`data:${normalizedType};base64,${base64}`);
                         };
                         reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
                         reader.readAsDataURL(file);
@@ -976,38 +1010,59 @@
         return false;
     }
 
-    async function requestJson(url, session, options = {}) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 35000);
-        if (options.signal) {
-            if (options.signal.aborted) {
-                controller.abort();
-            } else {
-                options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    async function requestJson(url, session, options = {}, retries = 1) {
+        let lastError;
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 35000);
+            if (options.signal) {
+                if (options.signal.aborted) {
+                    clearTimeout(timeoutId);
+                    controller.abort();
+                } else {
+                    options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+                }
+            }
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: session?.access_token ? `Bearer ${session.access_token}` : '',
+                        ...(options.headers || {})
+                    }
+                });
+                clearTimeout(timeoutId);
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const error = new Error(payload.error || 'The request could not be completed.');
+                    error.status = response.status;
+                    error.payload = payload;
+                    if (response.status >= 400 && response.status < 500) {
+                        throw error;
+                    }
+                    if (attempt < retries) {
+                        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+                        continue;
+                    }
+                    throw error;
+                }
+                return payload;
+            } catch (err) {
+                clearTimeout(timeoutId);
+                lastError = err;
+                if (err?.name === 'AbortError' || (err?.status && err.status < 500)) {
+                    throw err;
+                }
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+                    continue;
+                }
+                throw err;
             }
         }
-        let response;
-        try {
-            response = await fetch(url, {
-                ...options,
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session.access_token}`,
-                    ...(options.headers || {})
-                }
-            });
-        } finally {
-            clearTimeout(timeoutId);
-        }
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            const error = new Error(payload.error || 'The request could not be completed.');
-            error.status = response.status;
-            error.payload = payload;
-            throw error;
-        }
-        return payload;
+        throw lastError;
     }
 
     function generateChatbotGuestReply(queryText) {
@@ -1016,7 +1071,7 @@
             return "Hello! I am Jevexa AI, your intelligent automation assistant. Ready to help you draft content, brainstorm marketing strategies, explain our AI tools, or automate business workflows. What would you like to work on today?";
         }
         if (/who are you|what can you do|what is jevexa/i.test(q)) {
-            return "I am Jevexa AI, the core assistant for JEVEXA AI Studio. I help teams automate operations, draft high-performing marketing & business copy, analyze documents (PDF & ZIP on Pro+), and streamline workflows with dedicated AI tools.";
+            return "I am Jevexa AI, the core assistant for JEVEXA AI Studio. I help teams automate operations, draft high-performing marketing & business copy, analyze documents (PDF & ZIP on Paid plans), and streamline workflows with dedicated AI tools.";
         }
         if (/blog|write a blog/i.test(q)) {
             return "Here is a high-converting blog outline you can use right away:\n\n1. **Hook:** State the industry challenge and why previous solutions fall short.\n2. **The Core Shift:** Introduce AI-driven automation as the competitive edge.\n3. **Practical Framework:** Step-by-step implementation guide with tangible metrics.\n4. **Call to Action:** Direct readers to test the workflow.\n\n*Tip:* Our live **Content Generation** tool drafts complete articles with customizable tone and length! Sign in to get 100 free credits to generate yours.";
@@ -1025,10 +1080,10 @@
             return "Here is a professional outreach email template:\n\n**Subject:** Streamlining your AI workflow at [Company Name]\n\nHi [First Name],\n\nI noticed your team is scaling operations and thought you might be interested in automating repetitive content and customer queries.\n\nAt JEVEXA, our AI tools help teams save 15+ hours weekly with intelligent chat, automated drafting, and workflow integrations. Would you be open to a quick 5-minute look this week?\n\nBest regards,\n[Your Name]\n\n*Tip:* You can generate personalized email sequences using our Content Generation tool with your 100 free credits!";
         }
         if (/credit|token|balance|cost|quota/i.test(q)) {
-            return "JEVEXA credits power all studio tools:\n• **100 Free Welcome Credits:** Included immediately upon sign-up (no card required).\n• **Fixed Per-Message Rates:** Lite is 1 credit/msg, Pro is 2 credits/msg, Max is 4 credits/msg, and Ultra is 8 credits/msg.\n• **Content Generation:** Measured transparently by provider usage.\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount**!";
+            return "JEVEXA credits power all studio tools with transparent usage-based economics:\n• **100 Free Welcome Credits:** Included immediately upon sign-up (no card required).\n• **Token-Weighted Chat:** 1 credit per 500 tokens (input + output) multiplied by model tier (Lite 1.0x, Pro 1.5x, Max 2.0x, Ultra 2.0x) + attachment surcharges.\n• **Content Generation:** Measured transparently by provider token usage.\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount**!";
         }
         if (/price|pricing|plan|ultra|pro|lite|max|annual|discount/i.test(q)) {
-            return "JEVEXA offers 4 scalable tiers with 20% annual discount:\n• **Lite:** $5/mo ($4/mo annual) — 2,000 monthly credits, Lite AI Chat (1 credit/msg)\n• **Pro:** $12/mo ($9.60/mo annual) — 10,000 monthly credits, Pro AI Chat (2 credits/msg), PDF & ZIP uploads\n• **Max:** $25/mo ($20/mo annual) — 30,000 monthly credits, Max AI Chat (4 credits/msg), full reasoning depth\n• **Ultra:** $49/mo ($39.20/mo annual) — 70,000 monthly credits, Ultra AI Chat (8 credits/msg), flagship models & priority queue.\nAll annual packages are discounted by 20% and paid once!";
+            return "JEVEXA offers 4 scalable tiers with an automatic 20% annual package discount:\n• **Lite:** $5/mo ($4/mo annual) — 2,000 monthly credits, fast Lite AI chat, Images + PDF + ZIP unlocked\n• **Pro:** $12/mo ($9.60/mo annual) — 10,000 monthly credits, Pro AI models, expanded PDF & ZIP limits, Standard thinking\n• **Max:** $25/mo ($20/mo annual) — 30,000 monthly credits, Max AI models, high-volume PDF & ZIP, deep reasoning\n• **Ultra:** $49/mo ($39.20/mo annual) — 70,000 monthly credits, Ultra flagship reasoning & vision models, priority queue.\nAll annual packages are discounted by 20% and paid once!";
         }
         if (/tool|feature|capabilities|model|ocr|crm/i.test(q)) {
             return "JEVEXA AI Studio features 10 business tools:\n• **AI Chat** & **Content Generation** are live today!\n• 8 additional tools (Email AI, Mini CRM, Document OCR, Social Assistant, Analytics, User Management, Workflow Automation, Data Management) roll out across planned releases.\nSign in to test the live tools with 100 free credits!";
@@ -1105,11 +1160,12 @@
             }
 
             const selectedTier = tierSelect?.value || 'lite';
-            if (selectedTier === 'lite' && attachments.some(item => !item.type.startsWith('image/'))) {
+            const isPaid = isPaidPlanActive();
+            if (!isPaid && attachments.some(item => !item.type.startsWith('image/'))) {
                 removeTyping();
-                setStatus('Images only on Lite. Remove PDF or ZIP attachments, or upgrade your plan.', true);
+                setStatus('PDF and ZIP uploads require a Paid plan. Upgrade to unlock document and archive files.', true);
                 if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                    window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
+                    window.JEVEXA_SHOW_UPGRADE_MODAL('Lite', 'PDF & ZIP file uploads', attachButton);
                 }
                 return;
             }
@@ -1122,7 +1178,21 @@
                 history: conversation.slice(-8)
             };
 
-            const fixedTierCosts = { lite: 1, pro: 2, max: 4, ultra: 8 };
+            // Dynamic token-weighted credit calculation:
+            // Math.max(1, Math.ceil(((inputTokens + outputTokens) / 500) * modelMultiplier)) + attachmentSurcharge
+            const tierMultipliers = { lite: 1.0, pro: 1.5, max: 2.0, ultra: 2.0 };
+            const multiplier = tierMultipliers[selectedTier] || 1.0;
+            let attachmentSurcharge = 0;
+            for (const att of attachments) {
+                const t = (att?.type || '').toLowerCase();
+                if (t.startsWith('image/')) attachmentSurcharge += 2;
+                else if (t === 'application/pdf') attachmentSurcharge += 4;
+                else if (t.includes('zip')) attachmentSurcharge += 5;
+            }
+            const estInputTokens = Math.max(1, Math.ceil((text.length + 50) / 4));
+            const estOutputTokens = selectedTier === 'ultra' ? 800 : selectedTier === 'max' ? 600 : selectedTier === 'pro' ? 400 : 250;
+            const calculatedEstCredits = Math.max(1, Math.ceil(((estInputTokens + estOutputTokens) / 500) * multiplier)) + attachmentSurcharge;
+
             let quote = null;
             try {
                 quote = await Promise.race([
@@ -1137,7 +1207,7 @@
                 console.warn('Credit quote lookup notice:', quoteErr?.message || quoteErr);
             }
 
-            const estimatedCredits = fixedTierCosts[selectedTier] || quote?.estimatedCredits || 1;
+            const estimatedCredits = quote?.estimatedCredits || calculatedEstCredits;
 
             let wallet = null;
             const countEl = document.getElementById('creditsCount');
@@ -1163,15 +1233,15 @@
             if (wallet && Number(wallet.balance) < estimatedCredits) {
                 removeTyping();
                 const requiredPlanName = selectedTier === 'lite' ? 'Lite' : selectedTier === 'pro' ? 'Pro' : selectedTier === 'max' ? 'Max' : 'Ultra';
-                setStatus(`This ${selectedTier.toUpperCase()} message costs ${estimatedCredits} credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
-                appendMessage(`Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`);
+                setStatus(`This ${selectedTier.toUpperCase()} message costs ~${estimatedCredits} token-weighted credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
+                appendMessage(`Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ~${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`);
                 if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                     window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlanName, 'additional AI credits');
                 }
                 return;
             }
 
-            setStatus(`${selectedTier.toUpperCase()} costs ${estimatedCredits} fixed credits per message.`);
+            setStatus(`⚡ ${selectedTier.toUpperCase()} • Token-weighted (~${estimatedCredits} cr est. • 1 cr / 500 tok)`);
 
             try {
                 const result = await requestJson('/api/chat', session, {
@@ -1198,17 +1268,20 @@
                     : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null);
                 const used = Number.isInteger(result.credits_used)
                     ? result.credits_used
-                    : (Number.isInteger(result.creditsCharged) ? result.creditsCharged : 1);
+                    : (Number.isInteger(result.creditsCharged) ? result.creditsCharged : (Number.isInteger(result.creditsUsed) ? result.creditsUsed : 1));
                 if (remaining !== null) {
                     const countEl = document.getElementById('creditsCount');
                     if (countEl) countEl.textContent = String(remaining);
                     const settingsBal = document.getElementById('settingsBalance');
                     if (settingsBal) settingsBal.textContent = String(remaining);
+                    try {
+                        localStorage.setItem('jevexa_persisted_credits', String(remaining));
+                    } catch (_) {}
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                     window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
                 }
                 setStatus(
-                    `AI reply completed. ${used} ${String(result.tier || selectedTier).toUpperCase()} credit${used === 1 ? '' : 's'} used. Balance ${remaining !== null ? remaining : result.creditsRemaining}.`
+                    `⚡ Credits used: ${used} • Remaining: ${remaining !== null ? remaining : result.creditsRemaining}`
                 );
                 await refreshDisplayedCredits();
             } catch (error) {
@@ -1511,7 +1584,8 @@
         }
         currentTier = tier;
         updateSelectorDisplay('tier');
-        setStatus(`⚡ ${tier[0].toUpperCase()}${tier.slice(1)} • ${{ lite: 1, pro: 2, max: 4, ultra: 8 }[tier]} credit${tier === 'lite' ? '' : 's'}/msg`);
+        const tierMultipliers = { lite: '1.0x', pro: '1.5x', max: '2.0x', ultra: '2.0x' };
+        setStatus(`⚡ ${tier[0].toUpperCase()}${tier.slice(1)} • Token-weighted (1 cr / 500 tok • ${tierMultipliers[tier] || '1.0x'})`);
     });
     document.getElementById('chatThinking')?.addEventListener('change', () => {
         const selected = thinkingSelect.value;
@@ -1610,7 +1684,7 @@
             if (!service.enabled || service.integration_status === 'unavailable') {
                 price.textContent = 'Unavailable — provider integration not connected';
             } else if (service.fixed_credits) {
-                price.textContent = `${service.fixed_credits} credits per operation`;
+                price.textContent = `${service.fixed_credits} credit baseline (1 cr / 500 tokens)`;
             } else if (service.credits_per_1000_tokens) {
                 price.textContent = `${service.credits_per_1000_tokens} credit(s) per 1,000 measured tokens`;
             } else {

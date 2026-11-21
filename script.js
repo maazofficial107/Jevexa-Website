@@ -205,10 +205,23 @@ function openUpgradeModal(plan, feature, returnFocusElement = document.activeEle
     const message = document.getElementById('upgradeModalMessage');
     const planLabel = document.getElementById('upgradeModalPlan');
     modal.returnFocusElement = returnFocusElement;
-    modal.dataset.requiredPlan = (plan || 'pro').toLowerCase();
+    modal.dataset.requiredPlan = (plan || 'lite').toLowerCase();
+    const cleanPlan = plan || 'Lite';
     if (title) title.textContent = `Unlock ${feature}`;
-    if (message) message.textContent = `Upgrade to Jevexa ${plan} to unlock this feature and get more from your AI workspace.`;
-    if (planLabel) planLabel.textContent = `JEVEXA ${plan.toUpperCase()}`;
+    if (message) {
+        if (/pdf|zip|file|upload/i.test(feature || '')) {
+            message.textContent = 'Upgrade to any Paid plan (Lite, Pro, Max, or Ultra) to unlock PDF, ZIP, and document uploads.';
+        } else {
+            message.textContent = `Upgrade to Jevexa ${cleanPlan} to unlock this feature and get more from your AI workspace.`;
+        }
+    }
+    if (planLabel) {
+        if (/pdf|zip|file|upload/i.test(feature || '')) {
+            planLabel.textContent = 'JEVEXA PAID PLANS';
+        } else {
+            planLabel.textContent = `JEVEXA ${cleanPlan.toUpperCase()}`;
+        }
+    }
     modal.hidden = false;
     requestAnimationFrame(() => modal.classList.add('is-open'));
     document.getElementById('upgradeModalClose')?.focus({ preventScroll: true });
@@ -444,6 +457,35 @@ let authBusy = false;
 let currentUser = null;
 let authStateRevision = 0;
 let previousLoginFocus = null;
+
+function getPersistedSession() {
+    try {
+        const cached = localStorage.getItem('jevexa_persisted_session');
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed?.user?.id) return parsed;
+        }
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                const val = localStorage.getItem(key);
+                if (val) {
+                    const parsed = JSON.parse(val);
+                    const user = parsed?.user || parsed?.currentSession?.user;
+                    if (user?.id) {
+                        return { user, session: parsed?.currentSession || parsed };
+                    }
+                }
+            }
+        }
+    } catch (_) {}
+    return null;
+}
+
+const earlyPersistedAuth = getPersistedSession();
+if (earlyPersistedAuth?.user) {
+    currentUser = earlyPersistedAuth.user;
+}
 
 function showLoginModal() {
     const modal = document.getElementById('loginModal');
@@ -1724,6 +1766,17 @@ function syncAuthNavigation(user) {
 function applyAuthState(user) {
     currentUser = user || null;
     const revision = ++authStateRevision;
+    if (currentUser) {
+        try {
+            localStorage.setItem('jevexa_persisted_session', JSON.stringify({ user: currentUser, timestamp: Date.now() }));
+        } catch (_) {}
+    } else {
+        try {
+            localStorage.removeItem('jevexa_persisted_session');
+            localStorage.removeItem('jevexa_persisted_credits');
+            document.documentElement.classList.remove('jevexa-authenticated-pending');
+        } catch (_) {}
+    }
     syncAuthNavigation(currentUser);
 
     if (currentUser) renderUserAccount(currentUser);
@@ -1734,6 +1787,20 @@ function applyAuthState(user) {
             void updateCreditsHeader(currentUser, revision);
         }
     }, 0);
+}
+
+// Immediate synchronous UI restoration from persisted session before async getSession()
+if (currentUser) {
+    syncAuthNavigation(currentUser);
+    renderUserAccount(currentUser);
+    const cachedCredits = localStorage.getItem('jevexa_persisted_credits');
+    if (cachedCredits) {
+        const countEl = document.getElementById('creditsCount');
+        if (countEl) countEl.textContent = cachedCredits;
+        const creditsBadge = document.getElementById('creditsBadge');
+        if (creditsBadge) creditsBadge.style.display = 'inline-flex';
+        window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+    }
 }
 
 if (supabaseClient) {
@@ -1805,6 +1872,9 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
     }
 
     creditsCount.textContent = String(data.balance);
+    try {
+        localStorage.setItem('jevexa_persisted_credits', String(data.balance));
+    } catch (_) {}
     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 }
 
@@ -2494,168 +2564,82 @@ if (document.readyState === 'loading') {
 
 
 const billingToggle = document.getElementById('billingToggle');
+const monthlyToggleLabel = document.getElementById('monthlyToggleLabel');
+const annualToggleLabel = document.getElementById('annualToggleLabel');
 const priceAnimationFrames = new WeakMap();
 
-
-
-
-
-
-
-billingToggle?.addEventListener('change', () => {
-
-
-
-    const yearly = billingToggle.checked;
+function syncPricingDisplay() {
+    if (!billingToggle) return;
+    const yearly = Boolean(billingToggle.checked);
+    billingToggle.setAttribute('aria-checked', String(yearly));
+    monthlyToggleLabel?.classList.toggle('active', !yearly);
+    annualToggleLabel?.classList.toggle('active', yearly);
 
     document.querySelectorAll('.price-card[data-pricing-plan]').forEach(card => {
-        const plan = PRICING_CONFIG.plans[card.dataset.pricingPlan];
+        const planKey = card.dataset.pricingPlan;
+        const plan = PRICING_CONFIG.plans[planKey];
         const original = card.querySelector('[data-original-monthly]');
         const annualNote = card.querySelector('[data-annual-price]');
+        const badge20 = card.querySelector('[data-badge-20-off]');
         if (!plan || !original || !annualNote) return;
-        const showAnnual = yearly && plan.annualEligible;
+        const showAnnual = yearly && Boolean(plan.annualEligible);
         original.hidden = !showAnnual;
         annualNote.hidden = !showAnnual;
-        const badge20 = card.querySelector('[data-badge-20-off]');
         if (badge20) badge20.hidden = !showAnnual;
     });
-
-
-
-
-
-
 
     document.querySelectorAll('.price-card .period[data-monthly-label][data-yearly-label]').forEach(el => {
         el.textContent = yearly ? el.dataset.yearlyLabel : el.dataset.monthlyLabel;
     });
 
     document.querySelectorAll('.price-card .amount[data-monthly][data-yearly]').forEach(el => {
-
         const previousFrame = priceAnimationFrames.get(el);
         if (previousFrame !== undefined) cancelAnimationFrame(previousFrame);
 
-        const next = +(
-
-
-
-            yearly
-
-
-
-                ? el.getAttribute('data-yearly')
-
-
-
-                : el.getAttribute('data-monthly')
-
-
-
-        );
-
-
-
-
-
-
-
+        const next = +(yearly ? el.getAttribute('data-yearly') : el.getAttribute('data-monthly'));
         const current = Number.parseFloat(el.textContent.replace(/,/g, '')) || 0;
         const showCents = yearly && el.dataset.annualEligible === 'true';
 
-
-
-
-
-
-
         el.dataset.animated = '0';
-
-
-
-
-
-
-
         const start = performance.now();
-
-
-
-        const duration = 450;
-
-
-
-
-
-
+        const duration = 350;
 
         const update = (now) => {
-
-
-
             const progress = Math.min((now - start) / duration, 1);
-
-
-
             const eased = 1 - Math.pow(1 - progress, 3);
-
-
-
-
-
-
-
             el.textContent = formatPackagePrice(current + (next - current) * eased, showCents);
 
-
-
-
-
-
-
             if (progress < 1) {
-
-
-
                 priceAnimationFrames.set(el, requestAnimationFrame(update));
-
-
-
             } else {
-
-
-
                 el.textContent = formatPackagePrice(next, showCents);
                 priceAnimationFrames.delete(el);
-
-
-
             }
-
-
-
         };
 
-
-
-
-
-
-
         priceAnimationFrames.set(el, requestAnimationFrame(update));
-
-
-
     });
+}
 
-
-
-});
-
-
-
-
-
-
+billingToggle?.addEventListener('change', syncPricingDisplay);
+if (window.JEVEXA_SAFE_INTERACTION) {
+    if (monthlyToggleLabel) {
+        window.JEVEXA_SAFE_INTERACTION.bind(monthlyToggleLabel, 'click', () => {
+            if (billingToggle && billingToggle.checked) {
+                billingToggle.checked = false;
+                syncPricingDisplay();
+            }
+        });
+    }
+    if (annualToggleLabel) {
+        window.JEVEXA_SAFE_INTERACTION.bind(annualToggleLabel, 'click', () => {
+            if (billingToggle && !billingToggle.checked) {
+                billingToggle.checked = true;
+                syncPricingDisplay();
+            }
+        });
+    }
+}
 
 // FAQ Accordion
 
@@ -4127,6 +4111,9 @@ const JEVEXA_PLANS = {
         if (countEl) countEl.textContent = str;
         const settingsBal = document.getElementById('settingsBalance');
         if (settingsBal) settingsBal.textContent = str;
+        try {
+            localStorage.setItem('jevexa_persisted_credits', str);
+        } catch (_) {}
         document.querySelectorAll('.workspace-credits-val').forEach(el => {
             el.textContent = str;
         });

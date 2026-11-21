@@ -52,6 +52,27 @@
 
     <link rel="stylesheet" href="/premium.css">
 
+    <!-- Anti-Flash Session Hydration: Check persistent auth synchronously before initial paint -->
+    <script>
+    (function () {
+        try {
+            var hasSession = Boolean(localStorage.getItem('jevexa_persisted_session'));
+            if (!hasSession) {
+                for (var i = 0; i < localStorage.length; i++) {
+                    var k = localStorage.key(i);
+                    if (k && k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1) {
+                        var v = localStorage.getItem(k);
+                        if (v && v.indexOf('"user"') !== -1) { hasSession = true; break; }
+                    }
+                }
+            }
+            if (hasSession) {
+                document.documentElement.classList.add('jevexa-authenticated-pending');
+            }
+        } catch (_) {}
+    })();
+    </script>
+
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -276,7 +297,7 @@
                         </div>
                         <div class="tool-card-footer">
                             <span class="tool-card-cta live-cta">Open Workspace <i class="fas fa-arrow-right"></i></span>
-                            <span class="tool-card-badge-pill">1 credit / msg</span>
+                            <span class="tool-card-badge-pill">Usage-based credits</span>
                         </div>
                     </div>
 
@@ -968,17 +989,17 @@
 
             <div class="pricing-toggle" data-aos="fade-up">
 
-                <span class="toggle-label">Monthly</span>
+                <span class="toggle-label active" id="monthlyToggleLabel">Monthly</span>
 
                 <label class="switch">
 
-                    <input type="checkbox" id="billingToggle" aria-label="Show annual package pricing">
+                    <input type="checkbox" id="billingToggle" aria-label="Save 20% with the annual package" role="switch" aria-checked="false">
 
                     <span class="slider"></span>
 
                 </label>
 
-                <span class="toggle-label">Annually <span class="save-badge">20% OFF</span></span>
+                <span class="toggle-label" id="annualToggleLabel">Annually <span class="save-badge">20% OFF</span></span>
 
             </div>
 
@@ -988,197 +1009,214 @@
 
             <div class="pricing-grid">
 
+                <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="50" data-pricing-plan="free">
+
+                    <div class="price-header">
+
+                        <h3>Free</h3>
+
+                        <p class="price-desc">Starter access with token-based credits</p>
+
+                    </div>
+
+                    <div class="price-amount">
+
+                        <span class="currency">$</span>
+
+                        <span class="amount">0</span>
+
+                        <span class="period">free forever</span>
+
+                    </div>
+
+                    <div class="discount-tag free-tag">100 Welcome Credits Included</div>
+
+                    <ul class="price-features">
+
+                        <li><i class="fas fa-check"></i> 100 free welcome credits</li>
+                        <li><i class="fas fa-check"></i> Token-weighted credits (1 cr / 500 tok)</li>
+                        <li><i class="fas fa-check"></i> Fast Lite AI models · Low thinking</li>
+                        <li><i class="fas fa-check"></i> Up to 5 images per message (max 5 MB each)</li>
+                        <li><i class="fas fa-lock"></i> PDF &amp; ZIP uploads locked (upgrade prompt)</li>
+                        <li><i class="fas fa-check"></i> Content Generation workspace</li>
+                        <li><i class="fas fa-headset"></i> Standard community support</li>
+
+                    </ul>
+
+                    <a href="#" class="btn btn-outline btn-magnetic" data-auth-action="signup">Get Started Free</a>
+
+                </div>
+
                 <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="100" data-pricing-plan="starter">
 
-    <div class="price-header">
+                    <div class="price-header">
 
-        <h3>Lite</h3>
+                        <h3>Lite</h3>
 
-        <p class="price-desc">For students &amp; solo starters · formerly Starter</p>
+                        <p class="price-desc">Built for students &amp; solo starters</p>
 
-    </div>
+                    </div>
 
+                    <div class="price-amount">
 
+                        <span class="old-price" data-original-monthly hidden></span>
 
-    <div class="price-amount">
+                        <span class="currency">$</span>
 
-        <span class="old-price" data-original-monthly hidden></span>
+                        <span class="amount" data-plan-amount>5</span>
 
-        <span class="currency">$</span>
+                        <span class="period" data-plan-period>monthly credit package</span>
+                        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
 
-        <span class="amount" data-plan-amount>—</span>
+                    </div>
 
-        <span class="period" data-plan-period>monthly credit package</span>
-        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+                    <p class="annual-price-note" data-annual-price hidden></p>
 
-    </div>
+                    <div class="discount-tag" data-annual-discount>Save 20% with the annual package · paid once</div>
 
-    <p class="annual-price-note" data-annual-price hidden></p>
+                    <ul class="price-features">
 
-    <div class="discount-tag" data-annual-discount>Annual package · paid once</div>
+                        <li><i class="fas fa-check"></i> 2,000 credits monthly / 24,000 credits annually</li>
+                        <li><i class="fas fa-check"></i> Fast Lite AI models · 1.0x token weight</li>
+                        <li><i class="fas fa-check"></i> Images + PDF + ZIP + file uploads unlocked</li>
+                        <li><i class="fas fa-check"></i> Standard limits: 5 files, 10 MB per file (35 MB total)</li>
+                        <li><i class="fas fa-check"></i> PDF (20 pgs) &amp; safe ZIP archives (20 MB / 25 files)</li>
+                        <li><i class="fas fa-check"></i> Content Generation workspace</li>
+                        <li><i class="fas fa-headset"></i> Public human support tickets</li>
 
-    <ul class="price-features">
+                    </ul>
 
-        <li><i class="fas fa-check"></i> 2,000 credits monthly / 24,000 credits annually</li>
-        <li><i class="fas fa-check"></i> AI chat access</li>
-        <li><i class="fas fa-check"></i> Lite AI chat · 1 credit per message</li>
-        <li><i class="fas fa-check"></i> Image uploads · Low thinking level</li>
-        <li><i class="fas fa-check"></i> Content Generation</li>
-        <li><i class="fas fa-clock"></i> Email &amp; Outreach AI (at launch)</li>
-        <li><i class="fas fa-clock"></i> Mini CRM (at launch)</li>
-        <li><i class="fas fa-clock"></i> Document AI &amp; OCR (at launch)</li>
-        <li><i class="fas fa-headset"></i> Public human support tickets</li>
+                    <button type="button" class="btn btn-outline btn-magnetic" data-plan="starter" disabled>Coming Soon</button>
 
-    </ul>
-
-
-
-    <button type="button" class="btn btn-outline btn-magnetic" data-plan="starter" disabled>Coming Soon</button>
-
-</div>
+                </div>
 
                 <div class="price-card glass popular tilt-card" data-aos="fade-up" data-aos-delay="200" data-pricing-plan="pro">
 
-    <div class="popular-badge">
+                    <div class="popular-badge">
 
-        <i class="fas fa-crown"></i> Most Popular
+                        <i class="fas fa-crown"></i> Most Popular
 
-    </div>
+                    </div>
 
+                    <div class="price-header">
 
+                        <h3>Pro</h3>
 
-    <div class="price-header">
+                        <p class="price-desc">Built for freelancers &amp; creators</p>
 
-        <h3>Pro</h3>
+                    </div>
 
-        <p class="price-desc">For freelancers &amp; small shops</p>
+                    <div class="price-amount">
 
-    </div>
+                        <span class="old-price" data-original-monthly hidden></span>
 
+                        <span class="currency">$</span>
 
+                        <span class="amount" data-plan-amount>12</span>
 
-    <div class="price-amount">
+                        <span class="period" data-plan-period>monthly credit package</span>
+                        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
 
-        <span class="old-price" data-original-monthly hidden></span>
+                    </div>
 
-        <span class="currency">$</span>
+                    <p class="annual-price-note" data-annual-price hidden></p>
 
-        <span class="amount" data-plan-amount>—</span>
+                    <div class="discount-tag" data-annual-discount>Save 20% with the annual package · paid once</div>
 
-        <span class="period" data-plan-period>monthly credit package</span>
-        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+                    <ul class="price-features">
 
-    </div>
+                        <li><i class="fas fa-check"></i> 10,000 credits monthly / 120,000 credits annually</li>
+                        <li><i class="fas fa-check"></i> Everything in Lite</li>
+                        <li><i class="fas fa-check"></i> Pro AI models · Standard thinking depth (1.5x)</li>
+                        <li><i class="fas fa-check"></i> Expanded limits: 8 files, 25 MB per file (75 MB total)</li>
+                        <li><i class="fas fa-check"></i> Deeper PDF (60 pgs) &amp; larger ZIPs (50 MB / 60 files)</li>
+                        <li><i class="fas fa-check"></i> Multi-step content workflows &amp; priority queue</li>
+                        <li><i class="fas fa-envelope"></i> Priority email support</li>
 
-    <p class="annual-price-note" data-annual-price hidden></p>
+                    </ul>
 
-    <div class="discount-tag" data-annual-discount>Annual package · paid once</div>
+                    <button type="button" class="btn btn-primary btn-magnetic" data-plan="pro" disabled>Coming Soon</button>
 
-
-
-    <ul class="price-features">
-
-        <li><i class="fas fa-check"></i> 10,000 credits monthly / 120,000 credits annually</li>
-        <li><i class="fas fa-check"></i> Everything in Lite</li>
-        <li><i class="fas fa-check"></i> Pro AI chat · 2 credits per message</li>
-        <li><i class="fas fa-check"></i> Images, PDF and ZIP uploads under 5 MB</li>
-        <li><i class="fas fa-check"></i> Low and Standard thinking levels</li>
-        <li><i class="fas fa-clock"></i> All 10 AI tools as they launch</li>
-        <li><i class="fas fa-clock"></i> Social Media Assistant and Business Analytics (at launch)</li>
-        <li><i class="fas fa-envelope"></i> Priority email support (at launch)</li>
-
-    </ul>
-
-
-
-    <button type="button" class="btn btn-primary btn-magnetic" data-plan="pro" disabled>Coming Soon</button>
-
-</div>
+                </div>
 
                 <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="300" data-pricing-plan="business">
 
-    <div class="price-header">
+                    <div class="price-header">
 
-        <h3>Max</h3>
+                        <h3>Max</h3>
 
-        <p class="price-desc">For growing small businesses · formerly Business</p>
+                        <p class="price-desc">Built for growing businesses &amp; heavy builders</p>
 
-    </div>
+                    </div>
 
+                    <div class="price-amount">
 
+                        <span class="old-price" data-original-monthly hidden></span>
 
-    <div class="price-amount">
+                        <span class="currency">$</span>
 
-        <span class="old-price" data-original-monthly hidden></span>
+                        <span class="amount" data-plan-amount>25</span>
 
-        <span class="currency">$</span>
+                        <span class="period" data-plan-period>monthly credit package</span>
+                        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
 
-        <span class="amount" data-plan-amount>—</span>
+                    </div>
 
-        <span class="period" data-plan-period>monthly credit package</span>
-        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+                    <p class="annual-price-note" data-annual-price hidden></p>
 
-    </div>
+                    <div class="discount-tag gold" data-annual-discount>Save 20% with the annual package · paid once</div>
 
-    <p class="annual-price-note" data-annual-price hidden></p>
+                    <ul class="price-features">
 
-    <div class="discount-tag gold" data-annual-discount>Annual package · paid once</div>
+                        <li><i class="fas fa-check"></i> 30,000 credits monthly / 360,000 credits annually</li>
+                        <li><i class="fas fa-check"></i> Everything in Pro</li>
+                        <li><i class="fas fa-check"></i> Max AI models · Deep reasoning &amp; analysis (2.0x)</li>
+                        <li><i class="fas fa-check"></i> High-volume limits: 12 files, 50 MB per file (150 MB total)</li>
+                        <li><i class="fas fa-check"></i> Large PDF (150 pgs) &amp; heavy ZIPs (120 MB / 150 files)</li>
+                        <li><i class="fas fa-check"></i> Larger context &amp; attachment allowances</li>
+                        <li><i class="fas fa-envelope"></i> Direct founder support &amp; priority turnaround</li>
 
+                    </ul>
 
+                    <button type="button" class="btn btn-outline btn-magnetic" data-plan="business" disabled>Coming Soon</button>
 
-    <ul class="price-features">
-
-        <li><i class="fas fa-check"></i> 30,000 credits monthly / 360,000 credits annually</li>
-        <li><i class="fas fa-check"></i> Everything in Pro</li>
-        <li><i class="fas fa-check"></i> Max AI chat · 4 credits per message</li>
-        <li><i class="fas fa-check"></i> Images, PDF and ZIP uploads under 5 MB</li>
-        <li><i class="fas fa-check"></i> Max thinking level</li>
-        <li><i class="fas fa-clock"></i> Data Management (at launch)</li>
-        <li><i class="fas fa-clock"></i> User &amp; Admin Management (at launch)</li>
-        <li><i class="fas fa-envelope"></i> Direct founder support (at launch)</li>
-
-    </ul>
-
-
-
-   <button type="button" class="btn btn-outline btn-magnetic" data-plan="business" disabled>Coming Soon</button>
-
-</div>
+                </div>
 
                 <div class="price-card glass tilt-card" data-aos="fade-up" data-aos-delay="400" data-pricing-plan="ultra">
 
-    <div class="price-header">
-        <h3>Ultra</h3>
-        <p class="price-desc">For power users &amp; teams · flagship studio suite</p>
-    </div>
+                    <div class="price-header">
+                        <h3>Ultra</h3>
+                        <p class="price-desc">Built for power users &amp; teams</p>
+                    </div>
 
-    <div class="price-amount">
-        <span class="old-price" data-original-monthly hidden></span>
-        <span class="currency">$</span>
-        <span class="amount" data-plan-amount>—</span>
-        <span class="period" data-plan-period>monthly credit package</span>
-        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
-    </div>
+                    <div class="price-amount">
+                        <span class="old-price" data-original-monthly hidden></span>
+                        <span class="currency">$</span>
+                        <span class="amount" data-plan-amount>49</span>
+                        <span class="period" data-plan-period>monthly credit package</span>
+                        <span class="save-badge badge-20-off" data-badge-20-off hidden>20% OFF</span>
+                    </div>
 
-    <p class="annual-price-note" data-annual-price hidden></p>
-    <div class="discount-tag gold" data-annual-discount>Annual package · paid once</div>
+                    <p class="annual-price-note" data-annual-price hidden></p>
+                    <div class="discount-tag gold" data-annual-discount>Save 20% with the annual package · paid once</div>
 
-    <ul class="price-features">
-        <li><i class="fas fa-check"></i> 70,000 credits monthly / 840,000 credits annually</li>
-        <li><i class="fas fa-check"></i> Everything in Max</li>
-        <li><i class="fas fa-check"></i> Ultra AI chat · 8 credits per message</li>
-        <li><i class="fas fa-check"></i> Full multi-modal: Images, PDF &amp; ZIP suites</li>
-        <li><i class="fas fa-check"></i> All thinking levels · Maximum depth</li>
-        <li><i class="fas fa-check"></i> Extended 2,400+ token response limit</li>
-        <li><i class="fas fa-clock"></i> Priority queue routing across all 10 tools</li>
-        <li><i class="fas fa-crown"></i> 24/7 VIP Concierge &amp; Studio Architect support</li>
-    </ul>
+                    <ul class="price-features">
+                        <li><i class="fas fa-check"></i> 70,000 credits monthly / 840,000 credits annually</li>
+                        <li><i class="fas fa-check"></i> Everything in Max</li>
+                        <li><i class="fas fa-check"></i> Ultra flagship reasoning &amp; vision models (2.0x)</li>
+                        <li><i class="fas fa-check"></i> Maximum capacity: 20 files, 100 MB per file (300 MB total)</li>
+                        <li><i class="fas fa-check"></i> Enterprise PDF (350 pgs) &amp; ZIPs (250 MB / 300 files)</li>
+                        <li><i class="fas fa-check"></i> Extended 2,400+ token limit &amp; high throughput</li>
+                        <li><i class="fas fa-crown"></i> 24/7 VIP Concierge &amp; Studio Architect support</li>
+                    </ul>
 
-    <button type="button" class="btn btn-outline btn-magnetic" data-plan="ultra" disabled>Coming Soon</button>
+                    <button type="button" class="btn btn-outline btn-magnetic" data-plan="ultra" disabled>Coming Soon</button>
 
-</div>
+                </div>
 
-            <p class="pricing-terms">Existing checkout is unavailable. Credit packages are one-time purchases, not subscriptions. AI chat uses fixed credits per message by tier; other variable AI services use measured provider usage.</p>
+            </div>
+
+            <p class="pricing-terms">Existing checkout is unavailable. Credit packages are one-time purchases, not subscriptions. AI tools utilize transparent usage-weighted credits (1 credit per 500 tokens) with progressive tier weights and attachment surcharges.</p>
         </div>
     </section>
 
@@ -1825,7 +1863,7 @@
             </div>
 
             <div class="chat-credit-notice">
-                <span id="chatCreditStatus" role="status" aria-live="polite">⚡ Lite • 1 credit/msg</span>
+                <span id="chatCreditStatus" role="status" aria-live="polite">⚡ Lite • Token-weighted (1 cr / 500 tok)</span>
                 <a id="chatCreditUpgrade" href="#pricing" hidden>View plans</a>
             </div>
             </main>
@@ -2150,7 +2188,7 @@
 
                 <span class="input-icon">👤</span>
 
-                <input type="text" id="signupName" placeholder="Full name" autocomplete="name" aria-label="Full name">
+                <input type="text" id="signupName" name="name" placeholder="Full name" autocomplete="name" aria-label="Full name">
 
             </div>
 
@@ -2162,7 +2200,7 @@
 
                 <span class="input-icon">✉</span>
 
-                <input type="email" id="loginEmail" placeholder="Email address" autocomplete="email" aria-label="Email address" required>
+                <input type="email" id="loginEmail" name="email" placeholder="Email address" autocomplete="email" aria-label="Email address" required>
 
             </div>
 
@@ -2174,7 +2212,7 @@
 
                 <span class="input-icon">🔒</span>
 
-                <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" aria-label="Password" minlength="6" required>
+                <input type="password" id="loginPassword" name="password" placeholder="Password" autocomplete="current-password" aria-label="Password" minlength="6" required>
 
                 <button type="button" id="passwordToggle" class="password-toggle" aria-label="Show password" aria-pressed="false"><i class="fas fa-eye"></i></button>
 

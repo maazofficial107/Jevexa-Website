@@ -971,8 +971,6 @@
             if (window.innerWidth <= 767) {
                 const isOpen = sidebar?.classList.toggle('open') || false;
                 chatbotWin?.classList.toggle('chat-history-open', isOpen);
-            } else {
-                chatbotWin?.classList.toggle('chat-sidebar-collapsed');
             }
         };
 
@@ -980,8 +978,6 @@
             if (window.innerWidth <= 767) {
                 sidebar?.classList.remove('open');
                 chatbotWin?.classList.remove('chat-history-open');
-            } else {
-                chatbotWin?.classList.add('chat-sidebar-collapsed');
             }
         };
 
@@ -1506,7 +1502,13 @@
         activeChatRequestId = null;
         removeTyping();
         sending = false;
-        if (sendButton) sendButton.disabled = false;
+        if (sendButton) {
+            sendButton.disabled = false;
+            sendButton.classList.remove('chat-stop-btn');
+            sendButton.setAttribute('aria-label', 'Send message');
+            sendButton.title = 'Send message';
+            sendButton.innerHTML = '<i class="fas fa-paper-plane" aria-hidden="true"></i>';
+        }
         if (input) input.disabled = false;
         if (attachButton) attachButton.disabled = false;
     }
@@ -1875,7 +1877,14 @@
         activeChatRequestId = requestId;
 
         sending = true;
-        if (sendButton) sendButton.disabled = true;
+        if (sendButton) {
+            sendButton.disabled = true; // Trigger busy state
+            sendButton.disabled = false; // Enabled as Stop-abort control
+            sendButton.classList.add('chat-stop-btn');
+            sendButton.setAttribute('aria-label', 'Stop generation');
+            sendButton.title = 'Stop generation';
+            sendButton.innerHTML = '<i class="fas fa-square" aria-hidden="true"></i>';
+        }
         if (input) input.disabled = true;
         if (attachButton) attachButton.disabled = true;
 
@@ -2022,9 +2031,8 @@
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                     window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
                 }
-                setStatus(
-                    `⚡ Credits used: ${used} • Remaining: ${remaining !== null ? remaining : result.creditsRemaining}`
-                );
+                const tierDisplayName = result?.modelName || result?.model || (selectedTier ? (selectedTier[0].toUpperCase() + selectedTier.slice(1)) : 'Lite');
+                setStatus(`⚡ ${tierDisplayName} • Ready`);
                 await refreshDisplayedCredits();
             } catch (error) {
                 if (error?.name === 'AbortError' || currentAbortController.signal.aborted || (activeChatRequestId && activeChatRequestId !== requestId)) {
@@ -2142,7 +2150,13 @@
             }
             removeTyping();
             sending = false;
-            if (sendButton) sendButton.disabled = false;
+            if (sendButton) {
+                sendButton.disabled = false;
+                sendButton.classList.remove('chat-stop-btn');
+                sendButton.setAttribute('aria-label', 'Send message');
+                sendButton.title = 'Send message';
+                sendButton.innerHTML = '<i class="fas fa-paper-plane" aria-hidden="true"></i>';
+            }
             if (input) input.disabled = false;
             if (attachButton) attachButton.disabled = false;
             input?.focus();
@@ -2155,6 +2169,12 @@
         if (!button) return;
         event.preventDefault();
         event.stopImmediatePropagation();
+        if (button.id === 'chatSend' && sending) {
+            abortInFlightChatRequest();
+            setStatus('Generation stopped.');
+            input?.focus();
+            return;
+        }
         if (button.matches('.chat-welcome-chip') && input) input.value = button.textContent.trim();
         handleSend();
     }, {
@@ -2170,6 +2190,7 @@
         if (event.target !== input || event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
         event.preventDefault();
         event.stopImmediatePropagation();
+        if (sending) return;
         handleSend();
     }, true);
 

@@ -8246,13 +8246,6 @@ body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
     transition: opacity 300ms cubic-bezier(.2, .8, .2, 1), transform 300ms cubic-bezier(.2, .8, .2, 1), visibility 300ms;
 }
 .chatbot-window.open { transform: none; }
-.chatbot-window.chat-sidebar-collapsed {
-    grid-template-columns: 0px 0px minmax(0, 1fr);
-}
-.chat-sidebar-collapsed > .chat-sidebar,
-.chat-sidebar-collapsed > .chat-sidebar-resizer {
-    display: none;
-}
 
 /* Sleek Resizer Divider Handle */
 .chat-sidebar-resizer {
@@ -8578,13 +8571,23 @@ body.chat-is-resizing {
 }
 @media (min-width: 768px) {
     .chat-sidebar-drawer-btn {
-        padding: 0 10px;
-        min-width: 38px;
-        justify-content: center;
+        display: none !important;
     }
-    .chat-drawer-btn-label {
-        display: none;
-    }
+}
+
+/* Stop-Abort Control for Modern Flagship Composer */
+.chat-send.chat-stop-btn {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4) !important;
+    border-radius: 14px !important;
+}
+.chat-send.chat-stop-btn:hover {
+    transform: scale(1.06) !important;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
+}
+.chat-send.chat-stop-btn i {
+    font-size: 13px !important;
+    color: #ffffff !important;
 }
 
 /* Customization Suite Modal */

@@ -5329,3 +5329,49 @@ test("Chatbot upgrade: Strict exact language mirroring instruction in system pro
   assert.match(worker, /If the user writes in Hindi, Arabic, Spanish, French, German/);
   assert.match(worker, /If the user mixes languages/);
 });
+
+test("Chatbot upgrade: Complete elimination of collapsed-sidebar state across entire codebase", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Zero collapsed-sidebar state across all frontend files
+  assert.doesNotMatch(html, /chat-sidebar-collapsed/);
+  assert.doesNotMatch(script, /chat-sidebar-collapsed/);
+  assert.doesNotMatch(credits, /chat-sidebar-collapsed/);
+  assert.doesNotMatch(styles, /\.chat-sidebar-collapsed/);
+
+  // Desktop hides drawer toggle so sidebar remains a spacious, permanent resizable pane
+  assert.match(styles, /@media\s*\(min-width:\s*768px\)\s*\{[\s\S]*?\.chat-sidebar-drawer-btn\s*\{[\s\S]*?display:\s*none\s*!important;/);
+});
+
+test("Chatbot upgrade: Stop-abort control, non-promotional system rules & bottom-only receipt", async () => {
+  const worker = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Zero unprompted self-promotion and thorough task completion in worker
+  assert.match(worker, /ZERO UNPROMPTED JEVEXA SELF-PROMOTION \(STRICT RULE\):/);
+  assert.match(worker, /Never randomly praise Jevexa, brag about studio features/);
+  assert.match(worker, /COMPLETE EVERY TASK THOROUGHLY:/);
+  assert.match(worker, /Never cut answers short prematurely/);
+  assert.doesNotMatch(worker, /SALES STYLE:/);
+  assert.doesNotMatch(worker, /Then suggest how JEVEXA can help/);
+
+  // Stop-abort button control in credits.js
+  assert.match(credits, /sendButton\.classList\.add\('chat-stop-btn'\)/);
+  assert.match(credits, /sendButton\.setAttribute\('aria-label',\s*'Stop generation'\)/);
+  assert.match(credits, /button\.id === 'chatSend' && sending/);
+  assert.match(credits, /abortInFlightChatRequest\(\)/);
+  assert.match(credits, /sendButton\.classList\.remove\('chat-stop-btn'\)/);
+
+  // Stop-abort button styling in styles.css
+  assert.match(styles, /\.chat-send\.chat-stop-btn\s*\{/);
+
+  // Receipt appears at bottom end of messages in .chat-credit-receipt, status line stays clean
+  assert.match(credits, /receipt\.className = 'chat-credit-receipt'/);
+  assert.match(credits, /⚡ Credits used:/);
+  assert.match(credits, /Remaining:/);
+  assert.match(credits, /setStatus\(`⚡ \$\{tierDisplayName\} • Ready`\)/);
+});

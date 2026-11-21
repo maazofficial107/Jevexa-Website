@@ -134,7 +134,8 @@ ACTIVE JEVEXA MODEL IDENTITY:
         french: "FRENCH (Français). Always reply in fluent French.",
         de: "GERMAN (Deutsch). Always reply in fluent German.",
         german: "GERMAN (Deutsch). Always reply in fluent German.",
-        ar: "ARABIC (العربية). Always reply in fluent Arabic."
+        ar: "ARABIC (العربية). Always reply in fluent Arabic.",
+        arabic: "ARABIC (العربية). Always reply in fluent Arabic."
       };
       customParts.push(`USER PREFERRED LANGUAGE (${language.toUpperCase()}): ${languageMap[language] || language}`);
       customParts.push(`CRITICAL LANGUAGE DIRECTIVE: The user explicitly configured their language setting to '${language.toUpperCase()}'. You MUST produce your full response strictly in ${languageMap[language] || language}.`);

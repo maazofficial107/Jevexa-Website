@@ -5634,3 +5634,29 @@ test("Flagship upgrade: Live working Settings end-to-end and 0 badge removal", a
   assert.match(worker, /CRITICAL LANGUAGE DIRECTIVE:/);
   assert.match(worker, /LANGUAGE MIRRORING: The user has selected 'Auto' mode/);
 });
+
+test("Flagship upgrade: Single-line sidebar chat history items without extra preview line below", async () => {
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Single-line clean title only: titleText element appended inside title, previewText is NOT appended to select
+  assert.match(credits, /titleText\.className = 'chat-history-title-text';/);
+  assert.match(credits, /appendSearchHighlight\(titleText, session\.title \|\| 'New chat', query\);/);
+  assert.match(credits, /title\.appendChild\(titleText\);/);
+  assert.match(credits, /select\.appendChild\(title\);/);
+  assert.doesNotMatch(credits, /select\.append\(title, previewText\);/, "Must not append snippet preview underneath title");
+
+  // Three-dots menu button and non-overlapping layout
+  assert.match(credits, /chat-history-menu-btn/);
+  assert.match(credits, /chat-menu-pin/);
+  assert.match(credits, /chat-menu-rename/);
+  assert.match(credits, /chat-menu-share/);
+  assert.match(credits, /chat-menu-delete/);
+
+  // CSS enforces single-line nowrap and ellipsis truncation
+  assert.match(styles, /\.chat-history-select\s*\{[\s\S]*?display:\s*flex;/);
+  assert.match(styles, /\.chat-history-select\s*\{[\s\S]*?white-space:\s*nowrap;/);
+  assert.match(styles, /\.chat-history-title,\s*\.chat-history-title-text\s*\{[\s\S]*?text-overflow:\s*ellipsis;/);
+  assert.match(styles, /\.chat-history-preview\s*\{[\s\S]*?display:\s*none\s*!important;/);
+  assert.match(styles, /\.chat-history-actions,\s*\.chat-history-menu-wrap\s*\{[\s\S]*?margin-left:\s*auto;/);
+});

@@ -424,12 +424,14 @@
                 return;
             }
 
-            // Normal mode
+            // Normal mode - Single-line clean title only (no preview/snippet line below)
             const select = document.createElement('button');
             select.type = 'button';
             select.className = 'chat-history-select';
-            select.setAttribute('aria-label', `${session.pinned ? '[Pinned] ' : ''}${session.title || 'New chat'}${preview ? `: ${preview}` : ''}`);
+            select.setAttribute('aria-label', `${session.pinned ? '[Pinned] ' : ''}${session.title || 'New chat'}`);
             select.setAttribute('aria-current', session.id === activeChatId ? 'true' : 'false');
+            select.title = session.title || 'New chat';
+
             const title = document.createElement('span');
             title.className = 'chat-history-title';
 
@@ -441,11 +443,12 @@
                 title.appendChild(pinIcon);
             }
 
-            appendSearchHighlight(title, session.title || 'New chat', query);
-            const previewText = document.createElement('span');
-            previewText.className = 'chat-history-preview';
-            appendSearchHighlight(previewText, preview.slice(0, 100), query);
-            select.append(title, previewText);
+            const titleText = document.createElement('span');
+            titleText.className = 'chat-history-title-text';
+            appendSearchHighlight(titleText, session.title || 'New chat', query);
+            title.appendChild(titleText);
+
+            select.appendChild(title);
             bindSafe(select, 'click', () => selectChatSession(session.id));
 
             // Three-dots menu actions container
@@ -965,6 +968,7 @@
     function renderMemoriesUI() {
         const limits = getUserPlanMemoryLimits();
         const badge = document.getElementById('chatMemoryBadge');
+        if (badge) badge.remove();
         const modalCount = document.getElementById('chatModalMemoryCount');
         const planPill = document.getElementById('chatMemoryPlanPill');
         const usageText = document.getElementById('chatMemoryUsageText');
@@ -974,7 +978,6 @@
 
         const totalCount = userMemories.length;
 
-        if (badge) badge.textContent = String(totalCount);
         if (modalCount) modalCount.textContent = String(totalCount);
         if (planPill) planPill.textContent = limits.label;
         if (usageText) usageText.textContent = `${totalCount} / ${limits.maxMemories} memories used`;
@@ -1399,6 +1402,9 @@
             if (saveStatus) {
                 saveStatus.textContent = '✓ Saved';
                 setTimeout(() => { if (saveStatus) saveStatus.textContent = ''; }, 2000);
+            }
+            if (typeof window.showToast === 'function') {
+                window.showToast('✓ Settings saved successfully');
             }
             closeModal();
         });

@@ -5375,3 +5375,119 @@ test("Chatbot upgrade: Stop-abort control, non-promotional system rules & bottom
   assert.match(credits, /Remaining:/);
   assert.match(credits, /setStatus\(`⚡ \$\{tierDisplayName\} • Ready`\)/);
 });
+
+test("Flagship upgrade: Mobile virtual keyboard viewport & visualViewport tracking", async () => {
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // CSS variables for dynamic visual viewport and keyboard insets
+  assert.match(styles, /--vvh:\s*100dvh;/);
+  assert.match(styles, /--vvh-top:\s*0px;/);
+  assert.match(styles, /--keyboard-inset-bottom:\s*0px;/);
+
+  // Chatbot window binds to visual viewport height
+  assert.match(styles, /height:\s*var\(--vvh,\s*100dvh\);/);
+  assert.match(styles, /max-height:\s*var\(--vvh,\s*100dvh\);/);
+
+  // Mobile viewport tracking handles resize, scroll, and focus
+  assert.match(credits, /function initVirtualViewportTracking\(\)/);
+  assert.match(credits, /window\.visualViewport\.addEventListener\('resize'/);
+  assert.match(credits, /window\.visualViewport\.addEventListener\('scroll'/);
+  assert.match(credits, /chatInput\.addEventListener\('focus'/);
+  assert.match(credits, /chatInput\.addEventListener\('input'/);
+  assert.match(credits, /document\.documentElement\.style\.setProperty\('--vvh'/);
+  assert.match(credits, /document\.documentElement\.style\.setProperty\('--keyboard-inset-bottom'/);
+
+  // Script triggers viewport refresh when opening chat
+  assert.match(script, /window\.JEVEXA_UPDATE_VIEWPORT\?\.\(\);/);
+
+  // Smooth touch scrolling and auto-zoom prevention on mobile
+  assert.match(styles, /-webkit-overflow-scrolling:\s*touch;/);
+  assert.match(styles, /overscroll-behavior-y:\s*contain;/);
+  assert.match(styles, /touch-action:\s*pan-y;/);
+  assert.match(styles, /\.chat-input-area textarea\s*\{[\s\S]*?font-size:\s*16px;/);
+});
+
+test("Flagship upgrade: Modern Settings interface with Personalization & Memory cleanly integrated", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // Settings modal structure with all standard sections
+  assert.match(html, /id="chatCustomizationModal"[^>]*role="dialog"/);
+  assert.match(html, /data-tab="instructions"/);
+  assert.match(html, /data-tab="language"/);
+  assert.match(html, /data-tab="personality"/);
+  assert.match(html, /data-tab="memory"/);
+  assert.match(html, /data-tab="display"/);
+
+  // Dedicated Personalization & Memory tab inside Settings
+  assert.match(html, /<span>Personalization &amp; Memory<\/span>\s*<span class="chat-memory-modal-badge" id="chatModalMemoryCount">/);
+
+  // Sidebar footer Settings trigger with non-colliding layout
+  assert.match(html, /id="chatOpenCustomizationBtn"/);
+  assert.match(html, /<span class="chat-personalize-title">Settings<\/span>/);
+  assert.match(html, /<span class="chat-personalize-subtitle">Personalization &amp; Memory<\/span>/);
+  assert.match(html, /id="chatMemoryBadge"/);
+
+  // Chatbot header settings button
+  assert.match(html, /id="chatHeaderSettingsBtn"/);
+  assert.match(credits, /headerSettingsBtn/);
+  assert.match(styles, /\.chatbot-header-settings-btn/);
+
+  // Settings clear all conversations button
+  assert.match(html, /id="chatSettingsClearAllBtn"/);
+  assert.match(credits, /chatSettingsClearAllBtn/);
+
+  // Account workspace settings includes Personalization & Memory
+  assert.match(script, /\['personalization',\s*'🧠',\s*'Personalization & AI'/);
+  assert.match(script, /openChatbotSettingsModalBtn/);
+});
+
+test("Flagship upgrade: Settings-driven pipeline with language selection and prompt adaptation", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+
+  // Language selector in HTML with Auto, Roman Urdu, Urdu, Hindi, English
+  assert.match(html, /id="chatLanguageSelect"/);
+  assert.match(html, /value="auto"[^>]*>Auto \(Match User Language\)/);
+  assert.match(html, /value="en"[^>]*>English/);
+  assert.match(html, /value="roman_urdu"[^>]*>Roman Urdu/);
+  assert.match(html, /value="urdu"[^>]*>Urdu/);
+  assert.match(html, /value="hindi"[^>]*>Hindi/);
+
+  // Language saved and dispatched in credits.js
+  assert.match(credits, /chatCustomSettings\.language = document\.getElementById\('chatLanguageSelect'\)/);
+  assert.match(credits, /language: chatCustomSettings\.language \|\| 'auto'/);
+
+  // Worker parses language and injects explicit instructions into prompt
+  assert.match(worker, /language: typeof body\.customSettings\.language === "string"/);
+  assert.match(worker, /USER PREFERRED LANGUAGE/);
+  assert.match(worker, /ROMAN URDU\. Always reply in natural, conversational Roman Urdu/);
+  assert.match(worker, /URDU \(اردو\)\. Always reply in proper, fluent Urdu script/);
+  assert.match(worker, /HINDI \(हिंदी\)\. Always reply in proper, fluent Hindi script/);
+  assert.match(worker, /ENGLISH\. Always respond in fluent English/);
+
+  // Tone and behavior mapping
+  assert.match(worker, /USER REQUESTED TONE/);
+  assert.match(worker, /USER REQUESTED BEHAVIOR/);
+  assert.match(worker, /CODE DEPTH/);
+});
+
+test("Flagship upgrade: Multi-device stability, touch safeguards and non-colliding controls", async () => {
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Touch target sizing (>= 44px)
+  assert.match(styles, /min-height:\s*44px;/);
+
+  // Non-colliding spacing on trigger and tabs
+  assert.match(styles, /\.chat-personalize-trigger\s*\{[\s\S]*?min-height:\s*48px;/);
+  assert.match(styles, /\.chat-custom-dialog\s*\{[\s\S]*?width:\s*min\(94vw,\s*720px\);/);
+  assert.match(styles, /\.chat-custom-nav\s*\{[\s\S]*?overflow-x:\s*auto;/);
+
+  // Zero collapsed-sidebar bugs
+  assert.doesNotMatch(styles, /\.chat-sidebar-collapsed/);
+});

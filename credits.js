@@ -79,6 +79,7 @@
     let chatCustomSettings = {
         aboutUser: '',
         responseStyle: '',
+        language: 'auto',
         tone: 'default',
         behavior: 'standard',
         codeDepth: 'full',
@@ -701,6 +702,8 @@
         if (aboutEl) aboutEl.value = chatCustomSettings.aboutUser || '';
         const respEl = document.getElementById('chatCustomResponse');
         if (respEl) respEl.value = chatCustomSettings.responseStyle || '';
+        const langEl = document.getElementById('chatLanguageSelect');
+        if (langEl) langEl.value = chatCustomSettings.language || 'auto';
         const toneEl = document.getElementById('chatToneSelect');
         if (toneEl) toneEl.value = chatCustomSettings.tone || 'default';
         const behEl = document.getElementById('chatBehaviorSelect');
@@ -890,6 +893,7 @@
         return {
             aboutUser: chatCustomSettings.aboutUser || '',
             responseStyle: chatCustomSettings.responseStyle || '',
+            language: chatCustomSettings.language || 'auto',
             tone: chatCustomSettings.tone || 'default',
             behavior: chatCustomSettings.behavior || 'standard',
             codeDepth: chatCustomSettings.codeDepth || 'full'
@@ -961,6 +965,92 @@
         resizer.addEventListener('dblclick', onDoubleClick);
     }
 
+    function initVirtualViewportTracking() {
+        const chatbotWin = document.getElementById('chatbotWindow');
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+
+        function updateViewport() {
+            if (!chatbotWin) return;
+            if (typeof window !== 'undefined' && window.visualViewport) {
+                const vv = window.visualViewport;
+                const height = Math.round(vv.height);
+                const offsetTop = Math.round(vv.offsetTop || 0);
+                const winH = window.innerHeight;
+                const keyboardInset = Math.max(0, winH - height - offsetTop);
+
+                document.documentElement.style.setProperty('--vvh', `${height}px`);
+                document.documentElement.style.setProperty('--vvh-top', `${offsetTop}px`);
+                document.documentElement.style.setProperty('--keyboard-inset-bottom', `${keyboardInset}px`);
+
+                if (chatbotWin.classList.contains('open')) {
+                    chatbotWin.style.setProperty('--vvh', `${height}px`);
+                    chatbotWin.style.setProperty('--vvh-top', `${offsetTop}px`);
+                    chatbotWin.style.setProperty('--keyboard-inset-bottom', `${keyboardInset}px`);
+                    chatbotWin.style.height = `${height}px`;
+                    chatbotWin.style.top = `${offsetTop}px`;
+                }
+            } else if (typeof window !== 'undefined') {
+                const h = window.innerHeight;
+                document.documentElement.style.setProperty('--vvh', `${h}px`);
+                document.documentElement.style.setProperty('--vvh-top', '0px');
+                document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px');
+                if (chatbotWin && chatbotWin.classList.contains('open')) {
+                    chatbotWin.style.height = '100dvh';
+                    chatbotWin.style.top = '0px';
+                }
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.JEVEXA_UPDATE_VIEWPORT = updateViewport;
+
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', () => {
+                    updateViewport();
+                    if (document.activeElement === chatInput) {
+                        scrollToBottom(false);
+                    }
+                });
+                window.visualViewport.addEventListener('scroll', updateViewport);
+            }
+
+            window.addEventListener('resize', updateViewport);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(updateViewport, 120);
+            });
+        }
+
+        if (chatInput) {
+            chatInput.addEventListener('focus', () => {
+                updateViewport();
+                setTimeout(() => {
+                    updateViewport();
+                    scrollToBottom(true);
+                }, 100);
+                setTimeout(() => {
+                    updateViewport();
+                    scrollToBottom(true);
+                }, 300);
+            });
+
+            chatInput.addEventListener('blur', () => {
+                setTimeout(updateViewport, 150);
+            });
+
+            chatInput.addEventListener('input', () => {
+                chatInput.style.height = 'auto';
+                const newH = Math.min(150, Math.max(44, chatInput.scrollHeight));
+                chatInput.style.height = `${newH}px`;
+                if (chatMessages && (chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 120)) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            });
+        }
+
+        updateViewport();
+    }
+
     function initChatSidebarDrawer() {
         const toggleBtn = document.getElementById('chatSidebarDrawerBtn');
         const closeBtn = document.getElementById('chatSidebarClose');
@@ -988,6 +1078,7 @@
     function initChatCustomizationSuite() {
         const modal = document.getElementById('chatCustomizationModal');
         const openBtn = document.getElementById('chatOpenCustomizationBtn');
+        const headerSettingsBtn = document.getElementById('chatHeaderSettingsBtn');
         const closeBtn = document.getElementById('chatCustomClose');
         const saveBtn = document.getElementById('chatCustomSaveBtn');
         const saveStatus = document.getElementById('chatCustomSaveStatus');
@@ -1007,10 +1098,12 @@
         };
 
         bindSafe(openBtn, 'click', openModal);
+        if (headerSettingsBtn) bindSafe(headerSettingsBtn, 'click', openModal);
         bindSafe(closeBtn, 'click', closeModal);
         bindSafe(saveBtn, 'click', () => {
             chatCustomSettings.aboutUser = document.getElementById('chatCustomAbout')?.value.trim() || '';
             chatCustomSettings.responseStyle = document.getElementById('chatCustomResponse')?.value.trim() || '';
+            chatCustomSettings.language = document.getElementById('chatLanguageSelect')?.value || 'auto';
             chatCustomSettings.tone = document.getElementById('chatToneSelect')?.value || 'default';
             chatCustomSettings.behavior = document.getElementById('chatBehaviorSelect')?.value || 'standard';
             chatCustomSettings.codeDepth = document.getElementById('chatCodeDepthSelect')?.value || 'full';
@@ -1027,6 +1120,14 @@
             }
             closeModal();
         });
+
+        const clearHistoryBtn = document.getElementById('chatSettingsClearAllBtn');
+        if (clearHistoryBtn) {
+            bindSafe(clearHistoryBtn, 'click', () => {
+                closeModal();
+                document.getElementById('chatClearAll')?.click();
+            });
+        }
 
         const tabs = modal.querySelectorAll('.chat-custom-tab');
         const panes = modal.querySelectorAll('.chat-custom-pane');
@@ -2359,6 +2460,7 @@
     initChatSidebarDrawer();
     initChatSidebarResizer();
     initChatCustomizationSuite();
+    initVirtualViewportTracking();
     loadCustomSettings(null);
     loadMemories(null);
     document.getElementById('chatDensity')?.addEventListener('change', event => {

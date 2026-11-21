@@ -1752,10 +1752,15 @@
                 <div class="chat-history-list" id="chatHistoryList" role="list"></div>
                 <p class="chat-history-empty" id="chatHistoryEmpty" role="status" hidden></p>
                 <div class="chat-sidebar-footer">
-                    <button type="button" class="chat-personalize-trigger" id="chatOpenCustomizationBtn" aria-label="Open personality, instructions, and memory settings">
-                        <i class="fas fa-sliders"></i>
-                        <span>Personalization &amp; Memory</span>
-                        <span class="chat-memory-indicator" id="chatMemoryBadge">0</span>
+                    <button type="button" class="chat-personalize-trigger" id="chatOpenCustomizationBtn" aria-label="Open settings, personality, instructions, and memory">
+                        <div class="chat-personalize-content">
+                            <i class="fas fa-sliders" aria-hidden="true"></i>
+                            <div class="chat-personalize-text">
+                                <span class="chat-personalize-title">Settings</span>
+                                <span class="chat-personalize-subtitle">Personalization &amp; Memory</span>
+                            </div>
+                        </div>
+                        <span class="chat-memory-indicator" id="chatMemoryBadge" title="Saved memories">0</span>
                     </button>
                     <details class="chat-settings" id="chatSettings">
                         <summary>⚙ Quick Settings</summary>
@@ -1820,6 +1825,9 @@
                         <strong class="workspace-credits-val">—</strong>
                         <span>Credits Remaining</span>
                     </div>
+                    <button type="button" class="chatbot-header-settings-btn" id="chatHeaderSettingsBtn" aria-label="Open Chat Settings" title="Settings">
+                        <i class="fas fa-gear" aria-hidden="true"></i>
+                    </button>
                     <button class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
                 </div>
             </div>
@@ -1911,19 +1919,27 @@
                     <div class="chat-custom-header">
                         <div class="chat-custom-header-title">
                             <i class="fas fa-sliders"></i>
-                            <h3 id="chatCustomTitle">Personalization, Behavior &amp; Memory</h3>
+                            <div>
+                                <h3 id="chatCustomTitle">Settings</h3>
+                                <span class="chat-custom-subtitle">Personalization, Memory &amp; Chat Controls</span>
+                            </div>
                         </div>
-                        <button type="button" class="chat-custom-close" id="chatCustomClose" aria-label="Close personalization settings">×</button>
+                        <button type="button" class="chat-custom-close" id="chatCustomClose" aria-label="Close settings">×</button>
                     </div>
-                    <div class="chat-custom-nav" role="tablist">
-                        <button type="button" class="chat-custom-tab active" data-tab="instructions" role="tab" aria-selected="true"><i class="fas fa-user-gear"></i> Custom Instructions</button>
-                        <button type="button" class="chat-custom-tab" data-tab="personality" role="tab" aria-selected="false"><i class="fas fa-palette"></i> Tone &amp; Style</button>
-                        <button type="button" class="chat-custom-tab" data-tab="memory" role="tab" aria-selected="false"><i class="fas fa-brain"></i> Memory (<span id="chatModalMemoryCount">0</span>)</button>
-                        <button type="button" class="chat-custom-tab" data-tab="display" role="tab" aria-selected="false"><i class="fas fa-display"></i> UI Controls</button>
+                    <div class="chat-custom-nav" role="tablist" aria-label="Settings categories">
+                        <button type="button" class="chat-custom-tab active" data-tab="instructions" role="tab" aria-selected="true"><i class="fas fa-user-gear"></i> <span>Custom Instructions</span></button>
+                        <button type="button" class="chat-custom-tab" data-tab="language" role="tab" aria-selected="false"><i class="fas fa-language"></i> <span>Language</span></button>
+                        <button type="button" class="chat-custom-tab" data-tab="personality" role="tab" aria-selected="false"><i class="fas fa-sliders"></i> <span>Tone &amp; Behavior</span></button>
+                        <button type="button" class="chat-custom-tab" data-tab="memory" role="tab" aria-selected="false"><i class="fas fa-brain"></i> <span>Personalization &amp; Memory</span> <span class="chat-memory-modal-badge" id="chatModalMemoryCount">0</span></button>
+                        <button type="button" class="chat-custom-tab" data-tab="display" role="tab" aria-selected="false"><i class="fas fa-palette"></i> <span>Appearance &amp; Controls</span></button>
                     </div>
                     <div class="chat-custom-body">
                         <!-- TAB 1: Instructions -->
                         <div class="chat-custom-pane active" id="pane-instructions" role="tabpanel">
+                            <div class="chat-settings-section-head">
+                                <h4>Customize &amp; Custom Instructions</h4>
+                                <p>Provide persistent context so Jevexa AI tailors its responses to who you are, your tech stack, and your preferred formatting.</p>
+                            </div>
                             <div class="chat-form-group">
                                 <label for="chatCustomAbout"><strong>What would you like Jevexa AI to know about you?</strong></label>
                                 <p class="chat-form-hint">Your role, industry, preferences, or technical background (e.g. "Full-stack developer building SaaS in Node.js &amp; Python").</p>
@@ -1935,28 +1951,61 @@
                                 <textarea id="chatCustomResponse" rows="3" maxlength="1000" placeholder="e.g. Be concise, provide copy-pasteable code, omit boilerplate, explain trade-offs..."></textarea>
                             </div>
                         </div>
-                        <!-- TAB 2: Tone & Personality -->
+                        <!-- TAB 2: Language -->
+                        <div class="chat-custom-pane" id="pane-language" role="tabpanel" hidden>
+                            <div class="chat-settings-section-head">
+                                <h4>Language Preferences</h4>
+                                <p>Choose your preferred response language mode. By default, Jevexa AI automatically detects and mirrors whatever language and script you write in.</p>
+                            </div>
+                            <div class="chat-form-group">
+                                <label for="chatLanguageSelect"><strong>Preferred Response Language Mode</strong></label>
+                                <select id="chatLanguageSelect" class="chat-input-select">
+                                    <option value="auto">Auto (Match User Language) — Automatically mirrors your language &amp; script</option>
+                                    <option value="en">English — Always respond in English</option>
+                                    <option value="roman_urdu">Roman Urdu — Respond in natural Roman Urdu</option>
+                                    <option value="urdu">Urdu (اردو) — Respond in Urdu script</option>
+                                    <option value="hindi">Hindi (हिंदी) — Respond in Hindi script</option>
+                                    <option value="es">Spanish (Español) — Responde en español</option>
+                                    <option value="fr">French (Français) — Répondre en français</option>
+                                    <option value="de">German (Deutsch) — Auf Deutsch antworten</option>
+                                    <option value="ar">Arabic (العربية) — الرد باللغة العربية</option>
+                                </select>
+                                <p class="chat-form-hint">When set to <em>Auto</em>, if you write in Roman Urdu, Urdu script, Hindi, Spanish, or any other language, Jevexa replies naturally in that exact tongue without forcing English.</p>
+                            </div>
+                            <div class="chat-info-callout">
+                                <i class="fas fa-circle-info" aria-hidden="true"></i>
+                                <div class="chat-info-callout-text">
+                                    <strong>Automatic Multilingual Mirroring Active</strong>
+                                    <p>You can mix languages in any query (e.g. Roman Urdu + English code terms). Jevexa naturally adapts to your exact communication style.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- TAB 3: Tone & Personality -->
                         <div class="chat-custom-pane" id="pane-personality" role="tabpanel" hidden>
+                            <div class="chat-settings-section-head">
+                                <h4>Tone &amp; Behavior / Personality</h4>
+                                <p>Shape the voice, reasoning depth, and delivery style of your assistant.</p>
+                            </div>
                             <div class="chat-form-group">
                                 <label for="chatToneSelect"><strong>Tone &amp; Style</strong></label>
                                 <select id="chatToneSelect" class="chat-input-select">
                                     <option value="default">Default — Balanced, natural, and helpful</option>
+                                    <option value="friendly">Friendly — Warm, supportive, and encouraging</option>
                                     <option value="concise">Concise — Ultra-brief, direct answers without fluff</option>
                                     <option value="detailed">Detailed — In-depth explanations with deep background &amp; examples</option>
                                     <option value="technical">Technical — Developer-focused, precise terminology, code-first</option>
                                     <option value="professional">Professional — Polished, business-ready executive tone</option>
-                                    <option value="friendly">Friendly — Warm, approachable, and encouraging</option>
                                     <option value="casual">Casual — Conversational, easygoing, relaxed</option>
                                 </select>
                             </div>
                             <div class="chat-form-group">
                                 <label for="chatBehaviorSelect"><strong>Response Behavior &amp; Personality</strong></label>
                                 <select id="chatBehaviorSelect" class="chat-input-select">
-                                    <option value="standard">Standard — Balanced reasoning assistant</option>
+                                    <option value="standard">Standard / Balanced — Balanced reasoning assistant</option>
                                     <option value="analytical">Analytical — Systematic, pros/cons, data-driven, edge cases</option>
-                                    <option value="creative">Creative — Innovative, brainstormer, out-of-the-box ideas</option>
-                                    <option value="tutor">Tutor — Step-by-step pedagogical explanations, checks for understanding</option>
+                                    <option value="tutor">Step-by-Step Tutor — Pedagogical explanations, checks for understanding</option>
                                     <option value="direct">Direct / No-fluff — Straight to the code/solution, zero preamble</option>
+                                    <option value="creative">Creative — Innovative, brainstormer, out-of-the-box ideas</option>
                                 </select>
                             </div>
                             <div class="chat-form-group">
@@ -1968,8 +2017,12 @@
                                 </select>
                             </div>
                         </div>
-                        <!-- TAB 3: Plan-Scaled Memory -->
+                        <!-- TAB 4: Plan-Scaled Memory -->
                         <div class="chat-custom-pane" id="pane-memory" role="tabpanel" hidden>
+                            <div class="chat-settings-section-head">
+                                <h4>Personalization &amp; Persistent Memory</h4>
+                                <p>Facts and project details saved here persist across all chats so Jevexa AI remembers your preferences without having to repeat yourself.</p>
+                            </div>
                             <div class="chat-memory-status-banner">
                                 <div class="chat-memory-plan-info">
                                     <span class="chat-plan-pill" id="chatMemoryPlanPill">Free Plan</span>
@@ -1986,14 +2039,18 @@
                             </div>
                             <div class="chat-memory-list" id="chatMemoryList"></div>
                         </div>
-                        <!-- TAB 4: UI Controls -->
+                        <!-- TAB 5: UI Controls -->
                         <div class="chat-custom-pane" id="pane-display" role="tabpanel" hidden>
+                            <div class="chat-settings-section-head">
+                                <h4>Appearance &amp; Chat Controls</h4>
+                                <p>Customize the chat visual theme, interface density, motion settings, and manage chat history.</p>
+                            </div>
                             <div class="chat-form-group">
                                 <label for="chatModalThemeSelect"><strong>Color Theme</strong></label>
                                 <select id="chatModalThemeSelect" class="chat-input-select">
-                                    <option value="dark">Dark Theme (Default)</option>
+                                    <option value="dark">Dark Theme (Default flagship luxury)</option>
                                     <option value="light">Light Theme</option>
-                                    <option value="system">Follow System</option>
+                                    <option value="system">Follow System Preferences</option>
                                 </select>
                             </div>
                             <div class="chat-form-group">
@@ -2008,6 +2065,19 @@
                                     <input type="checkbox" id="chatModalReducedMotion">
                                     <span>Reduce UI Animations &amp; Motion</span>
                                 </label>
+                                <p class="chat-form-hint">Disables heavy animations and transitions for a calmer, performance-optimized interface.</p>
+                            </div>
+                            <hr class="chat-settings-divider">
+                            <div class="chat-settings-section-head">
+                                <h4>Chat History &amp; Actions</h4>
+                                <p>Manage your saved conversations or wipe local chats.</p>
+                            </div>
+                            <div class="chat-history-controls-row">
+                                <button type="button" class="chat-settings-danger-btn" id="chatSettingsClearAllBtn">
+                                    <i class="fas fa-trash-can" aria-hidden="true"></i>
+                                    <span>Clear All Conversations</span>
+                                </button>
+                                <p class="chat-form-hint">Permanently clears all conversation threads. You can also rename or delete individual chats in the recent chats sidebar.</p>
                             </div>
                         </div>
                     </div>

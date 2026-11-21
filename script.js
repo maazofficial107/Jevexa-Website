@@ -1465,6 +1465,7 @@ function openSettingsView(user) {
     const email = user.email || '';
     const sections = [
         ['account', '👤', 'Account', 'Profile details'],
+        ['personalization', '🧠', 'Personalization & AI', 'Custom instructions, memory & tone'],
         ['security', '🔐', 'Security', 'Password and sessions'],
         ['appearance', '🎨', 'Appearance', 'Theme and display'],
         ['preferences', '⚙️', 'Preferences', 'Saved interface choices'],
@@ -1538,7 +1539,7 @@ function openSettingsView(user) {
         button.classList.toggle('active', active);
         button.setAttribute('aria-current', active ? 'page' : 'false');
       });
-      const titles = {account:'Account',security:'Security',appearance:'Appearance',preferences:'Preferences',credits:'Credits & Usage',support:'Help & Support'};
+      const titles = {account:'Account',personalization:'Personalization & Memory',security:'Security',appearance:'Appearance',preferences:'Preferences',credits:'Credits & Usage',support:'Help & Support'};
       panel.querySelector('#settingsTitle').textContent = titles[section] || 'Settings';
 
       if (section === 'account') {
@@ -1554,6 +1555,37 @@ function openSettingsView(user) {
             <div class="settings-info-row"><span>Account</span><strong>Active session</strong></div>
             <div class="settings-info-row"><span>Member since</span><strong>${escape(user.created_at ? new Date(user.created_at).toLocaleDateString() : '—')}</strong></div>
             ${action('Log out of this device','logout',true)}`)}`;
+      } else if (section === 'personalization') {
+        const chatCustom = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(`jevexa_${user.id}_chat_settings`) || localStorage.getItem('jevexa_chat_settings_global') || '{}');
+          } catch (_) { return {}; }
+        })();
+        const memories = (() => {
+          try {
+            return JSON.parse(localStorage.getItem(`jevexa_${user.id}_memories`) || localStorage.getItem('jevexa_memories_global') || '[]');
+          } catch (_) { return []; }
+        })();
+        content.innerHTML = `
+          ${card('Personalization & Custom Instructions','Tailor how Jevexa AI responds to your domain context and preferences.',`
+            <div class="settings-info-row"><span>User Context</span><strong>${escape(chatCustom.aboutUser ? chatCustom.aboutUser.slice(0, 60) + '…' : 'None set')}</strong></div>
+            <div class="settings-info-row"><span>Response Style</span><strong>${escape(chatCustom.responseStyle ? chatCustom.responseStyle.slice(0, 60) + '…' : 'Default')}</strong></div>
+            <div class="settings-info-row"><span>Preferred Language</span><strong>${escape(chatCustom.language || 'Auto (Match User Language)')}</strong></div>
+            <div class="settings-info-row"><span>Tone & Behavior</span><strong>${escape(chatCustom.tone || 'Default')} • ${escape(chatCustom.behavior || 'Standard')}</strong></div>
+            <div class="settings-info-row"><span>Saved Memories</span><strong>${memories.length} memories retained</strong></div>
+            <div style="margin-top: 14px;">
+              <button type="button" class="settings-action-btn" id="openChatbotSettingsModalBtn">Open Chatbot Settings &amp; Memory Suite</button>
+            </div>`)}`;
+        const openChatModalBtn = content.querySelector('#openChatbotSettingsModalBtn');
+        if (openChatModalBtn) {
+          window.JEVEXA_SAFE_INTERACTION.bind(openChatModalBtn, 'click', () => {
+            backdrop.style.display = 'none';
+            openChatWorkspace();
+            setTimeout(() => {
+              document.getElementById('chatOpenCustomizationBtn')?.click();
+            }, 150);
+          });
+        }
       } else if (section === 'security') {
         content.innerHTML = `
           ${card('Change password','Choose a strong password you do not use elsewhere.',`
@@ -3068,8 +3100,12 @@ window.JEVEXA_SAFE_INTERACTION.bind(chatbotToggle, 'click', () => {
         '.ct-badge, .toggle-badge'
     );
     if (badge) badge.style.display = 'none';
-    if (isOpen) document.getElementById('chatInput')?.focus();
-    else chatbotToggle.focus();
+    if (isOpen) {
+        window.JEVEXA_UPDATE_VIEWPORT?.();
+        document.getElementById('chatInput')?.focus();
+    } else {
+        chatbotToggle.focus();
+    }
 });
 
 window.JEVEXA_SAFE_INTERACTION.bind(chatbotClose, 'click', () => {
@@ -4208,6 +4244,7 @@ const JEVEXA_PLANS = {
             document.body.classList.add('chat-modal-open');
             if (typeof setChatbotToggleHidden === 'function') setChatbotToggleHidden(true);
             syncWorkspaceCredits();
+            window.JEVEXA_UPDATE_VIEWPORT?.();
             document.getElementById('chatInput')?.focus();
         }
         if (pushState) {

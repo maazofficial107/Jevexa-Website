@@ -110,6 +110,7 @@ ACTIVE JEVEXA MODEL IDENTITY:
     const customParts = [];
     const aboutUser = typeof custom.aboutUser === "string" ? custom.aboutUser.trim().slice(0, 1000) : "";
     const responseStyle = typeof custom.responseStyle === "string" ? custom.responseStyle.trim().slice(0, 1000) : "";
+    const language = typeof custom.language === "string" ? custom.language.trim().toLowerCase().slice(0, 30) : "auto";
     const tone = typeof custom.tone === "string" ? custom.tone.trim().toLowerCase().slice(0, 30) : "";
     const behavior = typeof custom.behavior === "string" ? custom.behavior.trim().toLowerCase().slice(0, 30) : "";
     const codeDepth = typeof custom.codeDepth === "string" ? custom.codeDepth.trim().toLowerCase().slice(0, 30) : "";
@@ -119,6 +120,23 @@ ACTIVE JEVEXA MODEL IDENTITY:
     }
     if (responseStyle) {
       customParts.push(`USER RESPONSE INSTRUCTIONS:\n${responseStyle}`);
+    }
+    if (language && language !== "auto") {
+      const languageMap = {
+        en: "ENGLISH. Always respond in fluent English, regardless of input language, unless explicitly asked to translate.",
+        english: "ENGLISH. Always respond in fluent English.",
+        roman_urdu: "ROMAN URDU. Always reply in natural, conversational Roman Urdu (Urdu written in Latin / English alphabet, e.g. 'Aapka sawal yeh hai...'). Do not answer in English.",
+        urdu: "URDU (اردو). Always reply in proper, fluent Urdu script (اردو رسم الخط).",
+        hindi: "HINDI (हिंदी). Always reply in proper, fluent Hindi script (देवناगरी लिपि).",
+        es: "SPANISH (Español). Always reply in fluent Spanish.",
+        spanish: "SPANISH (Español). Always reply in fluent Spanish.",
+        fr: "FRENCH (Français). Always reply in fluent French.",
+        french: "FRENCH (Français). Always reply in fluent French.",
+        de: "GERMAN (Deutsch). Always reply in fluent German.",
+        german: "GERMAN (Deutsch). Always reply in fluent German.",
+        ar: "ARABIC (العربية). Always reply in fluent Arabic."
+      };
+      customParts.push(`USER PREFERRED LANGUAGE (${language.toUpperCase()}): ${languageMap[language] || language}`);
     }
     if (tone && tone !== "default") {
       const toneMap = {
@@ -1123,6 +1141,7 @@ function parseChatPayload(body) {
     customSettings = {
       aboutUser: typeof body.customSettings.aboutUser === "string" ? body.customSettings.aboutUser.trim().slice(0, 1000) : "",
       responseStyle: typeof body.customSettings.responseStyle === "string" ? body.customSettings.responseStyle.trim().slice(0, 1000) : "",
+      language: typeof body.customSettings.language === "string" ? body.customSettings.language.trim().toLowerCase().slice(0, 30) : "auto",
       tone: typeof body.customSettings.tone === "string" ? body.customSettings.tone.trim().toLowerCase().slice(0, 30) : "default",
       behavior: typeof body.customSettings.behavior === "string" ? body.customSettings.behavior.trim().toLowerCase().slice(0, 30) : "standard",
       codeDepth: typeof body.customSettings.codeDepth === "string" ? body.customSettings.codeDepth.trim().toLowerCase().slice(0, 30) : "full"

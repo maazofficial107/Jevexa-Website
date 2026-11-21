@@ -90,6 +90,7 @@
 
     let userMemories = [];
     let renamingSessionId = null;
+    let openMenuSessionId = null;
 
     function selectorOptions(name) {
         return Array.from(selectorControls[name]?.menu?.querySelectorAll('[role="option"]') || []);
@@ -346,7 +347,12 @@
             }))
             .filter(({ session, preview }) => !query
                 || `${session.title} ${preview}`.toLowerCase().includes(query))
-            .sort((a, b) => b.session.updatedAt - a.session.updatedAt);
+            .sort((a, b) => {
+                const aPinned = Boolean(a.session.pinned);
+                const bPinned = Boolean(b.session.pinned);
+                if (aPinned !== bPinned) return bPinned ? 1 : -1;
+                return b.session.updatedAt - a.session.updatedAt;
+            });
 
         if (countBadge) {
             if (query) {
@@ -359,7 +365,7 @@
 
         matchingSessions.forEach(({ session, preview }) => {
             const row = document.createElement('div');
-            row.className = `chat-history-row${session.id === activeChatId ? ' active' : ''}`;
+            row.className = `chat-history-row${session.id === activeChatId ? ' active' : ''}${session.pinned ? ' is-pinned' : ''}`;
             row.setAttribute('role', 'listitem');
 
             if (renamingSessionId === session.id) {
@@ -422,10 +428,19 @@
             const select = document.createElement('button');
             select.type = 'button';
             select.className = 'chat-history-select';
-            select.setAttribute('aria-label', `${session.title || 'New chat'}${preview ? `: ${preview}` : ''}`);
+            select.setAttribute('aria-label', `${session.pinned ? '[Pinned] ' : ''}${session.title || 'New chat'}${preview ? `: ${preview}` : ''}`);
             select.setAttribute('aria-current', session.id === activeChatId ? 'true' : 'false');
             const title = document.createElement('span');
             title.className = 'chat-history-title';
+
+            if (session.pinned) {
+                const pinIcon = document.createElement('i');
+                pinIcon.className = 'fas fa-thumbtack chat-pinned-indicator';
+                pinIcon.setAttribute('aria-hidden', 'true');
+                pinIcon.title = 'Pinned chat';
+                title.appendChild(pinIcon);
+            }
+
             appendSearchHighlight(title, session.title || 'New chat', query);
             const previewText = document.createElement('span');
             previewText.className = 'chat-history-preview';
@@ -433,40 +448,150 @@
             select.append(title, previewText);
             bindSafe(select, 'click', () => selectChatSession(session.id));
 
+            // Three-dots menu actions container
             const actions = document.createElement('div');
-            actions.className = 'chat-history-actions';
+            actions.className = `chat-history-actions chat-history-menu-wrap${openMenuSessionId === session.id ? ' menu-open' : ''}`;
 
-            const renameBtn = document.createElement('button');
-            renameBtn.type = 'button';
-            renameBtn.className = 'chat-history-action-btn chat-history-rename';
-            renameBtn.setAttribute('aria-label', `Rename chat: ${session.title || 'New chat'}`);
-            renameBtn.title = 'Rename chat';
-            renameBtn.innerHTML = '<i class="fas fa-pencil"></i>';
-            bindSafe(renameBtn, 'click', (e) => {
+            const menuBtn = document.createElement('button');
+            menuBtn.type = 'button';
+            menuBtn.className = 'chat-history-action-btn chat-history-menu-btn';
+            menuBtn.setAttribute('aria-label', `Chat actions for ${session.title || 'chat'}`);
+            menuBtn.setAttribute('aria-haspopup', 'menu');
+            menuBtn.setAttribute('aria-expanded', String(openMenuSessionId === session.id));
+            menuBtn.title = 'More options';
+            menuBtn.innerHTML = '<i class="fas fa-ellipsis"></i>';
+
+            bindSafe(menuBtn, 'click', (e) => {
                 e.stopPropagation();
-                renamingSessionId = session.id;
+                openMenuSessionId = openMenuSessionId === session.id ? null : session.id;
                 renderChatHistory();
             });
 
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.className = 'chat-history-action-btn chat-history-delete-btn chat-history-delete';
-            removeBtn.setAttribute('aria-label', `Delete chat: ${session.title || 'New chat'}`);
-            removeBtn.title = 'Delete chat';
-            removeBtn.innerHTML = '<i class="fas fa-trash-can"></i>';
-            bindSafe(removeBtn, 'click', (e) => {
-                e.stopPropagation();
-                if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
-                chatSessions = chatSessions.filter(item => item.id !== session.id);
-                if (session.id === activeChatId) {
-                    if (chatSessions.length > 0) selectChatSession(chatSessions[0].id);
-                    else createChatSession();
-                } else {
-                    saveChatSessions();
-                }
-            });
+            if (openMenuSessionId === session.id) {
+                const menu = document.createElement('div');
+                menu.className = 'chat-history-dropdown-menu';
+                menu.setAttribute('role', 'menu');
+                menu.setAttribute('aria-label', 'Chat actions');
 
-            actions.append(renameBtn, removeBtn);
+                // 1. Pin / Unpin
+                const pinBtn = document.createElement('button');
+                pinBtn.type = 'button';
+                pinBtn.className = 'chat-menu-item chat-menu-pin';
+                pinBtn.setAttribute('role', 'menuitem');
+                pinBtn.innerHTML = `<i class="fas ${session.pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack'}"></i><span>${session.pinned ? 'Unpin' : 'Pin'}</span>`;
+                bindSafe(pinBtn, 'click', (e) => {
+                    e.stopPropagation();
+                    session.pinned = !session.pinned;
+                    session.updatedAt = Date.now();
+                    openMenuSessionId = null;
+                    saveChatSessions();
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(session.pinned ? 'Chat pinned to top' : 'Chat unpinned');
+                    }
+                });
+
+                // 2. Rename
+                const renameBtn = document.createElement('button');
+                renameBtn.type = 'button';
+                renameBtn.className = 'chat-menu-item chat-menu-rename chat-history-rename';
+                renameBtn.setAttribute('role', 'menuitem');
+                renameBtn.innerHTML = '<i class="fas fa-pencil"></i><span>Rename</span>';
+                bindSafe(renameBtn, 'click', (e) => {
+                    e.stopPropagation();
+                    openMenuSessionId = null;
+                    renamingSessionId = session.id;
+                    renderChatHistory();
+                });
+
+                // 3. Share
+                const shareBtn = document.createElement('button');
+                shareBtn.type = 'button';
+                shareBtn.className = 'chat-menu-item chat-menu-share';
+                shareBtn.setAttribute('role', 'menuitem');
+                shareBtn.innerHTML = '<i class="fas fa-arrow-up-from-bracket"></i><span>Share</span>';
+                bindSafe(shareBtn, 'click', async (e) => {
+                    e.stopPropagation();
+                    openMenuSessionId = null;
+                    renderChatHistory();
+                    const shareUrl = `${window.location.origin}/tools/chatbot`;
+                    const shareTitle = session.title || 'Jevexa AI Chat';
+                    const userPrompt = session.messages?.find(m => m.role === 'user')?.text || '';
+                    const shareText = userPrompt
+                        ? `Jevexa AI Chat: "${shareTitle}"\n"${userPrompt.slice(0, 150)}..."\n${shareUrl}`
+                        : `${shareTitle} — Jevexa AI Studio\n${shareUrl}`;
+
+                    if (navigator.share && typeof navigator.share === 'function') {
+                        try {
+                            await navigator.share({
+                                title: shareTitle,
+                                text: shareText,
+                                url: shareUrl
+                            });
+                            if (typeof window.showToast === 'function') window.showToast('✓ Chat shared successfully');
+                            return;
+                        } catch (shareErr) {
+                            if (shareErr?.name === 'AbortError') return;
+                        }
+                    }
+
+                    try {
+                        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                            await navigator.clipboard.writeText(shareText);
+                        } else {
+                            const ta = document.createElement('textarea');
+                            ta.value = shareText;
+                            ta.style.position = 'fixed';
+                            ta.style.opacity = '0';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            ta.remove();
+                        }
+                        if (typeof window.showToast === 'function') window.showToast('✓ Chat link copied to clipboard!');
+                        else setStatus('Chat link copied to clipboard!');
+                    } catch (_) {
+                        if (typeof window.showToast === 'function') window.showToast('Could not copy link to clipboard');
+                    }
+                });
+
+                // 4. Delete
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = 'button';
+                deleteBtn.className = 'chat-menu-item chat-menu-delete chat-history-delete-btn chat-history-delete';
+                deleteBtn.setAttribute('role', 'menuitem');
+                deleteBtn.innerHTML = '<i class="fas fa-trash-can"></i><span>Delete</span>';
+                bindSafe(deleteBtn, 'click', (e) => {
+                    e.stopPropagation();
+                    openMenuSessionId = null;
+                    if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
+                    chatSessions = chatSessions.filter(item => item.id !== session.id);
+                    if (session.id === activeChatId) {
+                        activeChatId = null;
+                        conversation.length = 0;
+                        messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
+                        const welcome = messages?.querySelector('[data-chat-welcome]');
+                        if (welcome) welcome.hidden = false;
+                        const emptyState = document.getElementById('chatEmptyState');
+                        if (emptyState) emptyState.hidden = false;
+                        updateChatWelcome();
+                    }
+                    saveChatSessions();
+                    if (typeof window.showToast === 'function') window.showToast('Chat deleted');
+                });
+
+                menu.append(pinBtn, renameBtn, shareBtn, deleteBtn);
+                actions.appendChild(menu);
+
+                requestAnimationFrame(() => {
+                    const wrapRect = actions.getBoundingClientRect();
+                    const listRect = list.getBoundingClientRect();
+                    if (wrapRect.bottom + 160 > Math.min(window.innerHeight, listRect.bottom + 30)) {
+                        menu.classList.add('menu-dropup');
+                    }
+                });
+            }
+
+            actions.appendChild(menuBtn);
             row.append(select, actions);
             list.appendChild(row);
         });
@@ -476,6 +601,19 @@
             emptyState.textContent = query ? `No chats match “${query}”.` : 'No saved chats yet.';
         }
     }
+
+    bindSafe(document, 'click', (e) => {
+        if (openMenuSessionId && !e.target.closest('.chat-history-menu-wrap')) {
+            openMenuSessionId = null;
+            renderChatHistory();
+        }
+    }, { getKey: () => document, preventDefaultOnDebounce: false });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && openMenuSessionId) {
+            openMenuSessionId = null;
+            renderChatHistory();
+        }
+    });
 
     function saveChatSessions() {
         if (!historyUserId) return true;
@@ -505,15 +643,8 @@
 
     function createChatSession() {
         abortInFlightChatRequest();
-        const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        activeChatId = id;
+        activeChatId = null;
         conversation.length = 0;
-        chatSessions.unshift({ id, title: 'New chat', updatedAt: Date.now(), messages: [] });
-        if (historyUserId) {
-            try {
-                localStorage.setItem(activeChatKey(historyUserId), id);
-            } catch (_) {}
-        }
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = false;
@@ -522,8 +653,9 @@
         updateChatWelcome();
         pendingAttachments.length = 0;
         renderAttachments();
-        saveChatSessions();
+        renderChatHistory();
         setStatus('New chat started.');
+        document.getElementById('chatInput')?.focus();
     }
 
     function selectChatSession(sessionId) {
@@ -563,13 +695,16 @@
         try {
             if (!activeChatId) {
                 activeChatId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-                chatSessions.unshift({ id: activeChatId, title: 'New chat', updatedAt: Date.now(), messages: [] });
+                chatSessions.unshift({ id: activeChatId, title: 'New chat', updatedAt: Date.now(), pinned: false, messages: [] });
             }
             const session = chatSessions.find(item => item.id === activeChatId);
             if (!session) return false;
             session.messages = conversation.slice(-100);
             session.updatedAt = Date.now();
-            session.title = session.messages.find(item => item.role === 'user')?.text.slice(0, 48) || 'New chat';
+            const firstUserText = session.messages.find(item => item.role === 'user')?.text;
+            if (firstUserText && (!session.title || session.title === 'New chat')) {
+                session.title = firstUserText.slice(0, 48);
+            }
             if (userId) {
                 try {
                     localStorage.setItem(activeChatKey(userId), activeChatId);
@@ -585,12 +720,6 @@
     function loadConversation(userId, force = false) {
         if (!userId) return;
         if (historyUserId === userId && !force && chatSessions.length > 0) {
-            if (activeChatId) {
-                const active = chatSessions.find(item => item.id === activeChatId);
-                if (active && (!conversation.length && active.messages.length)) {
-                    selectChatSession(activeChatId);
-                }
-            }
             return;
         }
         historyUserId = userId;
@@ -609,6 +738,7 @@
                     id: item.id,
                     title: typeof item.title === 'string' ? item.title.slice(0, 48) : 'New chat',
                     updatedAt: item.updatedAt,
+                    pinned: Boolean(item.pinned),
                     messages: item.messages.slice(-100).filter(message =>
                         message && ['user', 'assistant'].includes(message.role)
                         && typeof message.text === 'string' && message.text.length <= 4000
@@ -620,30 +750,34 @@
                     id: crypto.randomUUID?.() || `${Date.now()}-legacy`,
                     title: legacy.find(item => item?.role === 'user')?.text?.slice(0, 48) || 'Previous chat',
                     updatedAt: Date.now(),
+                    pinned: false,
                     messages: legacy.filter(item => item && ['user', 'assistant'].includes(item.role)
                         && typeof item.text === 'string' && item.text.length <= 4000).slice(-100)
                 }];
             }
-            let savedActiveId = null;
-            try {
-                savedActiveId = localStorage.getItem(activeChatKey(userId));
-            } catch (_) {}
-            if (chatSessions.length) {
-                const targetSession = (savedActiveId && chatSessions.find(item => item.id === savedActiveId))
-                    || [...chatSessions].sort((a, b) => b.updatedAt - a.updatedAt)[0];
-                selectChatSession(targetSession.id);
-            } else {
-                createChatSession();
-            }
+            // FRESH CHAT ON REOPEN:
+            // Past conversations remain intact and accessible in the sidebar history list,
+            // but the main chat canvas always starts as a fresh clean chat session on launch/reopen.
+            // Past chats only load when the user explicitly clicks a chat in the sidebar history.
+            activeChatId = null;
+            conversation.length = 0;
+            messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
+            const welcome = messages?.querySelector('[data-chat-welcome]');
+            if (welcome) welcome.hidden = false;
+            const emptyState = document.getElementById('chatEmptyState');
+            if (emptyState) emptyState.hidden = false;
+            updateChatWelcome();
             loadCustomSettings(userId);
             loadMemories(userId);
             renderChatHistory();
         } catch (error) {
             console.warn('Chat history restore notice:', error?.message || error);
             chatSessions = [];
-            createChatSession();
+            activeChatId = null;
+            conversation.length = 0;
             loadCustomSettings(userId);
             loadMemories(userId);
+            renderChatHistory();
         }
     }
 
@@ -1226,7 +1360,7 @@
             });
         }
 
-        bindSafe(saveBtn, 'click', () => {
+        const syncSettingsFromInputs = () => {
             chatCustomSettings.aboutUser = document.getElementById('chatCustomAbout')?.value.trim() || '';
             chatCustomSettings.responseStyle = document.getElementById('chatCustomResponse')?.value.trim() || '';
             chatCustomSettings.language = document.getElementById('chatLanguageSelect')?.value || 'auto';
@@ -1239,6 +1373,28 @@
 
             saveCustomSettings(historyUserId);
             applyCustomSettingsToUI();
+        };
+
+        const liveControls = [
+            'chatLanguageSelect',
+            'chatToneSelect',
+            'chatBehaviorSelect',
+            'chatCodeDepthSelect',
+            'chatModalThemeSelect',
+            'chatModalDensitySelect',
+            'chatModalReducedMotion',
+            'chatCustomAbout',
+            'chatCustomResponse'
+        ];
+        liveControls.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const evtName = (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
+            bindSafe(el, evtName, syncSettingsFromInputs);
+        });
+
+        bindSafe(saveBtn, 'click', () => {
+            syncSettingsFromInputs();
 
             if (saveStatus) {
                 saveStatus.textContent = '✓ Saved';

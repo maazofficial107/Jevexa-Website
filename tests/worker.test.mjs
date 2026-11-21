@@ -5430,7 +5430,7 @@ test("Flagship upgrade: Modern Settings interface with Personalization & Memory 
   assert.match(html, /id="chatOpenCustomizationBtn"/);
   assert.match(html, /<i class="fas fa-gear"[^>]*><\/i>\s*<span class="chat-personalize-title">Settings<\/span>/);
   assert.doesNotMatch(html, /class="chat-personalize-subtitle"/);
-  assert.match(html, /id="chatMemoryBadge"/);
+  assert.doesNotMatch(html, /id="chatMemoryBadge"/, "0 badge next to Settings must be removed");
 
   // Chatbot header settings button
   assert.match(html, /id="chatHeaderSettingsBtn"/);
@@ -5505,7 +5505,7 @@ test("Flagship upgrade: Single unified settings and bottom-end credit detail in 
   assert.match(html, /id="chatOpenCustomizationBtn"/);
   assert.match(html, /<i class="fas fa-gear"[^>]*><\/i>\s*<span class="chat-personalize-title">Settings<\/span>/);
   assert.doesNotMatch(html, /class="chat-personalize-subtitle"/);
-  assert.match(html, /id="chatMemoryBadge"/);
+  assert.doesNotMatch(html, /id="chatMemoryBadge"/, "0 badge next to Settings must be removed");
 
   // All 5 standard chatbot settings categories in one cohesive flagship modal
   assert.match(html, /id="chatCustomizationModal"/);
@@ -5559,4 +5559,78 @@ test("Flagship upgrade: Session resumption continuity, highlighted bottom credit
   assert.match(html, /<i class="fas fa-gear" aria-hidden="true"><\/i>/);
   assert.match(html, /<span class="chat-personalize-title">Settings<\/span>/);
   assert.doesNotMatch(html, /chat-personalize-subtitle/);
+});
+
+test("Flagship upgrade: Sidebar chat history three-dots menu (Pin, Rename, Delete, Share)", async () => {
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Three-dots menu button and state
+  assert.match(credits, /let openMenuSessionId = null;/);
+  assert.match(credits, /chat-history-menu-btn/);
+  assert.match(credits, /chat-history-menu-wrap/);
+  assert.match(credits, /chat-history-dropdown-menu/);
+
+  // Four actions: Pin, Rename, Share, Delete
+  assert.match(credits, /chat-menu-pin/);
+  assert.match(credits, /session\.pinned = !session\.pinned;/);
+  assert.match(credits, /chat-pinned-indicator/);
+  assert.match(credits, /chat-menu-rename/);
+  assert.match(credits, /renamingSessionId = session\.id;/);
+  assert.match(credits, /chat-menu-share/);
+  assert.match(credits, /navigator\.share/);
+  assert.match(credits, /navigator\.clipboard\.writeText/);
+  assert.match(credits, /chat-menu-delete/);
+  assert.match(credits, /chatSessions = chatSessions\.filter/);
+
+  // Sorting: Pinned chats sort to the top
+  assert.match(credits, /const aPinned = Boolean\(a\.session\.pinned\);/);
+  assert.match(credits, /if \(aPinned !== bPinned\) return bPinned \? 1 : -1;/);
+
+  // Dismiss on outside click and Escape
+  assert.match(credits, /e\.key === 'Escape' && openMenuSessionId/);
+
+  // Styling for three-dots menu, dropdown, and pinned indicator
+  assert.match(styles, /\.chat-history-menu-btn/);
+  assert.match(styles, /\.chat-history-dropdown-menu/);
+  assert.match(styles, /\.chat-pinned-indicator/);
+  assert.match(styles, /\.chat-menu-item/);
+  assert.match(styles, /\.menu-dropup/);
+});
+
+test("Flagship upgrade: Fresh chat on reopen with click-to-load sidebar history", async () => {
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+
+  // loadConversation keeps past chat sessions intact in sidebar history list
+  assert.match(credits, /function loadConversation\(userId,\s*force = false\)/);
+  assert.match(credits, /chatSessions = saved\.filter/);
+  assert.match(credits, /pinned: Boolean\(item\.pinned\)/);
+
+  // But starts main chat box as a fresh clean session by default on reopen
+  assert.match(credits, /\/\/ FRESH CHAT ON REOPEN:/);
+  assert.match(credits, /activeChatId = null;/);
+  assert.match(credits, /conversation\.length = 0;/);
+  assert.match(credits, /messages\?\.querySelectorAll\('\.message:not\(\[data-chat-welcome\]\)'\)\.forEach/);
+
+  // Only loads a past chat into canvas when user explicitly clicks that chat in sidebar
+  assert.match(credits, /bindSafe\(select, 'click', \(\) => selectChatSession\(session\.id\)\);/);
+  assert.match(credits, /function selectChatSession\(sessionId\)/);
+  assert.match(credits, /conversation\.splice\(0, conversation\.length, \.\.\.session\.messages\);/);
+});
+
+test("Flagship upgrade: Live working Settings end-to-end and 0 badge removal", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const worker = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Removal of 0 badge next to Settings
+  assert.doesNotMatch(html, /id="chatMemoryBadge"/, "0 badge next to Settings must be completely removed");
+
+  // Live input sync across all settings controls
+  assert.match(credits, /const syncSettingsFromInputs = \(\) =>/);
+  assert.match(credits, /liveControls\.forEach\(id =>/);
+
+  // Mandatory language directive in worker prompt
+  assert.match(worker, /CRITICAL LANGUAGE DIRECTIVE:/);
+  assert.match(worker, /LANGUAGE MIRRORING: The user has selected 'Auto' mode/);
 });

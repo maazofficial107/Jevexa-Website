@@ -137,6 +137,9 @@ ACTIVE JEVEXA MODEL IDENTITY:
         ar: "ARABIC (العربية). Always reply in fluent Arabic."
       };
       customParts.push(`USER PREFERRED LANGUAGE (${language.toUpperCase()}): ${languageMap[language] || language}`);
+      customParts.push(`CRITICAL LANGUAGE DIRECTIVE: The user explicitly configured their language setting to '${language.toUpperCase()}'. You MUST produce your full response strictly in ${languageMap[language] || language}.`);
+    } else {
+      customParts.push("LANGUAGE MIRRORING: The user has selected 'Auto' mode. Always mirror the exact language and script (e.g. Roman Urdu, Urdu script, Hindi, Spanish, French, German, Arabic, English) of the user's prompt.");
     }
     if (tone && tone !== "default") {
       const toneMap = {

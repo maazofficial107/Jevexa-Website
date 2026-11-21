@@ -45,6 +45,7 @@
     let chatSessions = [];
     let activeChatId = null;
     const pendingAttachments = [];
+    let currentUserPlan = 'free';
     let historyUserId = null;
     let activeAuthUserId = null;
     let maximumChatTier = 'lite';
@@ -441,6 +442,7 @@
             const { data, error } = await supabaseClient.from('user_credits')
                 .select('plan,balance').eq('user_id', session.user.id).maybeSingle();
             let maximumTier = 'lite';
+            currentUserPlan = (data?.plan || 'free').toLowerCase();
             if (data && typeof data.plan === 'string' && data.plan.trim()) {
                 const planKey = data.plan.trim().toLowerCase();
                 if (accountTiers[planKey]) {
@@ -516,14 +518,40 @@
         }
     }
 
+    function formatFileSize(bytes) {
+        if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+        if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function getFileIcon(type, name) {
+        const ext = (name || '').split('.').pop().toLowerCase();
+        if ((type && type.startsWith('image/')) || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) {
+            return 'fa-image';
+        }
+        if (type === 'application/pdf' || ext === 'pdf') {
+            return 'fa-file-pdf';
+        }
+        if ((type && type.includes('zip')) || ext === 'zip') {
+            return 'fa-file-zipper';
+        }
+        return 'fa-file';
+    }
+
     function renderAttachments() {
         if (!attachmentList) return;
         attachmentList.replaceChildren();
         pendingAttachments.forEach((attachment, index) => {
             const chip = document.createElement('span');
             chip.className = 'chat-attachment-chip';
+            const icon = document.createElement('i');
+            icon.className = `fas ${getFileIcon(attachment.type, attachment.name)}`;
             const label = document.createElement('span');
+            label.className = 'chip-name';
             label.textContent = attachment.name;
+            const size = document.createElement('span');
+            size.className = 'chip-size';
+            size.textContent = `(${formatFileSize(attachment.size || 0)})`;
             const remove = document.createElement('button');
             remove.type = 'button';
             remove.setAttribute('aria-label', `Remove ${attachment.name}`);
@@ -532,10 +560,16 @@
                 pendingAttachments.splice(index, 1);
                 renderAttachments();
             });
-            chip.append(label, remove);
+            chip.append(icon, label, size, remove);
             attachmentList.appendChild(chip);
         });
         attachmentList.hidden = pendingAttachments.length === 0;
+    }
+
+    function isPaidPlanActive() {
+        const plan = (currentUserPlan || 'free').toLowerCase();
+        const tier = (tierSelect?.value || 'lite').toLowerCase();
+        return (plan !== 'free' && plan !== '') || (tier !== 'lite');
     }
 
     async function addAttachments(files) {
@@ -544,7 +578,7 @@
             return;
         }
         const prepared = [];
-        const tier = tierSelect?.value || 'lite';
+        const isPaid = isPaidPlanActive();
         for (const file of files) {
             if (file.size >= 5 * 1024 * 1024) {
                 setStatus(`${file.name} is too large. Each attachment must be under 5 MB.`);
@@ -555,16 +589,30 @@
             const type = (file.type || extensionTypes[extension] || '').toLowerCase();
             const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
             const paidFileTypes = ['application/pdf', 'application/zip', 'application/x-zip-compressed'];
-            if (tier === 'lite' && !imageTypes.includes(type)) {
-                setStatus('Images only on Lite. Upgrade to attach PDF or ZIP files.', true);
-                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                    window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
+
+            // Free Plan: Images only (max 2, max 5MB). Block PDFs, ZIPs, and other doc types with upgrade modal.
+            if (!isPaid) {
+                if (!imageTypes.includes(type)) {
+                    setStatus('PDF and ZIP uploads require a Paid plan. Upgrade to attach document and archive files.', true);
+                    if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                        window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'PDF & ZIP file uploads', attachButton);
+                    }
+                    if (typeof window.showToast === 'function') {
+                        window.showToast('Upgrade to a Paid plan to upload PDF and ZIP files.');
+                    }
+                    return;
                 }
-                return;
+            } else {
+                if (!imageTypes.includes(type) && !paidFileTypes.includes(type)) {
+                    setStatus('Supported files are JPEG, PNG, WebP, GIF, PDF, and ZIP under 5 MB.');
+                    return;
+                }
             }
-            if (imageTypes.includes(type) || (tier !== 'lite' && paidFileTypes.includes(type))) {
+
+            if (imageTypes.includes(type) || (isPaid && paidFileTypes.includes(type))) {
                 prepared.push({
                     name: file.name,
+                    size: file.size,
                     type: type === 'application/x-zip-compressed' ? 'application/zip' : type,
                     data: await new Promise((resolve, reject) => {
                         const reader = new FileReader();
@@ -577,9 +625,6 @@
                         reader.readAsDataURL(file);
                     })
                 });
-            } else {
-                setStatus('Supported files are JPEG, PNG, WebP, GIF, PDF, and ZIP under 5 MB.');
-                return;
             }
         }
         pendingAttachments.push(...prepared);
@@ -613,7 +658,7 @@
             .replace(/\n/g, '<br>');
     }
 
-    function appendMessage(text, user = false, index = conversation.length) {
+    function appendMessage(text, user = false, index = conversation.length, meta = null) {
         if (!messages) return;
         const row = document.createElement('div');
         row.className = `message ${user ? 'user' : 'bot'}`;
@@ -629,6 +674,17 @@
         paragraph.innerHTML = renderMarkdown(text);
         content.appendChild(paragraph);
         if (!user) {
+            if (meta) {
+                const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
+                const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
+                if (used !== null && remaining !== null) {
+                    const receipt = document.createElement('div');
+                    receipt.className = 'chat-credit-receipt';
+                    receipt.setAttribute('role', 'status');
+                    receipt.innerHTML = `<span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
+                    content.appendChild(receipt);
+                }
+            }
             const actions = document.createElement('div');
             actions.className = 'chat-message-actions';
             const copy = document.createElement('button');
@@ -1134,7 +1190,7 @@
                 const replyText = String(result.reply || '').trim();
                 conversation.push({ role: 'user', text: displayText });
                 conversation.push({ role: 'assistant', text: replyText });
-                appendMessage(replyText, false, conversation.length - 1);
+                appendMessage(replyText, false, conversation.length - 1, result);
                 if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
                 const historySaved = persistConversation(session.user.id);
                 const remaining = Number.isInteger(result.remaining_credits)
@@ -1149,6 +1205,7 @@
                     const settingsBal = document.getElementById('settingsBalance');
                     if (settingsBal) settingsBal.textContent = String(remaining);
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+                    window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
                 }
                 setStatus(
                     `AI reply completed. ${used} ${String(result.tier || selectedTier).toUpperCase()} credit${used === 1 ? '' : 's'} used. Balance ${remaining !== null ? remaining : result.creditsRemaining}.`
@@ -1382,6 +1439,38 @@
             setStatus(error?.message || 'Could not read the selected attachment.');
         } finally {
             fileInput.value = '';
+        }
+    });
+
+    const dropTarget = document.getElementById('chatForm') || document.getElementById('chatbotWindow');
+    if (dropTarget) {
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropTarget.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropTarget.classList.add('is-dragover');
+            });
+        });
+        ['dragleave', 'dragend', 'drop'].forEach(eventName => {
+            dropTarget.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropTarget.classList.remove('is-dragover');
+            });
+        });
+        dropTarget.addEventListener('drop', async e => {
+            const files = Array.from(e.dataTransfer?.files || []);
+            if (files.length > 0) {
+                await addAttachments(files);
+            }
+        });
+    }
+
+    input?.addEventListener('paste', async e => {
+        const files = Array.from(e.clipboardData?.files || []);
+        if (files.length > 0) {
+            e.preventDefault();
+            await addAttachments(files);
         }
     });
 

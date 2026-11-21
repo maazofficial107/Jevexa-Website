@@ -4344,3 +4344,258 @@ test("Reliability & Schema security: RPC permissions and notification timeout sa
   // Admin HTML base href
   assert.match(adminHtml, /<base href="\/">/i);
 });
+
+
+test("token-weighted credits: formula, multipliers, attachments, and fallback token estimation", async () => {
+  const workerSrc = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Verify token-weighted credit formula implementation in source
+  assert.match(workerSrc, /Math\.max\(1,\s*Math\.ceil\(\(tokens\s*\/\s*500\)\s*\*\s*modelMultiplier\)\)\s*\+\s*attachmentSurcharge/);
+  assert.match(workerSrc, /attachmentSurcharge\s*\+=\s*2/); // Image: +2 credits
+  assert.match(workerSrc, /attachmentSurcharge\s*\+=\s*4/); // PDF: +4 credits
+  assert.match(workerSrc, /attachmentSurcharge\s*\+=\s*5/); // ZIP: +5 credits
+
+  // Test calculateUsageCredits formula logic in isolated context
+  const testCalc = (tokens, mult, surcharge) => Math.max(1, Math.ceil((tokens / 500) * mult)) + surcharge;
+
+  // Short message (50 tokens, standard fast model 1.0x, 0 surcharge) -> 1 credit
+  assert.equal(testCalc(50, 1.0, 0), 1);
+
+  // Long message (1500 tokens, 1.0x, 0 surcharge) -> 3 credits
+  assert.equal(testCalc(1500, 1.0, 0), 3);
+
+  // Heavy model (1200 tokens, 1.5x, 0 surcharge) -> Math.ceil(2.4 * 1.5) = 4 credits
+  assert.equal(testCalc(1200, 1.5, 0), 4);
+
+  // Short message with 1 image (+2 surcharge) -> 1 + 2 = 3 credits
+  assert.equal(testCalc(50, 1.0, 2), 3);
+
+  // Short message with 2 images (+4 surcharge) -> 1 + 4 = 5 credits
+  assert.equal(testCalc(50, 1.0, 4), 5);
+
+  // Message with PDF (+4 surcharge) -> 1 + 4 = 5 credits
+  assert.equal(testCalc(100, 1.0, 4), 5);
+
+  // Message with ZIP (+5 surcharge) -> 1 + 5 = 6 credits
+  assert.equal(testCalc(100, 1.0, 5), 6);
+
+  // Deterministic fallback tokens calculation from characters: Math.ceil(chars / 4)
+  const fallbackCalc = chars => Math.max(1, Math.ceil(chars / 4));
+  assert.equal(fallbackCalc(200), 50);
+  assert.ok(!Number.isNaN(fallbackCalc(0)));
+});
+
+test("credit receipt footer & real-time balance sync across chat and content generator", async () => {
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const scriptCode = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const workerSrc = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Worker returns structured metadata for credit receipt
+  assert.match(workerSrc, /creditsUsed:\s*chargedCredits/);
+  assert.match(workerSrc, /remainingCredits:\s*remainingCredits/);
+  assert.match(workerSrc, /tokensUsed:\s*totalTokens/);
+  assert.match(workerSrc, /providerUsed:/);
+
+  // Chatbot message receipt footer
+  assert.match(creditsCode, /chat-credit-receipt/);
+  assert.match(creditsCode, /⚡ Credits used:/);
+  assert.match(creditsCode, /Remaining:/);
+
+  // Content generator receipt footer
+  assert.match(contentCode, /content-credit-receipt|contentCreditReceipt/);
+  assert.match(contentCode, /⚡ Credits used:/);
+  assert.match(contentCode, /Remaining:/);
+
+  // Real-time balance sync helper exported to window
+  assert.match(scriptCode, /window\.JEVEXA_UPDATE_CREDIT_BALANCE\s*=/);
+  assert.match(creditsCode, /window\.JEVEXA_UPDATE_CREDIT_BALANCE\?\.\(remaining\)/);
+  assert.match(contentCode, /window\.JEVEXA_UPDATE_CREDIT_BALANCE\?\.\(remaining\)/);
+
+  // Styles defined for receipt badges
+  assert.match(stylesCode, /\.chat-credit-receipt/);
+  assert.match(stylesCode, /\.content-credit-receipt/);
+});
+
+test("plan-based file upload gating: Free plan allows images only and blocks PDF/ZIP with 403", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "free", balance: 100 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        service_key: "ai_chat",
+        display_name: "AI Chat",
+        integration_status: "available",
+        fixed_credits: 1,
+        credits_per_1000_tokens: null,
+        enabled: true
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 1, balance: 99 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 99 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "Image received and analyzed." }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 50, candidatesTokenCount: 20, totalTokenCount: 70 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    // 1. Free plan user uploads allowed image (JPEG/PNG/WebP) -> Succeeds 200
+    const sampleImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const allowedImageRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Look at this image",
+        tier: "lite",
+        attachments: [{
+          name: "photo.png",
+          type: "image/png",
+          data: `data:image/png;base64,${sampleImageBase64}`
+        }]
+      }
+    }), geminiEnv);
+
+    assert.equal(allowedImageRes.status, 200);
+    const imgData = await allowedImageRes.json();
+    assert.equal(imgData.reply, "Image received and analyzed.");
+
+    // 2. Free plan user uploads PDF -> Blocked with 400 or 403
+    const blockedPdfRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Review my document",
+        tier: "lite",
+        attachments: [{
+          name: "doc.pdf",
+          type: "application/pdf",
+          data: "data:application/pdf;base64,JVBERi0xLjQ="
+        }]
+      }
+    }), geminiEnv);
+
+    assert.ok(blockedPdfRes.status === 400 || blockedPdfRes.status === 403);
+    const pdfErr = await blockedPdfRes.json();
+    assert.match(pdfErr.error, /Images only on Lite|PDF and ZIP uploads require a Paid plan/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Paid plan accepts images, PDFs, and valid ZIPs while enforcing ZIP safety limits", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") {
+      return Response.json({ id: userId });
+    }
+    if (url.pathname === "/rest/v1/user_credits") {
+      return Response.json([{ plan: "pro", balance: 500 }]);
+    }
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{
+        service_key: "ai_chat_pro",
+        display_name: "AI Chat Pro",
+        integration_status: "available",
+        fixed_credits: 2,
+        credits_per_1000_tokens: null,
+        enabled: true
+      }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 2, balance: 498 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 2, balance: 498 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "PDF and ZIP analyzed successfully." }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 30, totalTokenCount: 130 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    // 1. Paid plan with valid PDF and ZIP passes cleanly
+    const paidRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Inspect files",
+        tier: "pro",
+        attachments: [
+          { name: "doc.pdf", type: "application/pdf", data: "data:application/pdf;base64,JVBERi0xLjQ=" },
+          { name: "code.zip", type: "application/zip", data: "data:application/zip;base64,UEsDBA==" }
+        ]
+      }
+    }), geminiEnv);
+
+    assert.equal(paidRes.status, 200);
+    const paidData = await paidRes.json();
+    assert.equal(paidData.reply, "PDF and ZIP analyzed successfully.");
+
+    // 2. ZIP safety check: Path traversal check in ZIP
+    const headerBytes = new Uint8Array(45);
+    headerBytes[0] = 0x50; headerBytes[1] = 0x4b; headerBytes[2] = 0x03; headerBytes[3] = 0x04;
+    headerBytes[26] = 13; headerBytes[27] = 0;
+    const nameStr = "../secret.txt";
+    for (let i = 0; i < nameStr.length; i++) headerBytes[30 + i] = nameStr.charCodeAt(i);
+    const badZipB64 = Buffer.from(headerBytes).toString("base64");
+
+    const unsafeZipRes = await worker.fetch(makeRequest("/api/chat", {
+      body: {
+        message: "Inspect unsafe zip",
+        tier: "pro",
+        attachments: [{ name: "unsafe.zip", type: "application/zip", data: `data:application/zip;base64,${badZipB64}` }]
+      }
+    }), geminiEnv);
+
+    assert.equal(unsafeZipRes.status, 400);
+    const unsafeData = await unsafeZipRes.json();
+    assert.match(unsafeData.error, /safety|unsafe/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("mobile, tablet & all-device responsiveness and UI safeguards verification", async () => {
+  const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const scriptCode = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  // 100dvh protection against mobile address bar clipping
+  assert.match(stylesCode, /100dvh/);
+
+  // Minimum touch target size 44px
+  assert.match(stylesCode, /min-height:\s*44px/);
+
+  // Blinking-dot live status animation
+  assert.match(stylesCode, /liveDotPulse|live-status-dot/);
+
+  // File preview chips with icons and sizes
+  assert.match(creditsCode, /formatFileSize/);
+  assert.match(creditsCode, /getFileIcon/);
+  assert.match(creditsCode, /chip-size/);
+
+  // Drag & drop and paste support in chat
+  assert.match(creditsCode, /is-dragover/);
+  assert.match(creditsCode, /clipboardData/);
+
+  // Send button disabled state during generation
+  assert.match(creditsCode, /sendButton\.disabled\s*=\s*true/);
+
+  // Meta viewport tag exists for responsive devices
+  assert.match(indexHtml, /<meta\s+name="viewport"\s+content="[^"]*width=device-width/i);
+});

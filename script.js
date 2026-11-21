@@ -4120,6 +4120,20 @@ const JEVEXA_PLANS = {
     }
     window.JEVEXA_SYNC_WORKSPACE_CREDITS = syncWorkspaceCredits;
 
+    function updateCreditBalanceGlobal(newBalance) {
+        if (!Number.isInteger(newBalance)) return;
+        const str = String(newBalance);
+        const countEl = document.getElementById('creditsCount');
+        if (countEl) countEl.textContent = str;
+        const settingsBal = document.getElementById('settingsBalance');
+        if (settingsBal) settingsBal.textContent = str;
+        document.querySelectorAll('.workspace-credits-val').forEach(el => {
+            el.textContent = str;
+        });
+        window.dispatchEvent(new CustomEvent('jevexa:credits-updated', { detail: { balance: newBalance } }));
+    }
+    window.JEVEXA_UPDATE_CREDIT_BALANCE = updateCreditBalanceGlobal;
+
     // Coming Soon Notification / Modal
     function showComingSoonPopup(toolName) {
         const message = '🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon.';

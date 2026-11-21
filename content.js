@@ -388,6 +388,16 @@
 
             clearContentProcessing();
             output.textContent = payload.content;
+            let receipt = document.getElementById('contentCreditReceipt');
+            if (!receipt) {
+                receipt = document.createElement('div');
+                receipt.id = 'contentCreditReceipt';
+                receipt.className = 'content-credit-receipt';
+                output.parentNode.appendChild(receipt);
+            }
+            receipt.innerHTML = `<span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
+            receipt.hidden = false;
+
             forgetPendingRequest(session, requestId);
             copyButton.disabled = false;
             downloadButton.disabled = false;
@@ -397,6 +407,7 @@
                 const settingsBal = document.getElementById('settingsBalance');
                 if (settingsBal) settingsBal.textContent = String(remaining);
                 window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
             }
             let balanceMessage = '';
             if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {

@@ -5491,3 +5491,41 @@ test("Flagship upgrade: Multi-device stability, touch safeguards and non-collidi
   // Zero collapsed-sidebar bugs
   assert.doesNotMatch(styles, /\.chat-sidebar-collapsed/);
 });
+
+test("Flagship upgrade: Single unified settings and bottom-end credit detail in status bar", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Requirement 2: Zero split Quick Settings in sidebar
+  assert.doesNotMatch(html, /Quick Settings/i, "Quick Settings block must be removed from sidebar");
+  assert.doesNotMatch(html, /id="chatSettings"/, "#chatSettings details element must be removed");
+
+  // Single clean Settings entry at bottom of sidebar
+  assert.match(html, /id="chatOpenCustomizationBtn"/);
+  assert.match(html, /<span class="chat-personalize-title">Settings<\/span>/);
+  assert.match(html, /<span class="chat-personalize-subtitle">Personalization &amp; Memory<\/span>/);
+  assert.match(html, /id="chatMemoryBadge"/);
+
+  // All 5 standard chatbot settings categories in one cohesive flagship modal
+  assert.match(html, /id="chatCustomizationModal"/);
+  assert.match(html, /data-tab="memory"/);
+  assert.match(html, /data-tab="instructions"/);
+  assert.match(html, /data-tab="language"/);
+  assert.match(html, /data-tab="personality"/);
+  assert.match(html, /data-tab="display"/);
+
+  // Requirement 1: Bottom-end credit detail in status bar
+  assert.match(credits, /Credits used:\s*\$\{used\}\s*•\s*Remaining:\s*\$\{remaining\}\s*•\s*Token-weighted/);
+
+  // Chat bubbles clean without clutter (.chat-credit-receipt hidden from message bubbles)
+  assert.match(styles, /\.chat-credit-receipt\s*\{[\s\S]*?display:\s*none\s*!important;/);
+
+  // Bottom notice styled with generous breathing room
+  assert.match(styles, /\.chat-credit-notice\s*\{[\s\S]*?display:\s*flex;/);
+  assert.match(styles, /#chatCreditStatus\s*\{[\s\S]*?display:\s*inline-flex;/);
+
+  // Clear all conversations unified handler in credits.js
+  assert.match(credits, /function clearAllConversations\(\)/);
+  assert.match(credits, /chatSettingsClearAllBtn/);
+});

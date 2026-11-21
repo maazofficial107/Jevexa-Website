@@ -9186,7 +9186,9 @@ body.chat-is-resizing {
 .chat-input-area { width: min(100%, 1180px); min-height: 58px; margin: 0 auto; align-items: flex-end; padding: 8px clamp(14px, 3vw, 36px) 10px; }
 .chat-input-area textarea { flex: 1; min-height: 44px; max-height: 150px; resize: none; overflow-y: auto; padding: 11px 16px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; outline: none; transition: border-color 180ms, box-shadow 180ms; }
 .chat-input-area textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(139,92,246,.16); }
-.chat-credit-notice { width: min(100%, 1180px); min-height: 28px; margin: 0 auto; padding: 0 clamp(14px, 3vw, 36px) max(8px, env(safe-area-inset-bottom)); font-size: 11.5px; }
+.chat-credit-notice { width: min(100%, 1180px); min-height: 32px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px clamp(14px, 3vw, 36px) max(8px, env(safe-area-inset-bottom)); font-size: 11.5px; }
+#chatCreditStatus { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; color: #cbd5e1; font-weight: 500; letter-spacing: 0.01em; }
+#chatCreditStatus strong { color: #f1f5f9; font-weight: 700; }
 .chatbot-window[data-chat-theme="light"] { background: rgba(248,250,255,.98); color: #172033; }
 .chatbot-window[data-chat-theme="light"] .chat-main,
 .chatbot-window[data-chat-theme="light"] .chatbot-header { color: #172033; }
@@ -10905,7 +10907,10 @@ body.is-offline .offline-indicator {
    AI STUDIO PERFORMANCE & CREDIT RECEIPT FOOTER STYLES
    ========================================================================== */
 
-.chat-credit-receipt,
+.chat-credit-receipt {
+    display: none !important;
+}
+
 .content-credit-receipt {
     display: inline-flex;
     align-items: center;

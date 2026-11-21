@@ -1762,36 +1762,6 @@
                         </div>
                         <span class="chat-memory-indicator" id="chatMemoryBadge" title="Saved memories">0</span>
                     </button>
-                    <details class="chat-settings" id="chatSettings">
-                        <summary>⚙ Quick Settings</summary>
-                        <input type="hidden" id="chatTheme" value="dark">
-                        <div class="chat-select chat-setting-select" data-chat-select="theme">
-                            <span class="chat-select-label" id="chatThemeLabel">Theme</span>
-                            <button type="button" class="chat-select-trigger" id="chatThemeTrigger" role="combobox" aria-labelledby="chatThemeLabel chatThemeValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatThemeOptions">
-                                <span class="chat-select-value" id="chatThemeValue">Dark</span>
-                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
-                            </button>
-                            <div class="chat-select-menu" id="chatThemeOptions" role="listbox" aria-labelledby="chatThemeLabel" hidden>
-                                <div class="chat-select-option" role="option" tabindex="-1" data-value="dark" data-label="Dark" aria-selected="true"><span>Dark</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
-                                <div class="chat-select-option" role="option" tabindex="-1" data-value="light" data-label="Light" aria-selected="false"><span>Light</span><span class="chat-option-state" aria-hidden="true"></span></div>
-                                <div class="chat-select-option" role="option" tabindex="-1" data-value="system" data-label="System" aria-selected="false"><span>System</span><span class="chat-option-state" aria-hidden="true"></span></div>
-                            </div>
-                        </div>
-                        <div class="chat-select chat-setting-select" data-chat-select="density">
-                            <input type="hidden" id="chatDensity" value="comfortable">
-                            <span class="chat-select-label" id="chatDensityLabel">Density</span>
-                            <button type="button" class="chat-select-trigger" id="chatDensityTrigger" role="combobox" aria-labelledby="chatDensityLabel chatDensityValue" aria-haspopup="listbox" aria-expanded="false" aria-controls="chatDensityOptions">
-                                <span class="chat-select-value" id="chatDensityValue">Comfortable</span>
-                                <i class="fas fa-chevron-down" aria-hidden="true"></i>
-                            </button>
-                            <div class="chat-select-menu" id="chatDensityOptions" role="listbox" aria-labelledby="chatDensityLabel" hidden>
-                                <div class="chat-select-option" role="option" tabindex="-1" data-value="comfortable" data-label="Comfortable" aria-selected="true"><span>Comfortable</span><span class="chat-option-state" aria-hidden="true">✓</span></div>
-                                <div class="chat-select-option" role="option" tabindex="-1" data-value="compact" data-label="Compact" aria-selected="false"><span>Compact</span><span class="chat-option-state" aria-hidden="true"></span></div>
-                            </div>
-                        </div>
-                        <label class="chat-motion-setting"><input type="checkbox" id="chatReducedMotion"> Reduced motion</label>
-                        <button type="button" id="chatClearAll">Clear all chats</button>
-                    </details>
                 </div>
             </aside>
             <div class="chat-sidebar-resizer" id="chatSidebarResizer" role="separator" aria-orientation="vertical" tabindex="0" title="Drag to resize sidebar • Double-click to reset" aria-label="Resize chat sidebar">
@@ -1927,15 +1897,37 @@
                         <button type="button" class="chat-custom-close" id="chatCustomClose" aria-label="Close settings">×</button>
                     </div>
                     <div class="chat-custom-nav" role="tablist" aria-label="Settings categories">
-                        <button type="button" class="chat-custom-tab active" data-tab="instructions" role="tab" aria-selected="true"><i class="fas fa-user-gear"></i> <span>Custom Instructions</span></button>
+                        <button type="button" class="chat-custom-tab active" data-tab="memory" role="tab" aria-selected="true"><i class="fas fa-brain"></i> <span>Personalization &amp; Memory</span> <span class="chat-memory-modal-badge" id="chatModalMemoryCount">0</span></button>
+                        <button type="button" class="chat-custom-tab" data-tab="instructions" role="tab" aria-selected="false"><i class="fas fa-user-gear"></i> <span>Customize &amp; Instructions</span></button>
                         <button type="button" class="chat-custom-tab" data-tab="language" role="tab" aria-selected="false"><i class="fas fa-language"></i> <span>Language</span></button>
                         <button type="button" class="chat-custom-tab" data-tab="personality" role="tab" aria-selected="false"><i class="fas fa-sliders"></i> <span>Tone &amp; Behavior</span></button>
-                        <button type="button" class="chat-custom-tab" data-tab="memory" role="tab" aria-selected="false"><i class="fas fa-brain"></i> <span>Personalization &amp; Memory</span> <span class="chat-memory-modal-badge" id="chatModalMemoryCount">0</span></button>
                         <button type="button" class="chat-custom-tab" data-tab="display" role="tab" aria-selected="false"><i class="fas fa-palette"></i> <span>Appearance &amp; Controls</span></button>
                     </div>
                     <div class="chat-custom-body">
-                        <!-- TAB 1: Instructions -->
-                        <div class="chat-custom-pane active" id="pane-instructions" role="tabpanel">
+                        <!-- TAB 1: Plan-Scaled Memory -->
+                        <div class="chat-custom-pane active" id="pane-memory" role="tabpanel">
+                            <div class="chat-settings-section-head">
+                                <h4>Personalization &amp; Persistent Memory</h4>
+                                <p>Facts and project details saved here persist across all chats so Jevexa AI remembers your preferences without having to repeat yourself.</p>
+                            </div>
+                            <div class="chat-memory-status-banner">
+                                <div class="chat-memory-plan-info">
+                                    <span class="chat-plan-pill" id="chatMemoryPlanPill">Free Plan</span>
+                                    <span class="chat-memory-usage-text" id="chatMemoryUsageText">0 / 5 memories used</span>
+                                </div>
+                                <div class="chat-memory-progress-track">
+                                    <div class="chat-memory-progress-bar" id="chatMemoryProgressBar" style="width: 0%;"></div>
+                                </div>
+                                <p class="chat-memory-plan-hint" id="chatMemoryPlanHint">Starter memory capacity for Supabase Free tier. Higher plans unlock up to 150 memory slots &amp; deeper chat context.</p>
+                            </div>
+                            <div class="chat-memory-add-box">
+                                <input type="text" id="chatNewMemoryInput" placeholder="Add a memory (e.g. 'I deploy to Cloudflare Workers using Wrangler')..." maxlength="300">
+                                <button type="button" class="chat-memory-add-btn" id="chatAddMemoryBtn">＋ Add Memory</button>
+                            </div>
+                            <div class="chat-memory-list" id="chatMemoryList"></div>
+                        </div>
+                        <!-- TAB 2: Instructions -->
+                        <div class="chat-custom-pane" id="pane-instructions" role="tabpanel" hidden>
                             <div class="chat-settings-section-head">
                                 <h4>Customize &amp; Custom Instructions</h4>
                                 <p>Provide persistent context so Jevexa AI tailors its responses to who you are, your tech stack, and your preferred formatting.</p>
@@ -1951,7 +1943,7 @@
                                 <textarea id="chatCustomResponse" rows="3" maxlength="1000" placeholder="e.g. Be concise, provide copy-pasteable code, omit boilerplate, explain trade-offs..."></textarea>
                             </div>
                         </div>
-                        <!-- TAB 2: Language -->
+                        <!-- TAB 3: Language -->
                         <div class="chat-custom-pane" id="pane-language" role="tabpanel" hidden>
                             <div class="chat-settings-section-head">
                                 <h4>Language Preferences</h4>
@@ -1980,7 +1972,7 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- TAB 3: Tone & Personality -->
+                        <!-- TAB 4: Tone & Personality -->
                         <div class="chat-custom-pane" id="pane-personality" role="tabpanel" hidden>
                             <div class="chat-settings-section-head">
                                 <h4>Tone &amp; Behavior / Personality</h4>
@@ -2016,28 +2008,6 @@
                                     <option value="architecture">Architecture — High-level interfaces, schemas, and diagrams</option>
                                 </select>
                             </div>
-                        </div>
-                        <!-- TAB 4: Plan-Scaled Memory -->
-                        <div class="chat-custom-pane" id="pane-memory" role="tabpanel" hidden>
-                            <div class="chat-settings-section-head">
-                                <h4>Personalization &amp; Persistent Memory</h4>
-                                <p>Facts and project details saved here persist across all chats so Jevexa AI remembers your preferences without having to repeat yourself.</p>
-                            </div>
-                            <div class="chat-memory-status-banner">
-                                <div class="chat-memory-plan-info">
-                                    <span class="chat-plan-pill" id="chatMemoryPlanPill">Free Plan</span>
-                                    <span class="chat-memory-usage-text" id="chatMemoryUsageText">0 / 5 memories used</span>
-                                </div>
-                                <div class="chat-memory-progress-track">
-                                    <div class="chat-memory-progress-bar" id="chatMemoryProgressBar" style="width: 0%;"></div>
-                                </div>
-                                <p class="chat-memory-plan-hint" id="chatMemoryPlanHint">Starter memory capacity for Supabase Free tier. Higher plans unlock up to 150 memory slots &amp; deeper chat context.</p>
-                            </div>
-                            <div class="chat-memory-add-box">
-                                <input type="text" id="chatNewMemoryInput" placeholder="Add a memory (e.g. 'I deploy to Cloudflare Workers using Wrangler')..." maxlength="300">
-                                <button type="button" class="chat-memory-add-btn" id="chatAddMemoryBtn">＋ Add Memory</button>
-                            </div>
-                            <div class="chat-memory-list" id="chatMemoryList"></div>
                         </div>
                         <!-- TAB 5: UI Controls -->
                         <div class="chat-custom-pane" id="pane-display" role="tabpanel" hidden>

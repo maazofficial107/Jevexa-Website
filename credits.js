@@ -1075,6 +1075,37 @@
         bindSafe(closeBtn, 'click', closeSidebar);
     }
 
+    function clearAllConversations() {
+        if (!conversation.length && (!chatSessions || chatSessions.length === 0)) {
+            setStatus('Chat history is already empty.');
+            return;
+        }
+        if (!window.confirm('Clear all saved conversations from this browser? This cannot be undone.')) return;
+        conversation.splice(0, conversation.length);
+        chatSessions = [];
+        activeChatId = null;
+        if (historyUserId) {
+            try {
+                localStorage.removeItem(conversationKey(historyUserId));
+                localStorage.removeItem(historyKey(historyUserId));
+                localStorage.removeItem(sessionsKey(historyUserId));
+            } catch (error) {
+                console.warn('Could not clear chat sessions from storage:', error);
+            }
+        } else {
+            try {
+                localStorage.removeItem('jevexa_chat_history');
+                localStorage.removeItem('jevexa_chat_sessions');
+            } catch (error) {
+                console.warn('Could not clear chat sessions from storage:', error);
+            }
+        }
+        createChatSession();
+        renderHistory();
+        renderActiveConversation();
+        setStatus('All chats cleared.');
+    }
+
     function initChatCustomizationSuite() {
         const modal = document.getElementById('chatCustomizationModal');
         const openBtn = document.getElementById('chatOpenCustomizationBtn');
@@ -1100,6 +1131,39 @@
         bindSafe(openBtn, 'click', openModal);
         if (headerSettingsBtn) bindSafe(headerSettingsBtn, 'click', openModal);
         bindSafe(closeBtn, 'click', closeModal);
+
+        const modalTheme = document.getElementById('chatModalThemeSelect');
+        if (modalTheme) {
+            bindSafe(modalTheme, 'change', () => {
+                chatCustomSettings.theme = modalTheme.value || 'dark';
+                applyCustomSettingsToUI();
+                if (historyUserId) {
+                    try {
+                        localStorage.setItem(`jevexa_${historyUserId}_chat_theme`, modalTheme.value || 'dark');
+                    } catch (_) {}
+                }
+            });
+        }
+        const modalDensity = document.getElementById('chatModalDensitySelect');
+        if (modalDensity) {
+            bindSafe(modalDensity, 'change', () => {
+                chatCustomSettings.density = modalDensity.value || 'comfortable';
+                applyCustomSettingsToUI();
+            });
+        }
+        const modalMotion = document.getElementById('chatModalReducedMotion');
+        if (modalMotion) {
+            bindSafe(modalMotion, 'change', () => {
+                chatCustomSettings.reducedMotion = Boolean(modalMotion.checked);
+                applyCustomSettingsToUI();
+                if (historyUserId) {
+                    try {
+                        localStorage.setItem(`jevexa_${historyUserId}_chat_reduced_motion`, String(modalMotion.checked));
+                    } catch (_) {}
+                }
+            });
+        }
+
         bindSafe(saveBtn, 'click', () => {
             chatCustomSettings.aboutUser = document.getElementById('chatCustomAbout')?.value.trim() || '';
             chatCustomSettings.responseStyle = document.getElementById('chatCustomResponse')?.value.trim() || '';
@@ -1125,7 +1189,7 @@
         if (clearHistoryBtn) {
             bindSafe(clearHistoryBtn, 'click', () => {
                 closeModal();
-                document.getElementById('chatClearAll')?.click();
+                clearAllConversations();
             });
         }
 
@@ -1209,12 +1273,15 @@
                 const theme = ['dark', 'light', 'system'].includes(savedTheme) ? savedTheme : 'dark';
                 setSelectorValue('theme', theme);
                 document.getElementById('chatbotWindow')?.setAttribute('data-chat-theme', theme);
-                document.getElementById('chatReducedMotion').checked =
-                    localStorage.getItem(`jevexa_${session.user.id}_chat_reduced_motion`) === 'true';
-                document.documentElement.classList.toggle(
-                    'jevexa-reduce-motion',
-                    document.getElementById('chatReducedMotion').checked
-                );
+                const reducedMotionEl = document.getElementById('chatReducedMotion') || document.getElementById('chatModalReducedMotion');
+                if (reducedMotionEl) {
+                    reducedMotionEl.checked =
+                        localStorage.getItem(`jevexa_${session.user.id}_chat_reduced_motion`) === 'true';
+                    document.documentElement.classList.toggle(
+                        'jevexa-reduce-motion',
+                        reducedMotionEl.checked
+                    );
+                }
             } catch (error) {
                 console.warn('Could not restore chat settings:', error);
             }
@@ -1539,15 +1606,18 @@
             if (meta) {
                 const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
                 const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
+                const tierNameMap = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
+                const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Lite';
+                const fullModelName = activeModel.startsWith('Jevexa ') ? activeModel : `Jevexa ${activeModel}`;
                 if (used !== null && remaining !== null) {
-                    const receipt = document.createElement('div');
-                    receipt.className = 'chat-credit-receipt';
-                    receipt.setAttribute('role', 'status');
-                    const tierNameMap = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
-                    const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Lite';
-                    receipt.innerHTML = `<span class="chat-receipt-tier">${activeModel}</span> <span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
-                    content.appendChild(receipt);
+                    setStatus(`⚡ ${fullModelName} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
                 }
+                const receipt = document.createElement('div');
+                receipt.className = 'chat-credit-receipt';
+                receipt.setAttribute('role', 'status');
+                receipt.hidden = true; // Hidden to keep chat bubbles clean without clutter
+                receipt.innerHTML = `<span class="chat-receipt-tier">${activeModel}</span> <span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
+                content.appendChild(receipt);
             }
             const actions = document.createElement('div');
             actions.className = 'chat-message-actions';
@@ -2133,7 +2203,12 @@
                     window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
                 }
                 const tierDisplayName = result?.modelName || result?.model || (selectedTier ? (selectedTier[0].toUpperCase() + selectedTier.slice(1)) : 'Lite');
-                setStatus(`⚡ ${tierDisplayName} • Ready`);
+                const fullTierName = tierDisplayName.startsWith('Jevexa ') ? tierDisplayName : `Jevexa ${tierDisplayName}`;
+                if (used !== null && remaining !== null) {
+                    setStatus(`⚡ ${fullTierName} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
+                } else {
+                    setStatus(`⚡ ${tierDisplayName} • Ready`);
+                }
                 await refreshDisplayedCredits();
             } catch (error) {
                 if (error?.name === 'AbortError' || currentAbortController.signal.aborted || (activeChatRequestId && activeChatRequestId !== requestId)) {
@@ -2535,14 +2610,7 @@
         }
     });
     bindSafe(document.getElementById('chatClearAll'), 'click', () => {
-        if (!historyUserId || !window.confirm('Delete all saved chats from this browser?')) return;
-        chatSessions = [];
-        try {
-            localStorage.removeItem(conversationKey(historyUserId));
-        } catch (error) {
-            console.warn('Could not clear chat sessions from storage:', error);
-        }
-        createChatSession();
+        clearAllConversations();
     });
 
     bindSafe(document.getElementById('chatbotWindow'), 'click', event => {

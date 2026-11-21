@@ -217,20 +217,47 @@
         ticketBusy = true;
         let controller = null;
         let timeoutId = null;
+        let response = null;
+        let lastError = null;
         
         try {
-            controller = new AbortController();
-            timeoutId = window.setTimeout(() => controller.abort(), 15000);
-            const response = await fetch('/api/support-ticket', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: document.getElementById('supportName').value,
-                    email: document.getElementById('supportEmail').value,
-                    message: document.getElementById('supportMessage').value
-                }),
-                signal: controller.signal
-            });
+            for (let attempt = 0; attempt < 2; attempt++) {
+                controller = new AbortController();
+                timeoutId = window.setTimeout(() => controller.abort(), 15000);
+                try {
+                    response = await fetch('/api/support-ticket', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: document.getElementById('supportName').value,
+                            email: document.getElementById('supportEmail').value,
+                            message: document.getElementById('supportMessage').value
+                        }),
+                        signal: controller.signal
+                    });
+                    lastError = null;
+                    if (response.ok || (response.status >= 400 && response.status < 500)) {
+                        break;
+                    }
+                    if (attempt === 0 && [502, 503, 504].includes(response.status)) {
+                        await new Promise(r => setTimeout(r, 600));
+                        continue;
+                    }
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    if (err?.name === 'AbortError') throw err;
+                    if (attempt === 0) {
+                        await new Promise(r => setTimeout(r, 600));
+                        continue;
+                    }
+                    throw err;
+                } finally {
+                    if (timeoutId !== null) window.clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+            }
+            if (!response && lastError) throw lastError;
             const result = await response.json().catch(() => ({}));
             if (!response.ok || result.success !== true || typeof result.ticketId !== 'string') {
                 const ticketReference = typeof result.ticketId === 'string' ? ` Ticket reference: ${result.ticketId}.` : '';

@@ -3376,6 +3376,27 @@ async function handleCreditReconcile(request, env) {
   });
 }
 
+function getAssetMimeType(pathname) {
+  const clean = String(pathname || "").split("?")[0].split("#")[0].toLowerCase();
+  if (clean.endsWith(".html") || clean === "/" || !clean.includes(".")) return "text/html; charset=utf-8";
+  if (clean.endsWith(".css")) return "text/css; charset=utf-8";
+  if (clean.endsWith(".js") || clean.endsWith(".mjs")) return "application/javascript; charset=utf-8";
+  if (clean.endsWith(".json")) return "application/json; charset=utf-8";
+  if (clean.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
+  if (clean.endsWith(".svg")) return "image/svg+xml";
+  if (clean.endsWith(".png")) return "image/png";
+  if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
+  if (clean.endsWith(".webp")) return "image/webp";
+  if (clean.endsWith(".gif")) return "image/gif";
+  if (clean.endsWith(".ico")) return "image/x-icon";
+  if (clean.endsWith(".woff2")) return "font/woff2";
+  if (clean.endsWith(".woff")) return "font/woff";
+  if (clean.endsWith(".ttf")) return "font/ttf";
+  if (clean.endsWith(".xml")) return "application/xml; charset=utf-8";
+  if (clean.endsWith(".txt")) return "text/plain; charset=utf-8";
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -3437,7 +3458,14 @@ export default {
       let pricingStatus = "active";
       try {
         const cfg = getSupabaseConfig(env);
-        const pricingRes = await sbRequest(cfg, "/rest/v1/jevexa_service_pricing?select=service_key,fixed_credits");
+        const healthController = new AbortController();
+        const healthTimeoutId = setTimeout(() => healthController.abort(), 2000);
+        let pricingRes;
+        try {
+          pricingRes = await sbRequest(cfg, "/rest/v1/jevexa_service_pricing?select=service_key,fixed_credits", { signal: healthController.signal });
+        } finally {
+          clearTimeout(healthTimeoutId);
+        }
         const rows = await readJsonResponse(pricingRes);
         if (pricingRes.ok && Array.isArray(rows)) {
           const requiredKeys = ["ai_chat", "ai_chat_pro", "ai_chat_max", "ai_chat_ultra", "content_generation"];
@@ -3470,6 +3498,10 @@ export default {
       return handleClientConfig(request, env);
     }
 
+    if (url.pathname.startsWith("/api/")) {
+      return json({ ok: false, error: "API endpoint not found" }, 404);
+    }
+
     if (env.ASSETS) {
       const normalizedPath = url.pathname.length > 1 && url.pathname.endsWith("/")
         ? url.pathname.slice(0, -1)
@@ -3487,45 +3519,100 @@ export default {
         "/pricing": "/",
         "/pricing/": "/",
         "/login": "/",
-        "/signup": "/"
+        "/signup": "/",
+        "/admin": "/admin.html",
+        "/admin/": "/admin.html"
       };
 
       if (publicRoutes[normalizedPath]) {
-        const pageReq = new Request(new URL(publicRoutes[normalizedPath], request.url), request);
-        const assetResponse = await env.ASSETS.fetch(pageReq);
+        const targetPath = publicRoutes[normalizedPath];
+        let pageReq = new Request(new URL(targetPath, request.url), request);
+        let assetResponse = await env.ASSETS.fetch(pageReq);
+        if (assetResponse.status === 404 && (targetPath === "/" || targetPath === "")) {
+          pageReq = new Request(new URL("/index.html", request.url), request);
+          assetResponse = await env.ASSETS.fetch(pageReq);
+        }
         const secured = new Response(assetResponse.body, assetResponse);
         secured.headers.set("X-Content-Type-Options", "nosniff");
         secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
         secured.headers.set("X-Frame-Options", "SAMEORIGIN");
         secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
         secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
+          secured.headers.set("Content-Type", "text/html; charset=utf-8");
+        }
+        if (!secured.headers.has("Cache-Control")) {
+          secured.headers.set("Cache-Control", "public, max-age=0, must-revalidate");
+        }
         return secured;
       }
 
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
         const isStaticAsset = /\.(css|js|mjs|png|jpg|jpeg|svg|ico|webp|webmanifest|json|woff2?|ttf|map)$/i.test(url.pathname) || url.pathname.includes("/assets/");
-        const targetPath = isStaticAsset
-          ? url.pathname.replace(/^\/tools(?:\/|$)/, "/")
-          : "/";
-        const spaRequest = new Request(new URL(targetPath, request.url), request);
-        const assetResponse = await env.ASSETS.fetch(spaRequest);
+        let targetPath = "/";
+        if (isStaticAsset) {
+          if (url.pathname.includes("/assets/")) {
+            targetPath = "/assets/" + url.pathname.slice(url.pathname.indexOf("/assets/") + 8);
+          } else {
+            const assetFilename = url.pathname.split("/").pop();
+            targetPath = "/" + assetFilename;
+          }
+        }
+        let spaRequest = new Request(new URL(targetPath, request.url), request);
+        let assetResponse = await env.ASSETS.fetch(spaRequest);
+        if (assetResponse.status === 404 && targetPath === "/") {
+          spaRequest = new Request(new URL("/index.html", request.url), request);
+          assetResponse = await env.ASSETS.fetch(spaRequest);
+        }
         const secured = new Response(assetResponse.body, assetResponse);
         secured.headers.set("X-Content-Type-Options", "nosniff");
         secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
         if (!isStaticAsset) {
           secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+          if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
+            secured.headers.set("Content-Type", "text/html; charset=utf-8");
+          }
+          if (!secured.headers.has("Cache-Control")) {
+            secured.headers.set("Cache-Control", "public, max-age=0, must-revalidate");
+          }
+        } else {
+          const mime = getAssetMimeType(targetPath);
+          if (mime) {
+            const currentType = secured.headers.get("Content-Type") || "";
+            if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
+              secured.headers.set("Content-Type", mime);
+            }
+          }
+          if (!secured.headers.has("Cache-Control")) {
+            secured.headers.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+          }
         }
         secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
         secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         return secured;
       }
-      const assetResponse = await env.ASSETS.fetch(request);
+      let assetResponse = await env.ASSETS.fetch(request);
+      if (assetResponse.status === 404 && (url.pathname === "/" || url.pathname === "")) {
+        const indexReq = new Request(new URL("/index.html", request.url), request);
+        assetResponse = await env.ASSETS.fetch(indexReq);
+      }
       const secured = new Response(assetResponse.body, assetResponse);
       secured.headers.set("X-Content-Type-Options", "nosniff");
       secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       secured.headers.set("X-Frame-Options", "SAMEORIGIN");
       secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
       secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+      const mime = getAssetMimeType(url.pathname);
+      if (mime) {
+        const currentType = secured.headers.get("Content-Type") || "";
+        if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
+          secured.headers.set("Content-Type", mime);
+        }
+      }
+      if (!secured.headers.has("Cache-Control")) {
+        const isHtml = url.pathname.endsWith(".html") || url.pathname === "/" || !url.pathname.includes(".");
+        secured.headers.set("Cache-Control", isHtml ? "public, max-age=0, must-revalidate" : "public, max-age=86400, stale-while-revalidate=604800");
+      }
       return secured;
     }
 

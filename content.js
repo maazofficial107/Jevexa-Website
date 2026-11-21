@@ -239,6 +239,9 @@
         event.preventDefault();
         if (requestInFlight) return;
 
+        const existingRetry = document.getElementById('contentRetryAction');
+        if (existingRetry) existingRetry.remove();
+
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
             setStatus('You are currently offline. Please check your internet connection before generating content.', 'error');
             if (typeof window.showToast === 'function') {
@@ -307,23 +310,44 @@
         rememberPendingRequest(session, requestId);
 
         try {
-            const contentController = new AbortController();
-            const contentTimeoutId = setTimeout(() => contentController.abort(), 35000);
             let response;
-            try {
-                response = await fetch('/api/content', {
-                    method: 'POST',
-                    signal: contentController.signal,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
-                        'Idempotency-Key': requestId
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-            } finally {
-                clearTimeout(contentTimeoutId);
+            let lastFetchError = null;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const contentController = new AbortController();
+                const contentTimeoutId = setTimeout(() => contentController.abort(), 35000);
+                try {
+                    response = await fetch('/api/content', {
+                        method: 'POST',
+                        signal: contentController.signal,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'Idempotency-Key': requestId
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+                    lastFetchError = null;
+                    if (response.ok || (response.status >= 400 && response.status < 500)) {
+                        break;
+                    }
+                    if (attempt === 0 && [502, 503, 504].includes(response.status)) {
+                        await new Promise(r => setTimeout(r, 600));
+                        continue;
+                    }
+                    break;
+                } catch (fetchErr) {
+                    lastFetchError = fetchErr;
+                    if (fetchErr?.name === 'AbortError') throw fetchErr;
+                    if (attempt === 0) {
+                        await new Promise(r => setTimeout(r, 600));
+                        continue;
+                    }
+                    throw fetchErr;
+                } finally {
+                    clearTimeout(contentTimeoutId);
+                }
             }
+            if (!response && lastFetchError) throw lastFetchError;
             let payload;
             try {
                 payload = await response.json();
@@ -398,6 +422,9 @@
             receipt.innerHTML = `<span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
             receipt.hidden = false;
 
+            const retryContainer = document.getElementById('contentRetryAction');
+            if (retryContainer) retryContainer.remove();
+
             forgetPendingRequest(session, requestId);
             copyButton.disabled = false;
             downloadButton.disabled = false;
@@ -427,6 +454,18 @@
                 ? 'The content request timed out. Please check your network and try again.'
                 : (error?.message || 'The content request could not be completed.');
             setStatus(`${msg} Reference: ${requestId}`, 'error');
+            let retryContainer = document.getElementById('contentRetryAction');
+            if (!retryContainer && output?.parentNode) {
+                retryContainer = document.createElement('div');
+                retryContainer.id = 'contentRetryAction';
+                retryContainer.className = 'content-retry-action';
+                retryContainer.innerHTML = '<button type="button" class="btn btn-secondary retry-btn"><i class="fas fa-rotate-right"></i> Retry Generation</button>';
+                output.parentNode.insertBefore(retryContainer, output.nextSibling);
+                bindSafe(retryContainer.querySelector('button'), 'click', () => {
+                    retryContainer.remove();
+                    form.dispatchEvent(new Event('submit', { cancelable: true }));
+                });
+            }
         } finally {
             clearContentProcessing();
             requestInFlight = false;

@@ -4289,6 +4289,8 @@ const JEVEXA_PLANS = {
     function handleCurrentRoute() {
         const path = window.location.pathname;
         const hash = window.location.hash;
+        const cleanPath = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+        const cleanHash = hash.length > 1 && hash.endsWith('/') ? hash.slice(0, -1) : hash;
 
         // If a section anchor is present (e.g. #how, #contact, #pricing, #features, #faq, #reviews, #home)
         if (hash && hash !== '#' && !hash.startsWith('#/tools')) {
@@ -4310,7 +4312,7 @@ const JEVEXA_PLANS = {
             }
         }
 
-        if (path === '/pricing' || path === '/pricing/' || hash === '#pricing') {
+        if (cleanPath === '/pricing' || cleanHash === '#pricing') {
             const pricingEl = document.getElementById('pricing');
             if (pricingEl) {
                 closeChatWorkspace(false);
@@ -4323,14 +4325,14 @@ const JEVEXA_PLANS = {
             }
         }
 
-        if (path === '/tools/chatbot' || hash === '#/tools/chatbot') {
+        if (cleanPath === '/tools/chatbot' || cleanHash === '#/tools/chatbot') {
             openChatWorkspace(false);
-        } else if (path === '/tools/content-generator' || path === '/tools/content' || hash === '#/tools/content-generator' || hash === '#/tools/content') {
+        } else if (cleanPath === '/tools/content-generator' || cleanPath === '/tools/content' || cleanHash === '#/tools/content-generator' || cleanHash === '#/tools/content') {
             openContentWorkspace(false);
-        } else if (path.startsWith('/tools/') || hash.startsWith('#/tools/')) {
-            const rawId = path.replace(/^\/tools\//, '') || hash.replace(/^#\/tools\//, '');
+        } else if (cleanPath.startsWith('/tools/') || cleanHash.startsWith('#/tools/')) {
+            const rawId = cleanPath.replace(/^\/tools\//, '') || cleanHash.replace(/^#\/tools\//, '');
             const toolId = (rawId === 'content' ? 'content-generator' : rawId);
-            const tool = toolsConfig.find(t => t.id === toolId || t.route === path || t.route === hash.replace(/^#/, ''));
+            const tool = toolsConfig.find(t => t.id === toolId || t.route === cleanPath || t.route === cleanHash.replace(/^#/, ''));
             if (tool && tool.status === 'live') {
                 if (tool.id === 'chatbot') openChatWorkspace(false);
                 else if (tool.id === 'content-generator') openContentWorkspace(false);

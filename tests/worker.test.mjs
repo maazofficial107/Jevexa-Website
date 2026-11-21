@@ -4895,3 +4895,162 @@ test("Fix 3: Pricing toggle cuts prices by 20% (Lite $5->$4, Pro $12->$9.60, Max
   assert.match(scriptJs, /annualToggleLabel/);
   assert.match(scriptJs, /monthlyToggleLabel/);
 });
+
+test("Edge Hardening: /api/health responds fast and deterministically with service status", async () => {
+  const mockEnv = {
+    ...env,
+    SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
+    SUPABASE_ANON_KEY: "dummy-anon",
+    SUPABASE_SERVICE_ROLE_KEY: "dummy-service"
+  };
+
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/rest/v1/jevexa_service_pricing")) {
+        return new Response(JSON.stringify([
+          { service_key: "ai_chat", fixed_credits: 1 },
+          { service_key: "ai_chat_pro", fixed_credits: 2 },
+          { service_key: "ai_chat_max", fixed_credits: 4 },
+          { service_key: "ai_chat_ultra", fixed_credits: 8 },
+          { service_key: "content_generation", credits_per_1000_tokens: 1 }
+        ]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response("OK", { status: 200 });
+    };
+
+    const res = await worker.fetch(new Request("https://jevexa.net/api/health"), mockEnv);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    assert.equal(data.service, "jevexa-worker");
+    assert.equal(data.pricing, "active");
+    assert.ok(data.time);
+    assert.equal(res.headers.get("Content-Type"), "application/json; charset=utf-8");
+    assert.equal(res.headers.get("Cache-Control"), "no-store");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Edge Hardening: Nested subroute asset resolution under /tools/* without dead-ends", async () => {
+  const nestedTests = [
+    { requestPath: "/tools/chatbot/styles.css", expectedAsset: "/styles.css" },
+    { requestPath: "/tools/content/script.js", expectedAsset: "/script.js" },
+    { requestPath: "/tools/chatbot/assets/logo.svg", expectedAsset: "/assets/logo.svg" },
+    { requestPath: "/tools/content/assets/image.png", expectedAsset: "/assets/image.png" },
+    { requestPath: "/tools/chatbot/", expectedAsset: "/" },
+    { requestPath: "/tools/content/", expectedAsset: "/" },
+    { requestPath: "/tools/chatbot", expectedAsset: "/" }
+  ];
+
+  for (const { requestPath, expectedAsset } of nestedTests) {
+    let requestedAssetUrl = null;
+    const mockEnv = {
+      ASSETS: {
+        fetch: async (req) => {
+          requestedAssetUrl = req.url;
+          return new Response("OK", {
+            headers: { "Content-Type": expectedAsset.endsWith(".css") ? "text/css" : "text/html" }
+          });
+        }
+      }
+    };
+
+    const res = await worker.fetch(new Request(`https://jevexa.net${requestPath}`), mockEnv);
+    assert.equal(res.status, 200);
+    assert.equal(new URL(requestedAssetUrl).pathname, expectedAsset, `${requestPath} should resolve to ${expectedAsset}`);
+    assert.equal(res.headers.get("X-Content-Type-Options"), "nosniff");
+  }
+});
+
+test("Edge Hardening: Route normalization for /admin, /pricing, and trailing slashes", async () => {
+  const routeTests = [
+    { path: "/admin", expectedAsset: "/admin.html" },
+    { path: "/admin/", expectedAsset: "/admin.html" },
+    { path: "/pricing", expectedAsset: "/" },
+    { path: "/pricing/", expectedAsset: "/" }
+  ];
+
+  for (const { path, expectedAsset } of routeTests) {
+    let requestedUrl = null;
+    const mockEnv = {
+      ASSETS: {
+        fetch: async (req) => {
+          requestedUrl = req.url;
+          return new Response(`<html><body>${expectedAsset}</body></html>`, {
+            headers: { "Content-Type": "text/html; charset=utf-8" }
+          });
+        }
+      }
+    };
+
+    const res = await worker.fetch(new Request(`https://jevexa.net${path}`), mockEnv);
+    assert.equal(res.status, 200);
+    assert.equal(new URL(requestedUrl).pathname, expectedAsset, `${path} should map to ${expectedAsset}`);
+    assert.equal(res.headers.get("X-Frame-Options"), "SAMEORIGIN");
+    assert.equal(res.headers.get("X-Content-Type-Options"), "nosniff");
+  }
+
+  // Unknown API route returns clean 404 JSON
+  const unknownApiRes = await worker.fetch(new Request("https://jevexa.net/api/nonexistent-route"), env);
+  assert.equal(unknownApiRes.status, 404);
+  const unknownData = await unknownApiRes.json();
+  assert.equal(unknownData.ok, false);
+});
+
+test("Edge Hardening: Response headers enforce MIME types, Cache-Control, and no forbidden hop-by-hop headers", async () => {
+  const testAssets = [
+    { path: "/styles.css", expectedMime: "text/css; charset=utf-8", expectedCache: "max-age=86400" },
+    { path: "/script.js", expectedMime: "application/javascript; charset=utf-8", expectedCache: "max-age=86400" },
+    { path: "/site.webmanifest", expectedMime: "application/manifest+json; charset=utf-8", expectedCache: "max-age=86400" },
+    { path: "/about.html", expectedMime: "text/html; charset=utf-8", expectedCache: "must-revalidate" }
+  ];
+
+  for (const { path, expectedMime, expectedCache } of testAssets) {
+    const mockEnv = {
+      ASSETS: {
+        fetch: async () => {
+          // Simulate asset returned without explicit Content-Type or Cache-Control
+          return new Response("content", { status: 200 });
+        }
+      }
+    };
+
+    const res = await worker.fetch(new Request(`https://jevexa.net${path}`), mockEnv);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Content-Type"), expectedMime, `Content-Type for ${path}`);
+    assert.match(res.headers.get("Cache-Control") || "", new RegExp(expectedCache), `Cache-Control for ${path}`);
+
+    // Forbidden hop-by-hop headers in HTTP/2 / HTTP/3
+    assert.equal(res.headers.has("Connection"), false);
+    assert.equal(res.headers.has("Keep-Alive"), false);
+    assert.equal(res.headers.has("Transfer-Encoding"), false);
+  }
+});
+
+test("Client Hardening: User recovery, prompt preservation, and transient retries", async () => {
+  const scriptCode = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const supportCode = await readFile(new URL("../support.js", import.meta.url), "utf8");
+  const premiumCode = await readFile(new URL("../premium.js", import.meta.url), "utf8");
+
+  // script.js route normalization handles trailing slashes without redirect dead-ends
+  assert.match(scriptCode, /const cleanPath = path\.length > 1 && path\.endsWith\('\/'\) \? path\.slice\(0, -1\) : path;/);
+  assert.match(scriptCode, /const cleanHash = hash\.length > 1 && hash\.endsWith\('\/'\) \? hash\.slice\(0, -1\) : hash;/);
+
+  // credits.js restores user message into input on connection interruption so input is never lost
+  assert.match(creditsCode, /if \(input && !input\.value && displayText\) \{\s*input\.value = displayText;/);
+
+  // content.js has retry loop for 5xx/network errors and user-friendly Retry button
+  assert.match(contentCode, /for \(let attempt = 0; attempt < 2; attempt\+\+\)/);
+  assert.match(contentCode, /contentRetryAction/);
+  assert.match(contentCode, /Retry Generation/);
+
+  // support.js has transient retry loop for support ticket submission
+  assert.match(supportCode, /for \(let attempt = 0; attempt < 2; attempt\+\+\)/);
+
+  // premium.js has AbortController timeout safeguard on newsletter signup
+  assert.match(premiumCode, /const newsletterController = new AbortController\(\);/);
+});

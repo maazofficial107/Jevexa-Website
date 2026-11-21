@@ -1328,10 +1328,16 @@
                         const stillPending = await reconcilePendingRequest(session);
                         if (!stillPending) {
                             setStatus('Request could not be confirmed. No credits were charged. You can send another message.');
+                            if (input && !input.value && displayText) {
+                                input.value = displayText;
+                            }
                         }
                     } catch {
                         forgetPendingRequest(session);
                         setStatus('Could not verify the interrupted request. You can send another message.');
+                        if (input && !input.value && displayText) {
+                            input.value = displayText;
+                        }
                     }
                 } else if (error.status === 402) {
                     setStatus(error.message, true);
@@ -1351,6 +1357,9 @@
                             forgetPendingRequest(session);
                             await refreshDisplayedCredits();
                             setStatus('Held credits were released. You can send another message.');
+                            if (input && !input.value && displayText) {
+                                input.value = displayText;
+                            }
                             return;
                         }
                     } catch (recErr) {
@@ -1358,6 +1367,9 @@
                     }
                     setStatus('AI is temporarily busy. Any held credits will clear automatically.');
                     appendMessage('The previous request was held for safety and will release automatically. Please try again shortly.');
+                    if (input && !input.value && displayText) {
+                        input.value = displayText;
+                    }
                 } else if (error.status === 409 && error.payload?.status === 'reserved') {
                     rememberPendingRequest(session, requestId);
                     const message = `Request ${requestId} is still processing. Do not submit it again.`;
@@ -1373,15 +1385,24 @@
                         setStatus(cleanMessage, !isPricingConfigNotice);
                     }
                     appendMessage(cleanMessage);
+                    if (input && !input.value && displayText) {
+                        input.value = displayText;
+                    }
                 } else if (error.status === 429) {
                     setStatus('Rate limited. Wait 60 seconds before sending another message.');
                     appendMessage('Rate limited. Wait 60 seconds before sending another message.');
+                    if (input && !input.value && displayText) {
+                        input.value = displayText;
+                    }
                 } else {
                     const message = error.message || (error.status >= 500
                         ? 'The AI assistant could not complete that request. Please try again shortly.'
                         : 'An error occurred.');
                     setStatus(message, true);
                     appendMessage(message);
+                    if (error.status >= 500 && input && !input.value && displayText) {
+                        input.value = displayText;
+                    }
                 }
             }
         } catch (error) {

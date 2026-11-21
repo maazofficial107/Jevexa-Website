@@ -5054,3 +5054,121 @@ test("Client Hardening: User recovery, prompt preservation, and transient retrie
   // premium.js has AbortController timeout safeguard on newsletter signup
   assert.match(premiumCode, /const newsletterController = new AbortController\(\);/);
 });
+
+test("Chatbot Viewport & Compact Controls: Spacious thread layout, low-profile selector bar, >=44px touch targets, and scroll-to-bottom", async () => {
+  const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+
+  // Spacious reading viewport on laptop/desktop: expanded width up to 1180px and 1240px
+  assert.match(stylesCode, /\.chat-messages\s*\{[^}]*width:\s*min\(100%,\s*1180px\);/);
+  assert.match(stylesCode, /\.chat-messages[^{]*\{[^}]*width:\s*min\(100%,\s*1240px\);/);
+
+  // Generous message bubble reading area for modern desktop AI chatbots
+  assert.match(stylesCode, /\.msg-content\s*\{[^}]*max-width:\s*min\(92%,\s*1020px\);/);
+  assert.match(stylesCode, /\.message\.bot\s+\.msg-content\s*\{[^}]*max-width:\s*min\(94%,\s*1040px\);/);
+
+  // Compact, sleek low-height selector toolbar for Model and Thinking
+  assert.match(stylesCode, /\.chat-tier-controls\s*\{[^}]*min-height:\s*48px;/);
+  assert.match(stylesCode, /\.chat-select\s*\{[^}]*display:\s*flex;\s*align-items:\s*center;/);
+
+  // Interactive controls maintain >= 44px touch target for accessibility
+  assert.match(stylesCode, /\.chat-select-trigger\s*\{[^}]*min-height:\s*44px;/);
+
+  // Scroll-to-bottom floating button exists in HTML and styles
+  assert.match(indexHtml, /id="chatScrollBottom"/);
+  assert.match(indexHtml, /class="[^"]*chat-scroll-bottom-btn[^"]*"/);
+  assert.match(stylesCode, /\.chat-scroll-bottom-btn/);
+  assert.match(creditsCode, /chatScrollBottom/);
+});
+
+test("Active Model Identity: /api/chat passes active Jevexa tier identity, system prompt context, and UI receipt metadata", async () => {
+  const workerCode = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+
+  // Worker defines Jevexa model name constants for all tiers
+  assert.match(workerCode, /lite:\s*"Jevexa Lite"/);
+  assert.match(workerCode, /pro:\s*"Jevexa Pro"/);
+  assert.match(workerCode, /max:\s*"Jevexa Max"/);
+  assert.match(workerCode, /ultra:\s*"Jevexa Ultra"/);
+
+  // System instruction template dynamically incorporates active model identity
+  assert.match(workerCode, /function buildChatSystemPrompt/);
+  assert.match(workerCode, /ACTIVE JEVEXA MODEL IDENTITY:/);
+  assert.match(workerCode, /You are currently operating as \*\*.*?\*\*/);
+
+  // Mock API call to /api/chat verifies model and modelName in response payload
+  const originalFetch = globalThis.fetch;
+  let receivedSystemInstruction = "";
+  globalThis.fetch = async (input, options = {}) => {
+    const url = new URL(input);
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: userId });
+    if (url.pathname === "/rest/v1/user_credits") return Response.json([{ plan: "lite", balance: 500 }]);
+    if (url.pathname === "/rest/v1/jevexa_service_pricing") {
+      return Response.json([{ fixed_credits: 1, credits_per_1000_tokens: null, enabled: true, integration_status: "available" }]);
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, status: "reserved", duplicate: false, reserved_credits: 1, balance: 499 });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      return Response.json({ ok: true, charged_credits: 1, balance: 499 });
+    }
+    if (url.hostname === "generativelanguage.googleapis.com") {
+      const reqBody = JSON.parse(options.body || "{}");
+      receivedSystemInstruction = reqBody.systemInstruction?.parts?.[0]?.text || "";
+      return Response.json({
+        candidates: [{ content: { parts: [{ text: "I am Jevexa Lite, ready to help." }] }, finishReason: "STOP" }],
+        usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 12, totalTokenCount: 27 }
+      });
+    }
+    return Response.json({ error: "Not found" }, { status: 404 });
+  };
+
+  try {
+    const chatRes = await worker.fetch(makeRequest("/api/chat", { body: { message: "Which model is currently working?", tier: "lite" } }), geminiEnv);
+    assert.equal(chatRes.status, 200);
+    const data = await chatRes.json();
+    assert.equal(data.tier, "lite");
+    assert.equal(data.model, "Jevexa Lite");
+    assert.equal(data.modelName, "Jevexa Lite");
+    assert.match(receivedSystemInstruction, /ACTIVE JEVEXA MODEL IDENTITY:/);
+    assert.match(receivedSystemInstruction, /Jevexa Lite/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  // Frontend credit receipt and status incorporate active model tag
+  assert.match(creditsCode, /chat-receipt-tier/);
+  assert.match(creditsCode, /generateChatbotGuestReply/);
+  assert.match(creditsCode, /I am currently operating as \*\*.*?\*\* in JEVEXA AI Studio/);
+});
+
+test("Response Quality & Markdown: Structured headings, bullet points, fenced code blocks with copy action, and non-intrusive auto-scrolling", async () => {
+  const workerCode = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // Worker SYSTEM_PROMPT instructs clean markdown structure (headings, lists, code blocks)
+  assert.match(workerCode, /Response formatting & structure:/);
+  assert.match(workerCode, /Deliver well-structured, easy-to-scan, and satisfying responses/);
+  assert.match(workerCode, /fenced code blocks with language tags/);
+
+  // credits.js markdown renderer parses code blocks, headings, and lists
+  assert.match(creditsCode, /@@JEVEXA_CODE_BLOCK_/);
+  assert.match(creditsCode, /chat-code-block/);
+  assert.match(creditsCode, /chat-code-copy/);
+  assert.match(creditsCode, /class="chat-h3"/);
+
+  // Copy code button click handling in credits.js
+  assert.match(creditsCode, /copyCodeBtn\.closest\('\.chat-code-block'\)/);
+  assert.match(creditsCode, /Code copied to clipboard\./);
+
+  // Non-intrusive auto-scrolling preserves user position when scrolled up
+  assert.match(creditsCode, /isScrolledNearBottom/);
+  assert.match(creditsCode, /scrollChatToBottom/);
+
+  // Code block and markdown CSS styles
+  assert.match(stylesCode, /\.chat-code-block\s*\{/);
+  assert.match(stylesCode, /\.chat-code-copy\s*\{/);
+  assert.match(stylesCode, /\.msg-body\s*\{/);
+});

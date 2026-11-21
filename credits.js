@@ -697,16 +697,138 @@
         }
     }
 
+    function isScrolledNearBottom(threshold = 140) {
+        if (!messages) return true;
+        return (messages.scrollHeight - messages.scrollTop - messages.clientHeight) <= threshold;
+    }
+
+    function scrollChatToBottom(force = false) {
+        if (!messages) return;
+        if (force || isScrolledNearBottom(140)) {
+            messages.scrollTo({
+                top: messages.scrollHeight,
+                behavior: force ? 'auto' : 'smooth'
+            });
+        }
+    }
+
     function renderMarkdown(text) {
-        const escaped = String(text).replace(/[&<>"]/g, character => ({
+        if (!text) return '';
+        // 1. Extract fenced code blocks first so inner backticks/formatting aren't mangled
+        const codeBlocks = [];
+        const placeholderText = String(text).replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (match, lang, code) => {
+            const index = codeBlocks.length;
+            codeBlocks.push({ lang: lang ? lang.trim() : 'text', code });
+            return `@@JEVEXA_CODE_BLOCK_${index}@@`;
+        });
+
+        // 2. Escape HTML special characters to prevent injection
+        const escaped = placeholderText.replace(/[&<>"]/g, character => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
         })[character]);
-        return escaped
+
+        // 3. Process line-by-line blocks (headings, lists, blockquotes, horizontal rules)
+        const lines = escaped.split(/\r?\n/);
+        const output = [];
+        let inUl = false;
+        let inOl = false;
+
+        const closeLists = () => {
+            if (inUl) { output.push('</ul>'); inUl = false; }
+            if (inOl) { output.push('</ol>'); inOl = false; }
+        };
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+
+            if (!trimmed) {
+                closeLists();
+                output.push('<br>');
+                continue;
+            }
+
+            // Headings
+            if (/^####\s+(.+)$/.test(trimmed)) {
+                closeLists();
+                output.push(`<h5 class="chat-h4">${trimmed.replace(/^####\s+/, '')}</h5>`);
+                continue;
+            }
+            if (/^###\s+(.+)$/.test(trimmed)) {
+                closeLists();
+                output.push(`<h4 class="chat-h3">${trimmed.replace(/^###\s+/, '')}</h4>`);
+                continue;
+            }
+            if (/^##\s+(.+)$/.test(trimmed)) {
+                closeLists();
+                output.push(`<h3 class="chat-h2">${trimmed.replace(/^##\s+/, '')}</h3>`);
+                continue;
+            }
+            if (/^#\s+(.+)$/.test(trimmed)) {
+                closeLists();
+                output.push(`<h2 class="chat-h1">${trimmed.replace(/^#\s+/, '')}</h2>`);
+                continue;
+            }
+
+            // Blockquotes
+            if (/^&gt;\s*(.+)$/.test(trimmed)) {
+                closeLists();
+                output.push(`<blockquote>${trimmed.replace(/^&gt;\s*/, '')}</blockquote>`);
+                continue;
+            }
+
+            // Horizontal rule
+            if (/^(?:---|\*\*\*|___)$/.test(trimmed)) {
+                closeLists();
+                output.push('<hr class="chat-divider">');
+                continue;
+            }
+
+            // Unordered list item
+            const ulMatch = trimmed.match(/^[-*•]\s+(.+)$/);
+            if (ulMatch) {
+                if (inOl) { output.push('</ol>'); inOl = false; }
+                if (!inUl) { output.push('<ul>'); inUl = true; }
+                output.push(`<li>${ulMatch[1]}</li>`);
+                continue;
+            }
+
+            // Ordered list item
+            const olMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
+            if (olMatch) {
+                if (inUl) { output.push('</ul>'); inUl = false; }
+                if (!inOl) { output.push('<ol>'); inOl = true; }
+                output.push(`<li>${olMatch[1]}</li>`);
+                continue;
+            }
+
+            // Regular paragraph line
+            closeLists();
+            output.push(`<p>${line}</p>`);
+        }
+        closeLists();
+
+        let rendered = output.join('');
+
+        // 4. Process inline formatting (code, bold, italic, links)
+        rendered = rendered
             .replace(/`([^`\n]+)`/g, '<code>$1</code>')
             .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
             .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
-            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+|https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2">$1</a>')
-            .replace(/\n/g, '<br>');
+            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+|https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+        // 5. Reinsert code blocks with header and copy button
+        rendered = rendered.replace(/@@JEVEXA_CODE_BLOCK_(\d+)@@/g, (match, idx) => {
+            const block = codeBlocks[Number(idx)];
+            if (!block) return '';
+            const safeCode = block.code.replace(/[&<>"]/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+            })[c]);
+            const langLabel = block.lang || 'code';
+            return `<div class="chat-code-block"><div class="chat-code-header"><span class="chat-code-lang">${langLabel}</span><button type="button" class="chat-code-copy" aria-label="Copy code">Copy</button></div><pre><code class="language-${langLabel}">${safeCode}</code></pre></div>`;
+        });
+
+        return rendered;
     }
 
     function appendMessage(text, user = false, index = conversation.length, meta = null) {
@@ -721,9 +843,10 @@
         avatar.appendChild(icon);
         const content = document.createElement('div');
         content.className = 'msg-content';
-        const paragraph = document.createElement('p');
-        paragraph.innerHTML = renderMarkdown(text);
-        content.appendChild(paragraph);
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+        body.innerHTML = renderMarkdown(text);
+        content.appendChild(body);
         if (!user) {
             if (meta) {
                 const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
@@ -732,7 +855,9 @@
                     const receipt = document.createElement('div');
                     receipt.className = 'chat-credit-receipt';
                     receipt.setAttribute('role', 'status');
-                    receipt.innerHTML = `<span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
+                    const tierNameMap = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
+                    const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Lite';
+                    receipt.innerHTML = `<span class="chat-receipt-tier">${activeModel}</span> <span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
                     content.appendChild(receipt);
                 }
             }
@@ -761,7 +886,7 @@
         if (welcome) welcome.hidden = true;
         const emptyState = document.getElementById('chatEmptyState');
         if (emptyState) emptyState.hidden = true;
-        messages.scrollTop = messages.scrollHeight;
+        scrollChatToBottom(user);
     }
 
     let activeChatAbortController = null;
@@ -820,7 +945,7 @@
             </div>
         `;
         messages.appendChild(typing);
-        messages.scrollTop = messages.scrollHeight;
+        scrollChatToBottom(false);
 
         clearTypingTimers();
 
@@ -1084,11 +1209,17 @@
 
     function generateChatbotGuestReply(queryText) {
         const q = String(queryText || '').toLowerCase().trim();
+        const activeTier = tierSelect?.value || 'lite';
+        const modelNames = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
+        const activeModelName = modelNames[activeTier] || 'Jevexa Lite';
+        if (/which model|what model|model are you|model is working|active model|current model|who is running/i.test(q)) {
+            return `I am currently operating as **${activeModelName}** in JEVEXA AI Studio. My reasoning depth and responses are powered by active ${activeModelName} configuration with transparent token-weighted credit accounting.`;
+        }
         if (/^(hi|hello|hey|greetings|howdy|salam|aoa)\b/i.test(q)) {
-            return "Hello! I am Jevexa AI, your intelligent automation assistant. Ready to help you draft content, brainstorm marketing strategies, explain our AI tools, or automate business workflows. What would you like to work on today?";
+            return `Hello! I am ${activeModelName}, your intelligent automation assistant. Ready to help you draft content, brainstorm marketing strategies, explain our AI tools, or automate business workflows. What would you like to work on today?`;
         }
         if (/who are you|what can you do|what is jevexa/i.test(q)) {
-            return "I am Jevexa AI, the core assistant for JEVEXA AI Studio. I help teams automate operations, draft high-performing marketing & business copy, analyze documents (PDF & ZIP on Paid plans), and streamline workflows with dedicated AI tools.";
+            return `I am ${activeModelName}, the core assistant for JEVEXA AI Studio. I help teams automate operations, draft high-performing marketing & business copy, analyze documents (PDF & ZIP on Paid plans), and streamline workflows with dedicated AI tools.`;
         }
         if (/blog|write a blog/i.test(q)) {
             return "Here is a high-converting blog outline you can use right away:\n\n1. **Hook:** State the industry challenge and why previous solutions fall short.\n2. **The Core Shift:** Introduce AI-driven automation as the competitive edge.\n3. **Practical Framework:** Step-by-step implementation guide with tangible metrics.\n4. **Call to Action:** Direct readers to test the workflow.\n\n*Tip:* Our live **Content Generation** tool drafts complete articles with customizable tone and length! Sign in to get 100 free credits to generate yours.";
@@ -1454,13 +1585,33 @@
     });
 
     bindSafe(messages, 'click', async event => {
+        const copyCodeBtn = event.target.closest('.chat-code-copy');
+        if (copyCodeBtn) {
+            const block = copyCodeBtn.closest('.chat-code-block');
+            const codeEl = block?.querySelector('code');
+            if (codeEl) {
+                try {
+                    await navigator.clipboard.writeText(codeEl.textContent || '');
+                    copyCodeBtn.textContent = 'Copied!';
+                    copyCodeBtn.classList.add('copied');
+                    setTimeout(() => {
+                        copyCodeBtn.textContent = 'Copy';
+                        copyCodeBtn.classList.remove('copied');
+                    }, 2000);
+                    setStatus('Code copied to clipboard.');
+                } catch {
+                    setStatus('Could not copy code on your device.');
+                }
+            }
+            return;
+        }
         const button = event.target.closest('[data-chat-action]');
         if (!button) return;
         const row = button.closest('.message');
         const index = Number(row?.dataset.messageIndex);
         if (button.dataset.chatAction === 'copy') {
             try {
-                await navigator.clipboard.writeText(conversation[index]?.text || row.querySelector('.msg-content p')?.textContent || '');
+                await navigator.clipboard.writeText(conversation[index]?.text || row.querySelector('.msg-body, .msg-content p, .msg-content')?.textContent || '');
                 setStatus('Response copied.');
             } catch (error) {
                 console.error('Could not copy chat response:', error);
@@ -1495,6 +1646,23 @@
             console.error('Attach button error:', error);
         }
     });
+    const scrollBottomBtn = document.getElementById('chatScrollBottom');
+    if (messages && scrollBottomBtn) {
+        messages.addEventListener('scroll', () => {
+            const distance = messages.scrollHeight - messages.scrollTop - messages.clientHeight;
+            if (distance > 160) {
+                scrollBottomBtn.hidden = false;
+                scrollBottomBtn.classList.add('visible');
+            } else {
+                scrollBottomBtn.hidden = true;
+                scrollBottomBtn.classList.remove('visible');
+            }
+        }, { passive: true });
+
+        bindSafe(scrollBottomBtn, 'click', () => {
+            messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+        });
+    }
     bindSafe(document.getElementById('chatbotToggle'), 'click', () => {
         updateChatWelcome();
         void initializeChatSession();
@@ -1597,6 +1765,9 @@
         updateSelectorDisplay('tier');
         const tierMultipliers = { lite: '1.0x', pro: '1.5x', max: '2.0x', ultra: '2.0x' };
         setStatus(`⚡ ${tier[0].toUpperCase()}${tier.slice(1)} • Token-weighted`);
+        const activeModelName = ({ lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' })[tier] || 'Jevexa Lite';
+        const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+        if (statusText && activeAuthUserId) statusText.textContent = `${activeModelName} • Online`;
     });
     document.getElementById('chatThinking')?.addEventListener('change', () => {
         const selected = thinkingSelect.value;

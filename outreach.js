@@ -206,6 +206,21 @@
     }
     const prefillWithLead = prefillLead;
 
+    function loadCachedSequences() {
+        try {
+            const raw = sessionStorage.getItem('jevexa_outreach_sequences_cache');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    state.savedSequences = parsed;
+                    renderSavedSequencesList();
+                    return true;
+                }
+            }
+        } catch (_) {}
+        return false;
+    }
+
     // Load saved sequences history
     async function loadSavedSequences() {
         const session = await getSession();
@@ -233,7 +248,12 @@
                 }
             }
 
-            state.savedSequences = seqs || [];
+            if (seqs) {
+                state.savedSequences = seqs;
+                try {
+                    sessionStorage.setItem('jevexa_outreach_sequences_cache', JSON.stringify(seqs));
+                } catch (_) {}
+            }
             renderSavedSequencesList();
         } catch (err) {
             console.warn('Could not load saved sequences:', err);
@@ -798,13 +818,19 @@
         getCurrentSequence: () => state.currentSequence
     };
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            initEvents();
-            loadCrmLeads();
-        });
-    } else {
+    function checkAutoMount() {
+        loadCachedSequences();
         initEvents();
         loadCrmLeads();
+        if (workspace && (!workspace.hidden || workspace.classList.contains('open') || window.location.pathname === '/tools/outreach')) {
+            loadSavedSequences();
+        }
+        window.dispatchEvent(new CustomEvent('outreach:ready'));
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAutoMount);
+    } else {
+        checkAutoMount();
     }
 })();

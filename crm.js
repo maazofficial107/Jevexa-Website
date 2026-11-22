@@ -174,8 +174,27 @@
         return ['lite', 'starter', 'pro', 'max', 'business', 'ultra'].includes(state.userPlan);
     }
 
+    function loadCachedLeads() {
+        try {
+            const raw = sessionStorage.getItem('jevexa_crm_leads_cache');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    state.leads = parsed;
+                    renderAll();
+                    return true;
+                }
+            }
+        } catch (_) {}
+        return false;
+    }
+
     // Load leads
     async function fetchLeads() {
+        if (state.leads.length === 0) {
+            loadCachedLeads();
+        }
+
         const session = await getSession();
         if (!session?.user?.id) {
             state.leads = [];
@@ -209,7 +228,12 @@
                 }
             }
 
-            state.leads = leads || [];
+            if (leads) {
+                state.leads = leads;
+                try {
+                    sessionStorage.setItem('jevexa_crm_leads_cache', JSON.stringify(leads));
+                } catch (_) {}
+            }
         } catch (err) {
             console.error('Error fetching leads:', err);
             if (typeof window.showToast === 'function') {
@@ -1326,12 +1350,19 @@
         getLeads: () => state.leads
     };
 
+    function checkAutoMount() {
+        loadCachedLeads();
+        initEvents();
+        if (workspace && (!workspace.hidden || workspace.classList.contains('open') || window.location.pathname === '/tools/crm')) {
+            fetchLeads();
+        }
+        window.dispatchEvent(new CustomEvent('crm:ready'));
+    }
+
     // Auto-init on DOMContentLoaded or immediate
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            initEvents();
-        });
+        document.addEventListener('DOMContentLoaded', checkAutoMount);
     } else {
-        initEvents();
+        checkAutoMount();
     }
 })();

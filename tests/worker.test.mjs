@@ -5961,3 +5961,38 @@ test("Worker Credit Metering & Fallback: Robust CRM scoring and Outreach generat
   assert.match(workerJs, /await callCreditRpc\(cfg,\s*"jevexa_credit_settle"/);
   assert.match(workerJs, /await syncUserCreditsAndProfile\(cfg,\s*user\.id,\s*remainingCredits\)/);
 });
+
+test("Mini CRM & Outreach: 100% zoom responsiveness, fast splash dismissal, and instant cache hydration", async () => {
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const crmJs = await readFile(new URL("../crm.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  // 1. 100% zoom layout safety rules (overflow-x clip, minmax(0, 1fr) grid columns, display: block scroll wrap)
+  assert.match(styles, /#crmWorkspace,\s*#outreachWorkspace\s*\{[\s\S]*?overflow-x:\s*clip/);
+  assert.match(styles, /#crmWorkspace \.workspace-scroll-wrap,\s*#outreachWorkspace \.workspace-scroll-wrap\s*\{[\s\S]*?display:\s*block/);
+  assert.match(styles, /\.crm-metrics-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(styles, /\.crm-kanban-board\s*\{[\s\S]*?grid-auto-flow:\s*column/);
+  assert.match(styles, /\.outreach-workspace-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(320px,\s*440px\)\s*minmax\(0,\s*1fr\)/);
+  assert.match(styles, /\.crm-skeleton-card/);
+
+  // 2. Preloader and splash screen responsiveness
+  assert.match(styles, /#preloader\.hidden\s*\{[\s\S]*?opacity:\s*0\s*!important/);
+  assert.match(script, /function finishLoading/);
+  assert.match(script, /window\.setTimeout\(finishLoading,\s*2500\)/);
+  assert.match(script, /openCrmWorkspace[\s\S]*?finishLoading\(\)/);
+  assert.match(script, /openOutreachWorkspace[\s\S]*?finishLoading\(\)/);
+
+  // 3. Fast mount & instant session cache hydration
+  assert.match(crmJs, /loadCachedLeads/);
+  assert.match(crmJs, /jevexa_crm_leads_cache/);
+  assert.match(crmJs, /checkAutoMount/);
+  assert.match(outreachJs, /loadCachedSequences/);
+  assert.match(outreachJs, /jevexa_outreach_sequences_cache/);
+  assert.match(outreachJs, /checkAutoMount/);
+
+  // 4. HTML structure classes
+  assert.match(html, /class="[^"]*crm-workspace-container[^"]*"/);
+  assert.match(html, /class="[^"]*outreach-workspace-container[^"]*"/);
+});

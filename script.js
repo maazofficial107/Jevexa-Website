@@ -352,34 +352,27 @@ let loadingFinished = false;
 
 
 function finishLoading() {
-
     if (loadingFinished) return;
     loadingFinished = true;
 
-
-
     const pre = document.getElementById('preloader');
-
-
-
-    if (pre) pre.classList.add('hidden');
-
-
+    if (pre) {
+        pre.classList.add('hidden');
+        setTimeout(() => { pre.style.display = 'none'; }, 400);
+    }
 
     countersReady = true;
-
-
-
     setupCounterObserver();
-
-
 }
-if (document.readyState === 'loading') {
+if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    finishLoading();
+} else if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', finishLoading, { once: true });
 } else {
     finishLoading();
 }
-window.setTimeout(finishLoading, 8000);
+window.addEventListener('load', finishLoading, { once: true });
+window.setTimeout(finishLoading, 2500);
 
 // ===============================
 // ===============================
@@ -4324,6 +4317,7 @@ const JEVEXA_PLANS = {
     }
 
     function openCrmWorkspace(pushState = true) {
+        finishLoading();
         closeChatWorkspace(false);
         closeContentWorkspace(false);
         closeOutreachWorkspace(false);
@@ -4334,7 +4328,11 @@ const JEVEXA_PLANS = {
             crmWorkspace.setAttribute('aria-hidden', 'false');
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_CRM?.fetchLeads();
+            if (window.JEVEXA_CRM?.fetchLeads) {
+                window.JEVEXA_CRM.fetchLeads();
+            } else {
+                document.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
+            }
         }
         if (pushState) {
             navigateToRoute('/tools/crm');
@@ -4354,6 +4352,7 @@ const JEVEXA_PLANS = {
     }
 
     function openOutreachWorkspace(pushState = true, lead = null) {
+        finishLoading();
         closeChatWorkspace(false);
         closeContentWorkspace(false);
         closeCrmWorkspace(false);
@@ -4364,7 +4363,21 @@ const JEVEXA_PLANS = {
             outreachWorkspace.setAttribute('aria-hidden', 'false');
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_OUTREACH?.init?.();
+            const initOutreach = () => {
+                window.JEVEXA_OUTREACH?.init?.();
+                if (lead) {
+                    if (typeof window.JEVEXA_OUTREACH?.prefillLead === 'function') {
+                        window.JEVEXA_OUTREACH.prefillLead(lead);
+                    } else if (typeof window.JEVEXA_OUTREACH?.openWithLead === 'function') {
+                        window.JEVEXA_OUTREACH.openWithLead(lead);
+                    }
+                }
+            };
+            if (window.JEVEXA_OUTREACH?.init) {
+                initOutreach();
+            } else {
+                document.addEventListener('outreach:ready', initOutreach, { once: true });
+            }
             if (lead) {
                 if (typeof window.JEVEXA_OUTREACH?.prefillLead === 'function') {
                     window.JEVEXA_OUTREACH.prefillLead(lead);

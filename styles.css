@@ -61,9 +61,20 @@ body {
     overflow-x: clip;
     max-width: 100%;
 }
-select option {
-    background: #0d111e;
-    color: #f1f5f9;
+select option,
+select optgroup,
+.crm-select option,
+.outreach-form select option,
+.crm-lead-form select option,
+.crm-stage-mover option,
+.chat-tier-controls select option,
+.chat-settings option,
+.chat-input-select option,
+#settingsPanel select option,
+.content-tool-panel select option {
+    background-color: #0d111e !important;
+    background: #0d111e !important;
+    color: #f1f5f9 !important;
 }
 a { text-decoration: none; color: inherit; }
 ul { list-style: none; }
@@ -436,7 +447,8 @@ button, input, textarea { font-family: inherit; }
 
 .ai-core-container {
     position: relative;
-    width: 420px;
+    width: min(420px, 100%);
+    max-width: 100%;
     height: 420px;
     display: flex;
     align-items: center;
@@ -1197,7 +1209,7 @@ section { padding: 100px 0; position: relative; }
 }
 .chatbot-window {
     position: absolute; bottom: 80px; right: 0;
-    width: 380px; max-height: 560px;
+    width: min(380px, 100%); max-width: 100%; max-height: 560px;
     background: rgba(12, 12, 30, 0.95); backdrop-filter: blur(30px);
     border: 1px solid var(--border-glow); border-radius: 24px;
     box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 40px rgba(139,92,246,0.15);
@@ -1385,7 +1397,7 @@ section { padding: 100px 0; position: relative; }
     color: var(--text);
     font: inherit;
 }
-.chat-tier-controls select option { color: #111827; }
+.chat-tier-controls select option { background: #0d111e; color: #f1f5f9; }
 .chat-tier-controls button {
     padding: 7px 9px;
     border: 1px solid var(--border);
@@ -1538,7 +1550,7 @@ section { padding: 100px 0; position: relative; }
     }
     #jevexaAccountUI { order: 1; margin-left: 0 !important; }
     .nav-links {
-        position: fixed; top: 0; right: -100%; width: min(84vw, 320px); height: 100vh; height: 100dvh;
+        position: fixed; top: 0; right: -100%; width: min(84%, 320px); max-width: 100%; height: 100vh; height: 100dvh;
         box-sizing: border-box; visibility: hidden;
         background: rgba(10,10,26,0.98); backdrop-filter: blur(20px);
         flex-direction: column; padding: 96px 18px calc(32px + env(safe-area-inset-bottom));
@@ -1578,7 +1590,7 @@ section { padding: 100px 0; position: relative; }
     .features-grid { grid-template-columns: 1fr; }
     .reviews-grid { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
-    .chatbot-window { width: calc(100vw - 32px); right: -8px; }
+    .chatbot-window { width: 100%; right: 0; }
     .footer-top { flex-direction: column; }
     .footer-links { gap: 32px; }
     .step-line { display: none; }
@@ -3997,7 +4009,7 @@ section { padding: 100px 0; position: relative; }
 .login-box {
     position: relative;
 
-    width: min(1040px, calc(100vw - 48px));
+    width: min(1040px, calc(100% - 48px));
     height: min(620px, calc(100vh - 48px));
 
     display: grid;
@@ -4775,7 +4787,7 @@ section { padding: 100px 0; position: relative; }
     }
 
     .login-box {
-        width: min(520px, calc(100vw - 30px));
+        width: min(520px, 100%);
 
         height: auto;
 
@@ -4832,8 +4844,13 @@ section { padding: 100px 0; position: relative; }
     }
 
     .login-close {
-        width: 40px;
-        height: 40px;
+        width: 42px;
+        height: 42px;
+        min-width: 42px;
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
 
         top: 15px;
         right: 15px;
@@ -4907,7 +4924,7 @@ section { padding: 100px 0; position: relative; }
 .login-box {
     position: relative !important;
 
-    width: min(1080px, calc(100vw - 36px)) !important;
+    width: min(1080px, 100%) !important;
 
     /*
        No fixed height.
@@ -5977,7 +5994,7 @@ section { padding: 100px 0; position: relative; }
 
     .login-box {
         width:
-            min(540px, calc(100vw - 28px)) !important;
+            min(540px, 100%) !important;
 
         max-height: none !important;
 
@@ -6032,8 +6049,13 @@ section { padding: 100px 0; position: relative; }
     }
 
     .login-close {
-        width: 40px !important;
-        height: 40px !important;
+        width: 42px !important;
+        height: 42px !important;
+        min-width: 42px !important;
+        min-height: 42px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
 
         top: 13px !important;
         right: 13px !important;
@@ -6155,7 +6177,7 @@ body.login-open {
     position: relative !important;
 
     width:
-        min(1080px, calc(100vw - 40px)) !important;
+        min(1080px, 100%) !important;
 
     /*
        IMPORTANT:
@@ -7295,7 +7317,7 @@ body.login-open {
 
     .login-box {
         width:
-            min(850px, calc(100vw - 30px)) !important;
+            min(850px, 100%) !important;
     }
 
     .login-visual {
@@ -7327,7 +7349,7 @@ body.login-open {
 
     .login-box {
         width:
-            min(540px, calc(100vw - 28px)) !important;
+            min(540px, 100%) !important;
 
         display:
             block !important;
@@ -7386,10 +7408,25 @@ body.login-open {
 
     .login-close {
         width:
-            40px !important;
+            42px !important;
 
         height:
-            40px !important;
+            42px !important;
+
+        min-width:
+            42px !important;
+
+        min-height:
+            42px !important;
+
+        display:
+            inline-flex !important;
+
+        align-items:
+            center !important;
+
+        justify-content:
+            center !important;
 
         top:
             12px !important;
@@ -7739,9 +7776,9 @@ body {
 
     /* Account dropdown */
     #jevexaProfilePanel {
-        width: min(290px, calc(100vw - 24px)) !important;
-        max-width: calc(100vw - 24px) !important;
-        right: -48px !important;
+        width: min(290px, calc(100% - 24px)) !important;
+        max-width: calc(100% - 24px) !important;
+        right: 0 !important;
         box-sizing: border-box !important;
     }
 
@@ -7779,8 +7816,9 @@ body {
     .logo-text { font-size: 16px; letter-spacing: 1px; }
 
     #jevexaProfilePanel {
-        width: calc(100vw - 24px) !important;
-        max-width: calc(100vw - 24px) !important;
+        width: min(280px, calc(100% - 24px)) !important;
+        max-width: 100% !important;
+        right: 0 !important;
     }
 
     #jevexaAccountBackdrop {
@@ -7926,8 +7964,8 @@ body {
     .chatbot-window {
         right: max(0px, env(safe-area-inset-right));
         bottom: calc(68px + env(safe-area-inset-bottom));
-        width: min(360px, calc(100vw - 24px));
-        max-height: calc(100dvh - 92px - env(safe-area-inset-bottom));
+        width: min(360px, calc(100% - 24px));
+        max-height: calc(var(--vvh, 100dvh) - 92px - env(safe-area-inset-bottom));
     }
 }
 
@@ -7970,8 +8008,8 @@ html.jevexa-reduce-motion .type-cursor { display: none; }
   border: 1px solid #8055e8 !important;
 }
 #settingsPanel select option {
-  background-color: #100d20 !important;
-  color: #f5f1ff !important;
+  background-color: #0d111e !important;
+  color: #f1f5f9 !important;
 }
 #settingsPanel select:focus {
   outline: 2px solid #8b5cf6 !important;
@@ -7988,7 +8026,7 @@ html.login-open, body.login-open { overflow: hidden !important; }
 body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
 .login-modal .login-box {
     position: relative !important;
-    width: min(1060px, calc(100vw - 40px)) !important;
+    width: min(1060px, calc(100% - 40px)) !important;
     height: auto !important;
     min-height: 0 !important;
     max-height: calc(100dvh - 40px) !important;
@@ -8006,7 +8044,7 @@ body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
 @media (max-width: 860px) {
     .login-modal .login-box {
         display: block !important;
-        width: min(540px, calc(100vw - 28px)) !important;
+        width: min(540px, 100%) !important;
         max-height: calc(100dvh - 24px) !important;
         overflow-y: auto !important;
     }
@@ -8126,7 +8164,7 @@ body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
     min-height: 48px;
     padding: 10px 12px;
 }
-.content-tool-panel select option { background: #100d20; color: #f5f1ff; }
+.content-tool-panel select option { background: #0d111e; color: #f1f5f9; }
 .content-tool-form .form-group small {
     display: block;
     margin-top: 7px;
@@ -8568,7 +8606,7 @@ body.chat-is-resizing {
     position: fixed;
     z-index: 99999;
     min-width: 154px;
-    max-width: calc(100vw - 20px);
+    max-width: min(280px, calc(100% - 20px));
     background: rgba(18, 20, 34, 0.98);
     border: 1px solid rgba(167, 139, 250, 0.35);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.09);
@@ -8786,9 +8824,9 @@ body.chat-is-resizing {
 .chat-settings { display: grid; gap: 8px; color: #e5e7eb; }
 .chat-settings summary { min-height: 38px; display: flex; align-items: center; cursor: pointer; font-weight: 700; font-size: 12.5px; }
 .chat-settings select, .chat-settings button { min-height: 40px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.04); color: inherit; font: inherit; padding: 7px 10px; font-size: 12px; }
-.chat-settings option { color: #111827; }
+.chat-settings option { background: #0d111e; color: #f1f5f9; }
 .chat-motion-setting { display: flex; align-items: center; gap: 8px; min-height: 38px; font-size: 12px; }
-.chat-sidebar-close { min-width: 36px; min-height: 36px; border: 0; border-radius: 9px; background: rgba(255,255,255,.06); color: inherit; font: inherit; cursor: pointer; }
+.chat-sidebar-close { width: 42px; height: 42px; min-width: 42px; min-height: 42px; border: 0; border-radius: 9px; background: rgba(255,255,255,.06); color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .chat-sidebar-close { display: none; }
 .chatbot-header { min-height: 58px; padding: max(8px, env(safe-area-inset-top)) clamp(14px, 3vw, 24px) 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
 .chatbot-header-left { display: flex; align-items: center; gap: 10px; }
@@ -8901,8 +8939,10 @@ body.chat-is-resizing {
     margin-top: 2px;
 }
 .chat-custom-close {
-    width: 36px;
-    height: 36px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     border: 0;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.06);
@@ -9095,8 +9135,8 @@ body.chat-is-resizing {
     outline: none;
 }
 .chat-input-select option {
-    background: #0f1024;
-    color: #f3f4f6;
+    background: #0d111e;
+    color: #f1f5f9;
 }
 .chat-memory-status-banner {
     padding: 14px 16px;
@@ -9358,8 +9398,8 @@ body.chat-is-resizing {
 .chat-welcome-chip:hover { transform: translateY(-2px); border-color: rgba(34,211,238,.5); background: rgba(34,211,238,.08); }
 .chat-welcome-chip:focus-visible { outline: 2px solid #67e8f9; outline-offset: 3px; }
 .chat-empty-state[hidden] { display: none !important; }
-.chatbot-toggle { box-sizing: border-box; max-width: calc(100vw - 28px); overflow: visible; }
-.chatbot-toggle-label { display: block; min-width: 0; max-width: calc(100vw - 92px); overflow: hidden; text-overflow: ellipsis; }
+.chatbot-toggle { box-sizing: border-box; max-width: calc(100% - 28px); overflow: visible; }
+.chatbot-toggle-label { display: block; min-width: 0; max-width: calc(100% - 92px); overflow: hidden; text-overflow: ellipsis; }
 .ct-core { flex: 0 0 40px; }
 .chat-input-area { width: min(100%, 1180px); min-height: 58px; margin: 0 auto; align-items: flex-end; padding: 8px clamp(14px, 3vw, 36px) 10px; }
 .chat-input-area textarea { flex: 1; min-height: 44px; max-height: 150px; resize: none; overflow-y: auto; padding: 11px 16px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; outline: none; transition: border-color 180ms, box-shadow 180ms; }
@@ -10352,8 +10392,10 @@ body.chat-is-resizing {
 }
 
 .workspace-close-btn {
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.04);
@@ -11271,6 +11313,27 @@ body.is-offline .offline-indicator {
     textarea,
     select {
         min-height: 44px;
+    }
+
+    .login-close,
+    .chatbot-close,
+    .support-modal-close,
+    .workspace-close-btn,
+    .chat-sidebar-close,
+    .chat-custom-close,
+    .coming-soon-close,
+    .crm-modal-close,
+    .crm-drawer-close,
+    .upgrade-modal-close,
+    .settings-close,
+    #profileClose {
+        min-width: 42px !important;
+        min-height: 42px !important;
+        width: 42px !important;
+        height: 42px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
 
     .chat-window,
@@ -12322,7 +12385,7 @@ body.is-offline .offline-indicator {
 .outreach-form select option,
 .crm-select option,
 .crm-stage-mover option {
-    background: #0b0f19;
+    background: #0d111e;
     color: #f1f5f9;
 }
 

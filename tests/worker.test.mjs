@@ -6067,3 +6067,90 @@ test("Phase 2 & 3: Newsletter Service, Route Normalization & Live Endpoints", as
   const goodData = await goodRes.json();
   assert.strictEqual(goodData.success, true);
 });
+
+test("End-to-End Residual Verification Pass: UI Zoom Safety, Modal/Drawer Ergonomics & AI Metering Safety", async () => {
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const crmJs = await readFile(new URL("../crm.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  // 1. Zero 100vw across styles.css and inline script styles to prevent horizontal scrollbar at 100%, 110%, 125% zoom
+  assert.equal(styles.includes("100vw"), false, "styles.css must have zero 100vw rules causing horizontal scroll on desktop/zoom");
+  assert.equal(scriptJs.includes("100vw"), false, "script.js must have zero 100vw rules");
+  assert.match(styles, /\.ai-core-container\s*\{[\s\S]*?width:\s*min\(420px,\s*100%\)/);
+  assert.match(styles, /\.chatbot-window\s*\{[\s\S]*?width:\s*min\(380px,\s*100%\)/);
+
+  // 2. Mobile touch targets >= 42px on close and action elements across all tools
+  assert.match(styles, /\.workspace-close-btn\s*\{[\s\S]*?min-width:\s*42px/);
+  assert.match(styles, /\.workspace-close-btn\s*\{[\s\S]*?min-height:\s*42px/);
+  assert.match(styles, /\.chat-sidebar-close\s*\{[\s\S]*?min-width:\s*42px/);
+  assert.match(styles, /\.chat-custom-close\s*\{[\s\S]*?min-width:\s*42px/);
+  assert.match(scriptJs, /id="profileClose"[\s\S]*?min-width:42px/);
+  assert.match(scriptJs, /\.settings-close\{width:42px;height:42px;min-width:42px;min-height:42px/);
+  assert.match(styles, /@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*?\.login-close,[\s\S]*?\.workspace-close-btn,[\s\S]*?\.crm-modal-close[\s\S]*?min-width:\s*42px\s*!important/);
+
+  // 3. Dark theme contrast (#0d111e options) across all dropdowns in CRM, Outreach, Chatbot, Content, Settings
+  assert.match(styles, /select\s+option[\s\S]*?background:\s*#0d111e/);
+  assert.match(styles, /\.crm-lead-form\s+select\s+option[\s\S]*?background:\s*#0d111e/);
+  assert.match(styles, /\.chat-tier-controls\s+select\s+option\s*\{\s*background:\s*#0d111e/);
+  assert.match(styles, /\.chat-settings\s+option\s*\{\s*background:\s*#0d111e/);
+  assert.match(styles, /\.chat-input-select\s+option\s*\{\s*background:\s*#0d111e/);
+  assert.match(styles, /#settingsPanel\s+select\s+option\s*\{\s*background-color:\s*#0d111e/);
+  assert.match(styles, /\.content-tool-panel\s+select\s+option\s*\{\s*background:\s*#0d111e/);
+
+  // 4. Modal/drawer dismissal safeguards (Escape key and backdrop clicks)
+  assert.match(creditsJs, /bindSafe\(chatbotWin,\s*'click',/);
+  assert.match(creditsJs, /if\s*\(\(e\.key === 'Escape' \|\| e\.key === 'Esc'\) && chatbotWin\?\.classList\.contains\('chat-history-open'\)\)/);
+  assert.match(crmJs, /bindSafe\(drawerBackdrop,\s*'click',\s*closeLeadDrawer\)/);
+  assert.match(outreachJs, /bindSafe\(historyBackdrop,\s*'click',\s*closeHistoryDrawer\)/);
+  assert.match(scriptJs, /if\s*\(event\.target === loginModalBackdropTarget\)\s*\{\s*closeLogin\(\);/);
+
+  // 5. Clean state reset on close
+  assert.match(scriptJs, /const pw = document\.getElementById\('loginPassword'\);\s*if \(pw\) pw\.value = '';\s*const email = document\.getElementById\('loginEmail'\);\s*if \(email\) email\.value = '';/);
+  assert.match(crmJs, /if \(leadForm\) leadForm\.reset\(\);/);
+
+  // 6. Preloader non-blocking safeguard
+  assert.match(styles, /#preloader\.hidden\s*\{[\s\S]*?pointer-events:\s*none\s*!important/);
+
+  // 7. Test API endpoints authentication & invalid payload handling directly
+  const workerModule = await import("../worker.js");
+  const worker = workerModule.default;
+  const testEnv = {
+    ...env,
+    GEMINI_API_KEY: "unit-test-gemini",
+    GROQ_API_KEY: "unit-test-groq",
+    OPENROUTER_API_KEY: "unit-test-openrouter"
+  };
+
+  // Unauthenticated requests rejected with 401
+  const endpoints = [
+    { url: "/api/chat", body: { message: "Hello", tier: "lite", requestId: "00000000-0000-4000-8000-000000000001" } },
+    { url: "/api/content", body: { topic: "AI Growth", type: "blog", tone: "professional", length: "short", requestId: "00000000-0000-4000-8000-000000000001" } },
+    { url: "/api/crm/score", body: { lead: { name: "Test Lead", company: "Test Co" }, requestId: "00000000-0000-4000-8000-000000000001" } },
+    { url: "/api/outreach/generate", body: { goal: "Grow business leads", recipient_name: "Jane", company: "Acme", tone: "professional", requestId: "00000000-0000-4000-8000-000000000001" } }
+  ];
+  for (const ep of endpoints) {
+    const unauthReq = new Request(`https://jevexa.net${ep.url}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ep.body)
+    });
+    const res = await worker.fetch(unauthReq, testEnv, {});
+    assert.strictEqual(res.status, 401, `${ep.url} must reject unauthenticated requests with 401`);
+  }
+
+  // Support AI invalid body returns 400
+  const badSupport = new Request("https://jevexa.net/api/support/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "" })
+  });
+  const badSupRes = await worker.fetch(badSupport, {}, {});
+  assert.strictEqual(badSupRes.status, 400);
+
+  // Support route normalization
+  assert.match(workerJs, /if \(url\.pathname === "\/api\/support" \|\| url\.pathname === "\/api\/support\/ai"\)/);
+});

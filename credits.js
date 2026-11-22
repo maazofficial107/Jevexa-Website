@@ -1262,7 +1262,7 @@
                 document.documentElement.style.setProperty('--vvh-top', '0px');
                 document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px');
                 if (chatbotWin && chatbotWin.classList.contains('open')) {
-                    chatbotWin.style.height = '100dvh';
+                    chatbotWin.style.height = `${h}px`;
                     chatbotWin.style.top = '0px';
                 }
             }
@@ -1339,6 +1339,22 @@
 
         bindSafe(toggleBtn, 'click', toggleSidebar);
         bindSafe(closeBtn, 'click', closeSidebar);
+
+        bindSafe(chatbotWin, 'click', (e) => {
+            if (window.innerWidth <= 767 && chatbotWin?.classList.contains('chat-history-open')) {
+                if (e.target === chatbotWin || (!sidebar?.contains(e.target) && !toggleBtn?.contains(e.target))) {
+                    closeSidebar();
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.key === 'Escape' || e.key === 'Esc') && chatbotWin?.classList.contains('chat-history-open')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                closeSidebar();
+            }
+        });
     }
 
     function clearAllConversations() {

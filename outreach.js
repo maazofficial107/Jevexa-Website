@@ -9,12 +9,27 @@
     'use strict';
 
     const bindSafe = (target, type, handler, options) => {
+        if (!target) return;
         if (window.JEVEXA_SAFE_INTERACTION?.bind) {
             window.JEVEXA_SAFE_INTERACTION.bind(target, type, handler, options);
         } else {
-            target?.addEventListener(type, handler, options?.listenerOptions);
+            target.addEventListener(type, handler, options?.listenerOptions);
         }
     };
+
+    // Helper: RFC4122 v4 UUID generator (guaranteed to match /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+    function generateUuid() {
+        if (typeof window.crypto?.randomUUID === 'function') {
+            try {
+                return window.crypto.randomUUID();
+            } catch (_) {}
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
 
     // State
     const state = {
@@ -112,7 +127,7 @@
         try {
             const { data, error } = await window.supabaseClient
                 .from('crm_leads')
-                .select('id,name,company,email,role,website,notes,ai_summary')
+                .select('id,name,company,email,role,website,notes,ai_summary,suggested_outreach_angle')
                 .order('created_at', { ascending: false });
 
             if (!error && Array.isArray(data)) {
@@ -147,9 +162,10 @@
         if (roleInput) roleInput.value = lead.role || '';
         if (websiteInput) websiteInput.value = lead.website || '';
 
-        // If lead has notes or AI summary, suggest context if valueProp is empty
         if (valuePropInput && !valuePropInput.value.trim()) {
-            if (lead.ai_summary) {
+            if (lead.suggested_outreach_angle) {
+                valuePropInput.value = `Suggested hook: ${lead.suggested_outreach_angle}\n\nProspect context: ${lead.ai_summary || lead.notes || 'Scale operational productivity with AI automation.'}`;
+            } else if (lead.ai_summary) {
                 valuePropInput.value = `Prospect context: ${lead.ai_summary}\n\nOur solution helps them streamline operations with AI automation.`;
             } else if (lead.notes) {
                 valuePropInput.value = `Lead background: ${lead.notes}`;
@@ -158,11 +174,10 @@
     }
 
     // Pre-fill directly from Mini CRM shortcut button
-    function prefillWithLead(lead) {
+    function prefillLead(lead) {
         if (!lead) return;
         state.linkedLead = lead;
 
-        // Ensure lead is in list or add it
         if (!state.crmLeads.some(l => l.id === lead.id)) {
             state.crmLeads.unshift(lead);
             const opt = document.createElement('option');
@@ -179,7 +194,9 @@
         if (websiteInput) websiteInput.value = lead.website || '';
 
         if (valuePropInput) {
-            if (lead.ai_summary) {
+            if (lead.suggested_outreach_angle) {
+                valuePropInput.value = `Focus angle: ${lead.suggested_outreach_angle}\n\nContext: ${lead.ai_summary || lead.notes || 'B2B automation'}`;
+            } else if (lead.ai_summary) {
                 valuePropInput.value = `Context: ${lead.ai_summary}\n\nHelp them scale with JEVEXA AI automation solutions.`;
             } else if (lead.notes) {
                 valuePropInput.value = `Context: ${lead.notes}`;
@@ -187,6 +204,7 @@
             valuePropInput.focus();
         }
     }
+    const prefillWithLead = prefillLead;
 
     // Load saved sequences history
     async function loadSavedSequences() {
@@ -194,15 +212,29 @@
         if (!session?.user?.id) return;
 
         try {
-            const { data, error } = await window.supabaseClient
-                .from('outreach_sequences')
-                .select('*')
-                .order('created_at', { ascending: false });
+            let seqs = null;
+            try {
+                const res = await fetch('/api/outreach/sequences', {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data?.sequences)) seqs = data.sequences;
+                }
+            } catch (_) {}
 
-            if (!error && Array.isArray(data)) {
-                state.savedSequences = data;
-                renderSavedSequencesList();
+            if (!seqs) {
+                const { data, error } = await window.supabaseClient
+                    .from('outreach_sequences')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                if (!error && Array.isArray(data)) {
+                    seqs = data;
+                }
             }
+
+            state.savedSequences = seqs || [];
+            renderSavedSequencesList();
         } catch (err) {
             console.warn('Could not load saved sequences:', err);
         }
@@ -266,11 +298,22 @@
         const session = await getSession();
         if (!session?.user?.id) return;
         try {
-            await window.supabaseClient
-                .from('outreach_sequences')
-                .delete()
-                .eq('id', seqId)
-                .eq('user_id', session.user.id);
+            let deleted = false;
+            try {
+                const res = await fetch(`/api/outreach/sequences?id=${encodeURIComponent(seqId)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (res.ok) deleted = true;
+            } catch (_) {}
+
+            if (!deleted) {
+                await window.supabaseClient
+                    .from('outreach_sequences')
+                    .delete()
+                    .eq('id', seqId)
+                    .eq('user_id', session.user.id);
+            }
 
             state.savedSequences = state.savedSequences.filter(s => s.id !== seqId);
             renderSavedSequencesList();
@@ -306,7 +349,6 @@
         if (valuePropInput) valuePropInput.value = seq.goal || '';
         if (toneSelect && seq.tone) toneSelect.value = seq.tone;
 
-        // Try to match lead in select
         if (seq.lead_id && leadSelect) {
             leadSelect.value = seq.lead_id;
             state.linkedLead = state.crmLeads.find(l => l.id === seq.lead_id) || null;
@@ -323,10 +365,13 @@
     function switchStep(stepNum) {
         state.activeStep = stepNum;
 
-        // Update tab buttons
         tabStep1?.classList.toggle('active', stepNum === 1);
         tabStep2?.classList.toggle('active', stepNum === 2);
         tabStep3?.classList.toggle('active', stepNum === 3);
+
+        tabStep1?.setAttribute('aria-selected', stepNum === 1 ? 'true' : 'false');
+        tabStep2?.setAttribute('aria-selected', stepNum === 2 ? 'true' : 'false');
+        tabStep3?.setAttribute('aria-selected', stepNum === 3 ? 'true' : 'false');
 
         if (!state.currentSequence) return;
 
@@ -344,13 +389,19 @@
 
         // A/B Subject handling (for Step 1 only)
         if (stepNum === 1 && state.currentSequence.initial?.alternative_subject) {
-            if (abSubjectContainer) abSubjectContainer.hidden = false;
+            if (abSubjectContainer) {
+                abSubjectContainer.hidden = false;
+                abSubjectContainer.removeAttribute('hidden');
+            }
             if (abSubjectText) abSubjectText.textContent = state.currentSequence.initial.alternative_subject;
             if (abSubjectToggleBtn) {
                 abSubjectToggleBtn.textContent = state.useAlternativeSubject ? 'Use Primary Subject' : 'Use A/B Subject';
             }
         } else {
-            if (abSubjectContainer) abSubjectContainer.hidden = true;
+            if (abSubjectContainer) {
+                abSubjectContainer.hidden = true;
+                abSubjectContainer.setAttribute('hidden', '');
+            }
         }
     }
 
@@ -397,7 +448,7 @@
         }
         setStatus('AI analyzing prospect and drafting personalized cold email sequence…', 'loading');
 
-        const requestId = window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+        const requestId = generateUuid();
 
         const payload = {
             lead_id: state.linkedLead?.id || leadSelect?.value || null,
@@ -477,13 +528,11 @@
         const subject = emailSubjectInput?.value?.trim() || '';
         const body = emailBodyInput?.value || '';
 
-        // Construct standard web Gmail compose URL
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         const fallbackMailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
         const win = window.open(gmailUrl, '_blank', 'noopener,noreferrer');
         if (!win || win.closed || typeof win.closed === 'undefined') {
-            // Popup blocked: trigger mailto
             window.location.href = fallbackMailto;
             if (typeof window.showToast === 'function') {
                 window.showToast('Opened email client.');
@@ -509,7 +558,6 @@
                 window.showToast('Subject and email body copied to clipboard!');
             }
         } catch {
-            // Fallback execCommand
             const ta = document.createElement('textarea');
             ta.value = fullText;
             document.body.appendChild(ta);
@@ -535,34 +583,54 @@
         const leadId = state.linkedLead?.id || leadSelect?.value || null;
 
         try {
-            // Update sequence status
             await updateSequenceStatus('Sent');
 
-            // If linked to lead: update stage to Contacted and schedule followup in 3 days
             if (leadId) {
                 const followupDate = new Date(Date.now() + 3 * 86400000).toISOString();
-                await window.supabaseClient
-                    .from('crm_leads')
-                    .update({
-                        stage: 'Contacted',
-                        last_contacted_at: new Date().toISOString(),
-                        next_followup_at: followupDate,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', leadId)
-                    .eq('user_id', session.user.id);
+                
+                // Try backend API first
+                let synced = false;
+                if (state.currentSequenceId) {
+                    try {
+                        const res = await fetch(`/api/outreach/sequences`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`
+                            },
+                            body: JSON.stringify({
+                                id: state.currentSequenceId,
+                                status: 'Sent',
+                                sync_crm: true,
+                                lead_id: leadId
+                            })
+                        });
+                        if (res.ok) synced = true;
+                    } catch (_) {}
+                }
 
-                // Log activity in CRM
-                await window.supabaseClient
-                    .from('crm_activities')
-                    .insert({
-                        user_id: session.user.id,
-                        lead_id: leadId,
-                        type: 'email_sent',
-                        description: `Sent ${stepName} (${subject}). CRM stage moved to Contacted; follow-up scheduled in 3 days.`
-                    });
+                if (!synced) {
+                    await window.supabaseClient
+                        .from('crm_leads')
+                        .update({
+                            stage: 'Contacted',
+                            last_contacted_at: new Date().toISOString(),
+                            next_followup_at: followupDate,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', leadId)
+                        .eq('user_id', session.user.id);
 
-                // Refresh CRM leads if CRM workspace initialized
+                    await window.supabaseClient
+                        .from('crm_activities')
+                        .insert({
+                            user_id: session.user.id,
+                            lead_id: leadId,
+                            type: 'email_sent',
+                            description: `Sent ${stepName} (${subject}). CRM stage moved to Contacted; follow-up scheduled in 3 days.`
+                        });
+                }
+
                 if (typeof window.JEVEXA_CRM?.fetchLeads === 'function') {
                     window.JEVEXA_CRM.fetchLeads();
                 }
@@ -606,32 +674,57 @@
         sequenceStatusPill.className = `crm-stage-pill stage-${status.toLowerCase().replace(/\s+/g, '-')}`;
     }
 
-    // History Drawer
+    // History Drawer - Strict open/close state handling
     function openHistoryDrawer() {
         loadSavedSequences();
         if (historyDrawer) {
-            historyDrawer.classList.add('open');
             historyDrawer.hidden = false;
+            historyDrawer.removeAttribute('hidden');
+            historyDrawer.classList.add('open');
+            historyDrawer.setAttribute('aria-hidden', 'false');
         }
         if (historyBackdrop) {
-            historyBackdrop.classList.add('open');
             historyBackdrop.hidden = false;
+            historyBackdrop.removeAttribute('hidden');
+            historyBackdrop.classList.add('open');
+            historyBackdrop.setAttribute('aria-hidden', 'false');
         }
     }
 
     function closeHistoryDrawer() {
         if (historyDrawer) {
             historyDrawer.classList.remove('open');
+            historyDrawer.setAttribute('aria-hidden', 'true');
+            historyDrawer.setAttribute('hidden', '');
             historyDrawer.hidden = true;
         }
         if (historyBackdrop) {
             historyBackdrop.classList.remove('open');
+            historyBackdrop.setAttribute('aria-hidden', 'true');
+            historyBackdrop.setAttribute('hidden', '');
             historyBackdrop.hidden = true;
         }
     }
 
     // Event Bindings
     function initEvents() {
+        // Ensure starting closed
+        closeHistoryDrawer();
+
+        // Workspace back / close buttons
+        bindSafe(backBtn, 'click', () => {
+            closeHistoryDrawer();
+            if (typeof window.returnToStudio === 'function') {
+                window.returnToStudio();
+            }
+        });
+        bindSafe(closeBtn, 'click', () => {
+            closeHistoryDrawer();
+            if (typeof window.returnToStudio === 'function') {
+                window.returnToStudio();
+            }
+        });
+
         bindSafe(form, 'submit', handleGenerateSubmit);
 
         // Lead selector change
@@ -657,10 +750,15 @@
         bindSafe(historyCloseBtn, 'click', closeHistoryDrawer);
         bindSafe(historyBackdrop, 'click', closeHistoryDrawer);
 
-        // Escape key to close drawer
+        // Escape key to close drawer safely with event propagation stopped
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && historyDrawer && historyDrawer.classList.contains('open')) {
-                closeHistoryDrawer();
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                const isDrawerOpen = historyDrawer && (!historyDrawer.hidden || historyDrawer.classList.contains('open'));
+                if (isDrawerOpen) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    closeHistoryDrawer();
+                }
             }
         });
 
@@ -685,10 +783,19 @@
 
     // Public API
     window.JEVEXA_OUTREACH = {
+        init: () => {
+            loadCrmLeads();
+            loadSavedSequences();
+        },
         loadCrmLeads,
         loadSavedSequences,
-        openWithLead: prefillWithLead,
-        switchStep
+        prefillLead: prefillLead,
+        openWithLead: prefillLead,
+        switchStep,
+        openHistoryDrawer,
+        closeHistoryDrawer,
+        getSequences: () => state.savedSequences,
+        getCurrentSequence: () => state.currentSequence
     };
 
     if (document.readyState === 'loading') {

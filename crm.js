@@ -8,12 +8,27 @@
     'use strict';
 
     const bindSafe = (target, type, handler, options) => {
+        if (!target) return;
         if (window.JEVEXA_SAFE_INTERACTION?.bind) {
             window.JEVEXA_SAFE_INTERACTION.bind(target, type, handler, options);
         } else {
-            target?.addEventListener(type, handler, options?.listenerOptions);
+            target.addEventListener(type, handler, options?.listenerOptions);
         }
     };
+
+    // Helper: RFC4122 v4 UUID generator (guaranteed to match /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+    function generateUuid() {
+        if (typeof window.crypto?.randomUUID === 'function') {
+            try {
+                return window.crypto.randomUUID();
+            } catch (_) {}
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
 
     // State
     const state = {
@@ -92,7 +107,6 @@
     const drawerAiScoreValue = document.getElementById('crmDrawerAiScoreValue');
     const drawerAiLikelihood = document.getElementById('crmDrawerAiLikelihood');
     const drawerAiSummary = document.getElementById('crmDrawerAiSummary');
-    const drawerAiPainPoints = document.getElementById('crmDrawerAiPainPoints');
     const drawerAiAction = document.getElementById('crmDrawerAiAction');
     const drawerAiScoreBtn = document.getElementById('crmAiScoreBtn');
     const drawerDraftOutreachBtn = document.getElementById('crmDraftOutreachBtn');
@@ -135,7 +149,10 @@
     // Check user plan
     async function checkUserPlan() {
         const session = await getSession();
-        if (!session?.user?.id) return 'free';
+        if (!session?.user?.id) {
+            state.userPlan = 'free';
+            return 'free';
+        }
         try {
             const { data, error } = await window.supabaseClient
                 .from('user_credits')
@@ -168,10 +185,9 @@
 
         state.isLoadingLeads = true;
         try {
-            // First check user plan
             await checkUserPlan();
 
-            // Try backend API first, fallback to Supabase Client
+            // Try backend API proxy first, fallback to Supabase Client
             let leads = null;
             try {
                 const res = await fetch('/api/crm/leads', {
@@ -202,6 +218,9 @@
         } finally {
             state.isLoadingLeads = false;
             renderAll();
+            if (typeof window.JEVEXA_SYNC_WORKSPACE_CREDITS === 'function') {
+                window.JEVEXA_SYNC_WORKSPACE_CREDITS();
+            }
         }
     }
 
@@ -231,7 +250,6 @@
     function getFilteredLeads() {
         const q = state.searchQuery.trim().toLowerCase();
         return state.leads.filter(lead => {
-            // Search query filter
             if (q) {
                 const matchName = lead.name?.toLowerCase().includes(q);
                 const matchCompany = lead.company?.toLowerCase().includes(q);
@@ -239,11 +257,9 @@
                 const matchRole = lead.role?.toLowerCase().includes(q);
                 if (!matchName && !matchCompany && !matchEmail && !matchRole) return false;
             }
-            // Stage filter
             if (state.filterStage !== 'all' && lead.stage !== state.filterStage) {
                 return false;
             }
-            // Score filter
             if (state.filterScore !== 'all') {
                 const score = lead.lead_score;
                 if (state.filterScore === 'unscored' && (score !== null && score !== undefined)) return false;
@@ -282,8 +298,10 @@
         // Free tier progress bar
         if (freeTierBar) {
             if (isPaidPlan()) {
-                if (freeTierProgress) freeTierProgress.style.width = '100%';
-                if (freeTierProgress) freeTierProgress.className = 'crm-progress-fill is-unlimited';
+                if (freeTierProgress) {
+                    freeTierProgress.style.width = '100%';
+                    freeTierProgress.className = 'crm-progress-fill is-unlimited';
+                }
                 if (freeTierText) freeTierText.innerHTML = `<strong>${total} Leads</strong> <span class="badge-tier-unlimited"><i class="fas fa-crown"></i> Unlimited</span>`;
                 if (freeTierUpgradeBtn) freeTierUpgradeBtn.hidden = true;
             } else {
@@ -459,7 +477,6 @@
             </table>
         `;
 
-        // Row button clicks
         tableContainer.querySelectorAll('.crm-view-btn').forEach(btn => {
             btn.addEventListener('click', () => openLeadDrawer(btn.dataset.leadId));
         });
@@ -533,9 +550,8 @@
         }
     }
 
-    // Lead Modal (Add / Edit)
+    // Lead Modal (Add / Edit) - Strict open/close state handling
     function openLeadModal(leadToEdit = null) {
-        // Enforce 50-lead free tier limit on ADD
         if (!leadToEdit && !isPaidPlan() && state.leads.length >= state.maxFreeLeads) {
             if (typeof window.showToast === 'function') {
                 window.showToast(`Free plan limit reached (${state.maxFreeLeads} leads). Please upgrade to Pro for unlimited leads.`);
@@ -567,14 +583,18 @@
 
         if (leadModal) {
             leadModal.hidden = false;
+            leadModal.removeAttribute('hidden');
             leadModal.classList.add('open');
-            leadNameInput?.focus();
+            leadModal.setAttribute('aria-hidden', 'false');
+            setTimeout(() => leadNameInput?.focus(), 60);
         }
     }
 
     function closeLeadModal() {
         if (leadModal) {
             leadModal.classList.remove('open');
+            leadModal.setAttribute('aria-hidden', 'true');
+            leadModal.setAttribute('hidden', '');
             leadModal.hidden = true;
         }
         if (leadForm) leadForm.reset();
@@ -586,6 +606,7 @@
         const session = await getSession();
         if (!session?.user?.id) {
             if (typeof window.openAuthModal === 'function') window.openAuthModal('signup');
+            else if (typeof window.openLogin === 'function') window.openLogin();
             return;
         }
 
@@ -596,7 +617,6 @@
             return;
         }
 
-        // Check Free tier limit on new lead creation
         if (!id && !isPaidPlan() && state.leads.length >= state.maxFreeLeads) {
             closeLeadModal();
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
@@ -622,40 +642,80 @@
 
         try {
             if (id) {
-                // Update
-                const { data, error } = await window.supabaseClient
-                    .from('crm_leads')
-                    .update(payload)
-                    .eq('id', id)
-                    .eq('user_id', session.user.id)
-                    .select()
-                    .single();
+                // Update existing lead
+                let updatedData = null;
+                try {
+                    const res = await fetch(`/api/crm/leads/${encodeURIComponent(id)}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        const resJson = await res.json();
+                        if (resJson?.lead) updatedData = resJson.lead;
+                    }
+                } catch (_) {}
 
-                if (error) throw error;
+                if (!updatedData) {
+                    const { data, error } = await window.supabaseClient
+                        .from('crm_leads')
+                        .update(payload)
+                        .eq('id', id)
+                        .eq('user_id', session.user.id)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    updatedData = data;
+                }
+
                 const idx = state.leads.findIndex(l => l.id === id);
-                if (idx !== -1) state.leads[idx] = data;
+                if (idx !== -1 && updatedData) {
+                    state.leads[idx] = { ...state.leads[idx], ...updatedData };
+                }
                 if (typeof window.showToast === 'function') window.showToast('Lead updated successfully!');
             } else {
-                // Create
+                // Create new lead
                 payload.created_at = new Date().toISOString();
-                const { data, error } = await window.supabaseClient
-                    .from('crm_leads')
-                    .insert(payload)
-                    .select()
-                    .single();
-
-                if (error) throw error;
-                state.leads.unshift(data);
-
-                // Log creation activity
-                await window.supabaseClient
-                    .from('crm_activities')
-                    .insert({
-                        user_id: session.user.id,
-                        lead_id: data.id,
-                        type: 'note',
-                        description: `Lead created with initial stage: ${data.stage}`
+                let createdData = null;
+                try {
+                    const res = await fetch('/api/crm/leads', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
+                        body: JSON.stringify(payload)
                     });
+                    if (res.ok) {
+                        const resJson = await res.json();
+                        if (resJson?.lead) createdData = resJson.lead;
+                    }
+                } catch (_) {}
+
+                if (!createdData) {
+                    const { data, error } = await window.supabaseClient
+                        .from('crm_leads')
+                        .insert(payload)
+                        .select()
+                        .single();
+                    if (error) throw error;
+                    createdData = data;
+                }
+
+                if (createdData) {
+                    state.leads.unshift(createdData);
+                    await window.supabaseClient
+                        .from('crm_activities')
+                        .insert({
+                            user_id: session.user.id,
+                            lead_id: createdData.id,
+                            type: 'note',
+                            description: `Lead created with initial stage: ${createdData.stage}`
+                        }).catch(() => {});
+                }
 
                 if (typeof window.showToast === 'function') window.showToast('Lead created successfully!');
             }
@@ -677,13 +737,24 @@
         if (!session?.user?.id) return;
 
         try {
-            const { error } = await window.supabaseClient
-                .from('crm_leads')
-                .delete()
-                .eq('id', leadId)
-                .eq('user_id', session.user.id);
+            let deleted = false;
+            try {
+                const res = await fetch(`/api/crm/leads/${encodeURIComponent(leadId)}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (res.ok) deleted = true;
+            } catch (_) {}
 
-            if (error) throw error;
+            if (!deleted) {
+                const { error } = await window.supabaseClient
+                    .from('crm_leads')
+                    .delete()
+                    .eq('id', leadId)
+                    .eq('user_id', session.user.id);
+                if (error) throw error;
+            }
+
             state.leads = state.leads.filter(l => l.id !== leadId);
             if (state.selectedLeadId === leadId) closeLeadDrawer();
             renderAll();
@@ -751,7 +822,6 @@
 
                 for (let i = 1; i < lines.length; i++) {
                     const rowText = lines[i];
-                    // Simple CSV split matching quoted strings
                     const values = rowText.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || rowText.split(',');
                     const cleanValues = values.map(v => v ? v.trim().replace(/^"|"$/g, '').replace(/""/g, '"') : '');
 
@@ -786,7 +856,6 @@
                     return;
                 }
 
-                // Enforce Free tier cap on import
                 let leadsToInsert = newLeads;
                 let capReached = false;
                 if (!isPaidPlan()) {
@@ -838,7 +907,7 @@
         reader.readAsText(file);
     }
 
-    // Lead Detail Drawer
+    // Lead Detail Drawer - Strict open/close state handling
     async function openLeadDrawer(leadId) {
         const lead = state.leads.find(l => l.id === leadId);
         if (!lead) return;
@@ -884,19 +953,20 @@
             drawerNotes.textContent = lead.notes || 'No notes added yet.';
         }
 
-        // AI Score & Strategy Box
         renderAiStrategyBox(lead);
-
-        // Timeline
         await renderDrawerTimeline(leadId);
 
         if (leadDrawer) {
-            leadDrawer.classList.add('open');
             leadDrawer.hidden = false;
+            leadDrawer.removeAttribute('hidden');
+            leadDrawer.classList.add('open');
+            leadDrawer.setAttribute('aria-hidden', 'false');
         }
         if (drawerBackdrop) {
-            drawerBackdrop.classList.add('open');
             drawerBackdrop.hidden = false;
+            drawerBackdrop.removeAttribute('hidden');
+            drawerBackdrop.classList.add('open');
+            drawerBackdrop.setAttribute('aria-hidden', 'false');
         }
     }
 
@@ -904,10 +974,14 @@
         state.selectedLeadId = null;
         if (leadDrawer) {
             leadDrawer.classList.remove('open');
+            leadDrawer.setAttribute('aria-hidden', 'true');
+            leadDrawer.setAttribute('hidden', '');
             leadDrawer.hidden = true;
         }
         if (drawerBackdrop) {
             drawerBackdrop.classList.remove('open');
+            drawerBackdrop.setAttribute('aria-hidden', 'true');
+            drawerBackdrop.setAttribute('hidden', '');
             drawerBackdrop.hidden = true;
         }
     }
@@ -916,6 +990,7 @@
         if (!drawerAiScoreBox) return;
         if (lead.lead_score !== null && lead.lead_score !== undefined) {
             drawerAiScoreBox.hidden = false;
+            drawerAiScoreBox.removeAttribute('hidden');
             if (drawerAiScoreValue) drawerAiScoreValue.textContent = String(lead.lead_score);
             if (drawerAiLikelihood) {
                 const likelihood = lead.lead_score >= 70 ? 'High Likelihood' : lead.lead_score >= 40 ? 'Medium Likelihood' : 'Low Likelihood';
@@ -927,6 +1002,7 @@
             }
         } else {
             drawerAiScoreBox.hidden = true;
+            drawerAiScoreBox.setAttribute('hidden', '');
         }
     }
 
@@ -989,7 +1065,10 @@
         if (!note) return;
 
         const session = await getSession();
-        if (!session?.user?.id) return;
+        if (!session?.user?.id) {
+            if (typeof window.openAuthModal === 'function') window.openAuthModal('signup');
+            return;
+        }
 
         drawerAddNoteBtn.disabled = true;
         try {
@@ -1031,7 +1110,7 @@
             drawerAiScoreBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> <span>Scoring Lead…</span>';
         }
 
-        const requestId = window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2));
+        const requestId = generateUuid();
 
         try {
             const res = await fetch('/api/crm/score', {
@@ -1066,9 +1145,11 @@
                 throw new Error(data?.error || 'AI scoring request failed.');
             }
 
-            // Update lead state
             lead.lead_score = data.lead_score;
             lead.ai_summary = data.summary;
+            if (data.suggested_outreach_angle) {
+                lead.suggested_outreach_angle = data.suggested_outreach_angle;
+            }
 
             // Immediately update credits in UI
             if (typeof data.remaining_credits === 'number') {
@@ -1101,7 +1182,7 @@
         }
     }
 
-    // Shortcut: Draft Outreach Email
+    // Shortcut: Draft Outreach Email -> Handoff to Email & Outreach AI
     function handleDraftOutreachShortcut() {
         const leadId = state.selectedLeadId;
         const lead = state.leads.find(l => l.id === leadId);
@@ -1110,6 +1191,10 @@
         closeLeadDrawer();
         if (typeof window.JEVEXA_STUDIO?.openOutreach === 'function') {
             window.JEVEXA_STUDIO.openOutreach(lead);
+        } else if (typeof window.openOutreachWorkspace === 'function') {
+            window.openOutreachWorkspace(true, lead);
+        } else if (typeof window.JEVEXA_OUTREACH?.prefillLead === 'function') {
+            window.JEVEXA_OUTREACH.prefillLead(lead);
         } else if (typeof window.JEVEXA_OUTREACH?.openWithLead === 'function') {
             window.JEVEXA_OUTREACH.openWithLead(lead);
         }
@@ -1117,7 +1202,27 @@
 
     // Initialize event listeners
     function initEvents() {
-        // View toggle
+        // Ensure starting closed
+        closeLeadModal();
+        closeLeadDrawer();
+
+        // Workspace back / close buttons
+        bindSafe(backBtn, 'click', () => {
+            closeLeadModal();
+            closeLeadDrawer();
+            if (typeof window.returnToStudio === 'function') {
+                window.returnToStudio();
+            }
+        });
+        bindSafe(closeBtn, 'click', () => {
+            closeLeadModal();
+            closeLeadDrawer();
+            if (typeof window.returnToStudio === 'function') {
+                window.returnToStudio();
+            }
+        });
+
+        // View switcher
         bindSafe(viewKanbanBtn, 'click', () => {
             state.activeView = 'kanban';
             viewKanbanBtn?.classList.add('active');
@@ -1145,10 +1250,16 @@
             renderAll();
         });
 
-        // Add lead & Modals
+        // Add lead & Modal handlers
         bindSafe(addLeadBtn, 'click', () => openLeadModal());
         bindSafe(leadModalCloseBtn, 'click', closeLeadModal);
         bindSafe(leadModalCancelBtn, 'click', closeLeadModal);
+        bindSafe(leadModal, 'click', (e) => {
+            if (e.target === leadModal) {
+                e.preventDefault();
+                closeLeadModal();
+            }
+        });
         bindSafe(leadForm, 'submit', handleLeadFormSubmit);
 
         // CSV Export & Import
@@ -1167,7 +1278,7 @@
             }
         });
 
-        // Drawer
+        // Drawer handlers
         bindSafe(drawerCloseBtn, 'click', closeLeadDrawer);
         bindSafe(drawerBackdrop, 'click', closeLeadDrawer);
         bindSafe(drawerAddNoteBtn, 'click', handleAddNote);
@@ -1184,12 +1295,19 @@
             if (state.selectedLeadId) deleteLead(state.selectedLeadId);
         });
 
-        // Escape key to close modal/drawer
+        // Escape key to close modal/drawer safely with event propagation stopped
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                if (leadModal && leadModal.classList.contains('open')) {
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                const isModalOpen = leadModal && (!leadModal.hidden || leadModal.classList.contains('open'));
+                const isDrawerOpen = leadDrawer && (!leadDrawer.hidden || leadDrawer.classList.contains('open'));
+
+                if (isModalOpen) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
                     closeLeadModal();
-                } else if (leadDrawer && leadDrawer.classList.contains('open')) {
+                } else if (isDrawerOpen) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
                     closeLeadDrawer();
                 }
             }
@@ -1200,7 +1318,9 @@
     window.JEVEXA_CRM = {
         fetchLeads,
         openLeadDrawer,
+        closeLeadDrawer,
         openLeadModal,
+        closeLeadModal,
         deleteLead,
         exportCsv,
         getLeads: () => state.leads

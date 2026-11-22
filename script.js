@@ -4364,9 +4364,13 @@ const JEVEXA_PLANS = {
             outreachWorkspace.setAttribute('aria-hidden', 'false');
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_OUTREACH?.init();
-            if (lead && window.JEVEXA_OUTREACH?.prefillLead) {
-                window.JEVEXA_OUTREACH.prefillLead(lead);
+            window.JEVEXA_OUTREACH?.init?.();
+            if (lead) {
+                if (typeof window.JEVEXA_OUTREACH?.prefillLead === 'function') {
+                    window.JEVEXA_OUTREACH.prefillLead(lead);
+                } else if (typeof window.JEVEXA_OUTREACH?.openWithLead === 'function') {
+                    window.JEVEXA_OUTREACH.openWithLead(lead);
+                }
             }
         }
         if (pushState) {
@@ -4657,7 +4661,15 @@ const JEVEXA_PLANS = {
 
     // Keyboard ESC handler
     document.addEventListener('keydown', event => {
-        if (event.key === 'Escape') {
+        if (event.key === 'Escape' || event.key === 'Esc') {
+            const hasActiveInnerModal = document.querySelector(
+                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, .crm-lead-drawer.open, .upgrade-modal.open, .auth-modal.open'
+            );
+            const activeModalOrDrawer = hasActiveInnerModal;
+            if (activeModalOrDrawer) {
+                // An inner modal or drawer is open; let its dedicated handler dismiss it without closing the entire workspace
+                return;
+            }
             if (comingSoonModal && (!comingSoonModal.hidden || comingSoonModal.classList.contains('is-open') || comingSoonModal.classList.contains('open') || comingSoonModal.style.display === 'flex')) {
                 event.preventDefault();
                 closeComingSoonModal();

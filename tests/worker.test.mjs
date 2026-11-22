@@ -5793,3 +5793,171 @@ test("mini crm and email & outreach ai workspaces are fully configured, live, an
   assert.match(styles, /\.outreach-workspace-grid/);
   assert.match(styles, /\.outreach-email-card/);
 });
+
+test("Mini CRM and Outreach: Modal, drawer, backdrop, cancel, and Escape key isolation", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const crmJs = await readFile(new URL("../crm.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+
+  // 1. Modals and drawers start hidden on initial page load
+  assert.match(html, /<div[^>]*class="[^"]*crm-modal-backdrop[^"]*"[^>]*id="crmLeadModal"[^>]*hidden/);
+  assert.match(html, /<aside[^>]*class="[^"]*crm-lead-drawer[^"]*"[^>]*id="crmLeadDrawer"[^>]*hidden/);
+  assert.match(html, /<div[^>]*class="[^"]*crm-drawer-backdrop[^"]*"[^>]*id="crmDrawerBackdrop"[^>]*hidden/);
+  assert.match(html, /<aside[^>]*class="[^"]*crm-lead-drawer[^"]*"[^>]*id="outreachHistoryDrawer"[^>]*hidden/);
+  assert.match(html, /<div[^>]*class="[^"]*crm-drawer-backdrop[^"]*"[^>]*id="outreachHistoryBackdrop"[^>]*hidden/);
+
+  // 2. CRM close handlers: Cancel button, × button, backdrop click
+  assert.match(crmJs, /bindSafe\(leadModalCancelBtn,\s*['"]click['"],\s*closeLeadModal\)/);
+  assert.match(crmJs, /bindSafe\(leadModalCloseBtn,\s*['"]click['"],\s*closeLeadModal\)/);
+  assert.match(crmJs, /if\s*\(e\.target\s*===\s*leadModal\)/);
+  assert.match(crmJs, /bindSafe\(drawerCloseBtn,\s*['"]click['"],\s*closeLeadDrawer\)/);
+  assert.match(crmJs, /bindSafe\(drawerBackdrop,\s*['"]click['"],\s*closeLeadDrawer\)/);
+
+  // 3. CRM Escape key isolation with stopImmediatePropagation
+  assert.match(crmJs, /document\.addEventListener\(['"]keydown['"],\s*\(e\)\s*=>\s*\{[\s\S]*?e\.stopImmediatePropagation\(\);[\s\S]*?closeLeadModal\(\)/);
+  assert.match(crmJs, /closeLeadModal\(\)/);
+  assert.match(crmJs, /closeLeadDrawer\(\)/);
+
+  // 4. Outreach close handlers & Escape key isolation
+  assert.match(outreachJs, /bindSafe\(historyCloseBtn,\s*['"]click['"],\s*closeHistoryDrawer\)/);
+  assert.match(outreachJs, /bindSafe\(historyBackdrop,\s*['"]click['"],\s*closeHistoryDrawer\)/);
+  assert.match(outreachJs, /document\.addEventListener\(['"]keydown['"],\s*\(e\)\s*=>\s*\{[\s\S]*?e\.stopImmediatePropagation\(\);[\s\S]*?closeHistoryDrawer\(\)/);
+  assert.match(outreachJs, /closeHistoryDrawer\(\)/);
+
+  // 5. Global Escape handler in script.js protects open inner modals/drawers from premature workspace exit
+  assert.match(script, /hasActiveInnerModal|activeModalOrDrawer/);
+  assert.match(script, /\.crm-modal-backdrop\.open|#crmLeadModal:not\(\[hidden\]\)/);
+  assert.match(script, /#crmLeadDrawer\.open/);
+  assert.match(script, /#outreachHistoryDrawer\.open/);
+});
+
+test("Mini CRM and Outreach: Dark glassmorphic aesthetic, form control styling, and responsive layout", async () => {
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. Dark glassmorphic container styling (#070b14, rgba(15, 23, 42, 0.88/0.94), borders)
+  assert.match(styles, /#crmWorkspace,\s*#outreachWorkspace\s*\{[\s\S]*?background:\s*#070b14/);
+  assert.match(styles, /\.crm-workspace-container\s*\{[\s\S]*?max-width:\s*1600px/);
+  assert.match(styles, /\.crm-modal-card\s*\{/);
+  assert.match(styles, /\.crm-lead-drawer\s*\{/);
+
+  // 2. Dark cohesive form controls (no raw white browser inputs)
+  assert.match(styles, /\.crm-lead-form\s*input/);
+  assert.match(styles, /\.outreach-form\s*input/);
+  assert.match(styles, /\.crm-lead-form input[\s\S]*?background:\s*rgba\(15,\s*23,\s*42/);
+
+  // 3. Kanban & Table views
+  assert.match(styles, /\.crm-kanban-board\s*\{[\s\S]*?display:\s*grid/);
+  assert.match(styles, /\.crm-kanban-col/);
+  assert.match(styles, /\.crm-kanban-card/);
+  assert.match(styles, /\.crm-table-wrapper\s*\{[\s\S]*?overflow-x:\s*auto/);
+  assert.match(styles, /\.crm-table\s*th/);
+
+  // 4. Outreach widescreen layout & step tabs
+  assert.match(styles, /\.outreach-workspace-grid\s*\{[\s\S]*?display:\s*grid/);
+  assert.match(styles, /\.outreach-step-tabs\s*\{[\s\S]*?display:\s*flex/);
+  assert.match(styles, /\.outreach-step-tab\.active/);
+});
+
+test("Mini CRM & Outreach: End-to-end CRM workflows (50-lead cap, AI scoring, CSV import/export, pipeline stages, outreach handoff)", async () => {
+  const crmJs = await readFile(new URL("../crm.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // 1. Free tier 50-lead limit and upgrade modal trigger
+  assert.match(crmJs, /maxFreeLeads:\s*50/);
+  assert.match(crmJs, /JEVEXA_SHOW_UPGRADE_MODAL/);
+  assert.match(crmJs, /Free (?:plan|tier) limit reached/i);
+
+  // 2. Add / Edit / Delete lead workflows
+  assert.match(crmJs, /function handleLeadFormSubmit/);
+  assert.match(crmJs, /function deleteLead\(leadId\)/);
+  assert.match(crmJs, /function openLeadModal\(/);
+  assert.match(crmJs, /bindSafe\(leadForm,\s*['"]submit['"],\s*handleLeadFormSubmit\)/);
+
+  // 3. Pipeline stage transitions
+  assert.match(crmJs, /function updateLeadStage\(leadId,\s*newStage\)/);
+  assert.match(crmJs, /STAGES\s*=\s*\[['"]New['"],\s*['"]Contacted['"]/);
+
+  // 4. View toggles & search filter
+  assert.match(crmJs, /bindSafe\(viewKanbanBtn,\s*['"]click['"]/);
+  assert.match(crmJs, /bindSafe\(viewTableBtn,\s*['"]click['"]/);
+  assert.match(crmJs, /bindSafe\(searchInput,\s*['"]input['"]/);
+  assert.match(crmJs, /bindSafe\(stageFilter,\s*['"]change['"]/);
+
+  // 5. CSV import and CSV export
+  assert.match(crmJs, /function exportCsv\(\)/);
+  assert.match(crmJs, /function handleCsvImport\(file\)/);
+  assert.match(crmJs, /text\/csv;charset=utf-8/);
+
+  // 6. AI lead scoring with credit balance sync
+  assert.match(crmJs, /function handleAiScore\(\)/);
+  assert.match(crmJs, /\/api\/crm\/score/);
+  assert.match(crmJs, /JEVEXA_UPDATE_CREDIT_BALANCE/);
+
+  // 7. Outreach handoff from lead drawer
+  assert.match(crmJs, /drawerDraftOutreachBtn/);
+  assert.match(crmJs, /window\.JEVEXA_STUDIO(?:\?\.|\.)openOutreach\(lead\)/);
+  assert.match(scriptJs, /openOutreach:\s*\(lead\)\s*=>\s*openOutreachWorkspace\(true,\s*lead\)/);
+});
+
+test("Mini CRM & Outreach: End-to-end Outreach workflows (3-step sequences, Gmail compose, CRM sync, editable fields, history drawer)", async () => {
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // 1. CRM Lead Prefill interface
+  assert.match(outreachJs, /function prefillLead\(lead\)/);
+  assert.match(outreachJs, /prefillLead:\s*prefillLead/);
+  assert.match(outreachJs, /openWithLead:\s*prefillLead/);
+  assert.match(scriptJs, /window\.JEVEXA_OUTREACH(?:\?\.|\.)prefillLead\(lead\)/);
+
+  // 2. 3-step sequence tabs and live editing synchronization
+  assert.match(outreachJs, /function switchStep\(step/);
+  assert.match(outreachJs, /emailSubjectInput\.addEventListener\(['"]input['"]/);
+  assert.match(outreachJs, /emailBodyInput\.addEventListener\(['"]input['"]/);
+  assert.match(outreachJs, /state\.currentSequence/);
+
+  // 3. A/B Alternative subject line toggle
+  assert.match(outreachJs, /abSubjectToggleBtn/);
+  assert.match(outreachJs, /state\.useAlternativeSubject/);
+
+  // 4. 1-Click Open in Gmail and Copy action
+  assert.match(outreachJs, /https:\/\/mail\.google\.com\/mail\/\?view=cm&fs=1&to=/);
+  assert.match(outreachJs, /navigator\.clipboard\.writeText/);
+  assert.match(outreachJs, /copied to clipboard/i);
+
+  // 5. Mark as Sent & Sync CRM
+  assert.match(outreachJs, /function handleSyncCrm\(\)/);
+  assert.match(outreachJs, /status:\s*['"]Sent['"]/);
+  assert.match(outreachJs, /sync_crm:\s*true/);
+  assert.match(outreachJs, /window\.JEVEXA_CRM(?:\?\.|\.)fetchLeads\(\)/);
+
+  // 6. Saved sequences history drawer
+  assert.match(outreachJs, /function openHistoryDrawer\(\)/);
+  assert.match(outreachJs, /function loadSequenceInto(?:Workspace|Editor)\(seq\)/);
+  assert.match(outreachJs, /\/api\/outreach\/sequences/);
+});
+
+test("Worker Credit Metering & Fallback: Robust CRM scoring and Outreach generation without tier pricing errors", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // 1. CRM Score Fallback cascade & pricing resilience
+  assert.match(workerJs, /const needsCrmFallback = !reservationResponse\.ok \|\| \(reservation && !reservation\.ok && reservation\.error !== "insufficient_credits"/);
+  assert.match(workerJs, /p_service:\s*"ai_chat"/);
+  assert.match(workerJs, /const needsDirectCrmFallback = !reservationResponse\.ok \|\| \(reservation && !reservation\.ok/);
+  assert.match(workerJs, /fallbackDirect:\s*true/);
+
+  // 2. Outreach Fallback cascade & pricing resilience
+  assert.match(workerJs, /const needsOutreachFallback = !reservationResponse\.ok \|\| \(reservation && !reservation\.ok && reservation\.error !== "insufficient_credits"/);
+  assert.match(workerJs, /const needsDirectOutreachFallback = !reservationResponse\.ok \|\| \(reservation && !reservation\.ok/);
+
+  // 3. Multi-provider priority order: Gemini -> Groq -> OpenRouter
+  assert.match(workerJs, /const primaryIsGroq = env\?\.AI_PRIMARY_PROVIDER === "groq";/);
+  assert.match(workerJs, /if \(!primaryIsGroq && geminiApiKey\) \{[\s\S]*?await executeGemini\(\);[\s\S]*?if \(!executionSuccess\) await executeGroq\(\);[\s\S]*?if \(!executionSuccess\) await executeOpenRouter\(\);/);
+
+  // 4. API keys check accounts for OpenRouter
+  assert.match(workerJs, /if \(!geminiApiKey && !groqApiKey && !openRouterApiKey\) \{/);
+
+  // 5. Idempotent settlement and profile balance synchronization
+  assert.match(workerJs, /await callCreditRpc\(cfg,\s*"jevexa_credit_settle"/);
+  assert.match(workerJs, /await syncUserCreditsAndProfile\(cfg,\s*user\.id,\s*remainingCredits\)/);
+});

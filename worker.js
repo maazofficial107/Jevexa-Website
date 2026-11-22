@@ -2843,7 +2843,7 @@ async function handleCrmScore(request, env) {
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
   const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
   const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
-  if (!geminiApiKey && !groqApiKey) {
+  if (!geminiApiKey && !groqApiKey && !openRouterApiKey) {
     return json({
       error: "AI service is currently being configured. Please contact JEVEXA Support."
     }, 503);
@@ -2867,7 +2867,8 @@ async function handleCrmScore(request, env) {
     }, 503);
   }
 
-  if (!reservationResponse.ok) {
+  const needsCrmFallback = !reservationResponse.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
+  if (needsCrmFallback) {
     try {
       const fallbackResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
         p_user_id: user.id,
@@ -2876,7 +2877,7 @@ async function handleCrmScore(request, env) {
         p_estimated_tokens: parsed.estimatedTokens
       });
       const fallbackReservation = await readJsonResponse(fallbackResponse);
-      if (fallbackResponse.ok && fallbackReservation?.ok) {
+      if (fallbackResponse.ok && (fallbackReservation?.ok || fallbackReservation?.error === "insufficient_credits" || fallbackReservation?.error === "rate_limited" || fallbackReservation?.duplicate)) {
         reservationResponse = fallbackResponse;
         reservation = fallbackReservation;
       }
@@ -2885,7 +2886,8 @@ async function handleCrmScore(request, env) {
     }
   }
 
-  if (!reservationResponse.ok) {
+  const needsDirectCrmFallback = !reservationResponse.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
+  if (needsDirectCrmFallback) {
     try {
       const balRes = await sbRequest(
         cfg,
@@ -3083,8 +3085,8 @@ async function handleCrmScore(request, env) {
     return false;
   };
 
-  const primaryIsGemini = env?.AI_PRIMARY_PROVIDER === "gemini";
-  if (primaryIsGemini) {
+  const primaryIsGroq = env?.AI_PRIMARY_PROVIDER === "groq";
+  if (!primaryIsGroq && geminiApiKey) {
     await executeGemini();
     if (!executionSuccess) await executeGroq();
     if (!executionSuccess) await executeOpenRouter();
@@ -3244,7 +3246,7 @@ async function handleOutreachGenerate(request, env) {
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
   const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
   const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
-  if (!geminiApiKey && !groqApiKey) {
+  if (!geminiApiKey && !groqApiKey && !openRouterApiKey) {
     return json({
       error: "AI service is currently being configured. Please contact JEVEXA Support."
     }, 503);
@@ -3268,7 +3270,8 @@ async function handleOutreachGenerate(request, env) {
     }, 503);
   }
 
-  if (!reservationResponse.ok) {
+  const needsOutreachFallback = !reservationResponse.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
+  if (needsOutreachFallback) {
     try {
       const fallbackResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
         p_user_id: user.id,
@@ -3277,7 +3280,7 @@ async function handleOutreachGenerate(request, env) {
         p_estimated_tokens: parsed.estimatedTokens
       });
       const fallbackReservation = await readJsonResponse(fallbackResponse);
-      if (fallbackResponse.ok && fallbackReservation?.ok) {
+      if (fallbackResponse.ok && (fallbackReservation?.ok || fallbackReservation?.error === "insufficient_credits" || fallbackReservation?.error === "rate_limited" || fallbackReservation?.duplicate)) {
         reservationResponse = fallbackResponse;
         reservation = fallbackReservation;
       }
@@ -3286,7 +3289,8 @@ async function handleOutreachGenerate(request, env) {
     }
   }
 
-  if (!reservationResponse.ok) {
+  const needsDirectOutreachFallback = !reservationResponse.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
+  if (needsDirectOutreachFallback) {
     try {
       const balRes = await sbRequest(
         cfg,
@@ -3484,8 +3488,8 @@ async function handleOutreachGenerate(request, env) {
     return false;
   };
 
-  const primaryIsGemini = env?.AI_PRIMARY_PROVIDER === "gemini";
-  if (primaryIsGemini) {
+  const primaryIsGroq = env?.AI_PRIMARY_PROVIDER === "groq";
+  if (!primaryIsGroq && geminiApiKey) {
     await executeGemini();
     if (!executionSuccess) await executeGroq();
     if (!executionSuccess) await executeOpenRouter();

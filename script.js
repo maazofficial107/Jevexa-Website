@@ -4076,11 +4076,11 @@ const JEVEXA_PLANS = {
             shortName: 'Outreach AI',
             tagline: 'Personalized cold outreach sequences, follow-ups, and inbox automation.',
             icon: 'fas fa-envelope-open-text',
-            status: 'coming_soon',
-            route: '/tools/email-outreach',
-            badge: 'COMING SOON',
-            badgeType: 'locked',
-            actionText: 'Click for release info'
+            status: 'live',
+            route: '/tools/outreach',
+            badge: 'LIVE NOW',
+            badgeType: 'live',
+            actionText: 'Open Workspace'
         },
         {
             id: 'crm',
@@ -4088,11 +4088,11 @@ const JEVEXA_PLANS = {
             shortName: 'Mini CRM',
             tagline: 'Pipeline deal tracking, contact timeline history, and lead scoring.',
             icon: 'fas fa-address-book',
-            status: 'coming_soon',
+            status: 'live',
             route: '/tools/crm',
-            badge: 'COMING SOON',
-            badgeType: 'locked',
-            actionText: 'Click for release info'
+            badge: 'LIVE NOW',
+            badgeType: 'live',
+            actionText: 'Open Workspace'
         },
         {
             id: 'ocr',
@@ -4172,6 +4172,8 @@ const JEVEXA_PLANS = {
     // DOM Elements
     const contentWorkspace = document.getElementById('contentWorkspace');
     const chatbotWindow = document.getElementById('chatbotWindow');
+    const crmWorkspace = document.getElementById('crmWorkspace');
+    const outreachWorkspace = document.getElementById('outreachWorkspace');
     const comingSoonModal = document.getElementById('comingSoonModal');
     const topicTextarea = document.getElementById('contentTopic');
     const charCountDisplay = document.getElementById('contentCharCount');
@@ -4250,6 +4252,8 @@ const JEVEXA_PLANS = {
     // Workspaces Control
     function openChatWorkspace(pushState = true) {
         closeContentWorkspace(false);
+        closeCrmWorkspace(false);
+        closeOutreachWorkspace(false);
         closeComingSoonModal();
         try {
             localStorage.setItem('jevexa_last_workspace', 'chatbot');
@@ -4290,6 +4294,8 @@ const JEVEXA_PLANS = {
 
     function openContentWorkspace(pushState = true) {
         closeChatWorkspace(false);
+        closeCrmWorkspace(false);
+        closeOutreachWorkspace(false);
         closeComingSoonModal();
         if (contentWorkspace) {
             contentWorkspace.hidden = false;
@@ -4317,9 +4323,74 @@ const JEVEXA_PLANS = {
         }
     }
 
+    function openCrmWorkspace(pushState = true) {
+        closeChatWorkspace(false);
+        closeContentWorkspace(false);
+        closeOutreachWorkspace(false);
+        closeComingSoonModal();
+        if (crmWorkspace) {
+            crmWorkspace.hidden = false;
+            crmWorkspace.classList.add('open');
+            crmWorkspace.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('workspace-open');
+            syncWorkspaceCredits();
+            window.JEVEXA_CRM?.fetchLeads();
+        }
+        if (pushState) {
+            navigateToRoute('/tools/crm');
+        }
+    }
+
+    function closeCrmWorkspace(pushState = true) {
+        if (crmWorkspace) {
+            crmWorkspace.classList.remove('open');
+            crmWorkspace.setAttribute('aria-hidden', 'true');
+            crmWorkspace.hidden = true;
+            document.body.classList.remove('workspace-open');
+        }
+        if (pushState) {
+            returnToStudio();
+        }
+    }
+
+    function openOutreachWorkspace(pushState = true, lead = null) {
+        closeChatWorkspace(false);
+        closeContentWorkspace(false);
+        closeCrmWorkspace(false);
+        closeComingSoonModal();
+        if (outreachWorkspace) {
+            outreachWorkspace.hidden = false;
+            outreachWorkspace.classList.add('open');
+            outreachWorkspace.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('workspace-open');
+            syncWorkspaceCredits();
+            window.JEVEXA_OUTREACH?.init();
+            if (lead && window.JEVEXA_OUTREACH?.prefillLead) {
+                window.JEVEXA_OUTREACH.prefillLead(lead);
+            }
+        }
+        if (pushState) {
+            navigateToRoute('/tools/outreach');
+        }
+    }
+
+    function closeOutreachWorkspace(pushState = true) {
+        if (outreachWorkspace) {
+            outreachWorkspace.classList.remove('open');
+            outreachWorkspace.setAttribute('aria-hidden', 'true');
+            outreachWorkspace.hidden = true;
+            document.body.classList.remove('workspace-open');
+        }
+        if (pushState) {
+            returnToStudio();
+        }
+    }
+
     function returnToStudio() {
         closeChatWorkspace(false);
         closeContentWorkspace(false);
+        closeCrmWorkspace(false);
+        closeOutreachWorkspace(false);
         closeComingSoonModal();
         const currentPath = window.location.pathname;
         const currentHash = window.location.hash;
@@ -4358,6 +4429,8 @@ const JEVEXA_PLANS = {
             if (targetEl) {
                 closeChatWorkspace(false);
                 closeContentWorkspace(false);
+                closeCrmWorkspace(false);
+                closeOutreachWorkspace(false);
                 closeComingSoonModal();
                 if (path.startsWith('/tools')) {
                     try {
@@ -4376,6 +4449,8 @@ const JEVEXA_PLANS = {
             if (pricingEl) {
                 closeChatWorkspace(false);
                 closeContentWorkspace(false);
+                closeCrmWorkspace(false);
+                closeOutreachWorkspace(false);
                 closeComingSoonModal();
                 setTimeout(() => {
                     pricingEl.scrollIntoView({ behavior: 'smooth' });
@@ -4390,13 +4465,19 @@ const JEVEXA_PLANS = {
             openChatWorkspace(false);
         } else if (cleanPath === '/tools/content-generator' || cleanPath === '/tools/content' || cleanHash === '#/tools/content-generator' || cleanHash === '#/tools/content') {
             openContentWorkspace(false);
+        } else if (cleanPath === '/tools/crm' || cleanHash === '#/tools/crm') {
+            openCrmWorkspace(false);
+        } else if (cleanPath === '/tools/outreach' || cleanPath === '/tools/email-outreach' || cleanHash === '#/tools/outreach' || cleanHash === '#/tools/email-outreach') {
+            openOutreachWorkspace(false);
         } else if (cleanPath.startsWith('/tools/') || cleanHash.startsWith('#/tools/')) {
             const rawId = cleanPath.replace(/^\/tools\//, '') || cleanHash.replace(/^#\/tools\//, '');
-            const toolId = (rawId === 'content' ? 'content-generator' : rawId);
+            const toolId = (rawId === 'content' ? 'content-generator' : (rawId === 'outreach' ? 'email-outreach' : rawId));
             const tool = toolsConfig.find(t => t.id === toolId || t.route === cleanPath || t.route === cleanHash.replace(/^#/, ''));
             if (tool && tool.status === 'live') {
                 if (tool.id === 'chatbot') openChatWorkspace(false);
                 else if (tool.id === 'content-generator') openContentWorkspace(false);
+                else if (tool.id === 'crm') openCrmWorkspace(false);
+                else if (tool.id === 'email-outreach') openOutreachWorkspace(false);
             } else if (tool && tool.status === 'coming_soon') {
                 returnToStudio();
                 showComingSoonPopup(tool.name);
@@ -4410,6 +4491,8 @@ const JEVEXA_PLANS = {
     window.JEVEXA_STUDIO = {
         openChat: () => openChatWorkspace(true),
         openContent: () => openContentWorkspace(true),
+        openCrm: () => openCrmWorkspace(true),
+        openOutreach: (lead) => openOutreachWorkspace(true, lead),
         closeWorkspaces: returnToStudio,
         showComingSoon: showComingSoonPopup,
         closeComingSoon: closeComingSoonModal,
@@ -4424,10 +4507,25 @@ const JEVEXA_PLANS = {
 
         const handleCardAction = () => {
             if (status === 'live' || tool?.status === 'live') {
+                if (toolId === 'crm' || toolId === 'email-outreach') {
+                    if (!currentUser) {
+                        if (typeof showToast === 'function') {
+                            showToast('Please sign in or create an account to access ' + (tool?.name || 'this workspace') + '.');
+                        }
+                        if (typeof openAuthModal === 'function') {
+                            openAuthModal('signup');
+                        }
+                        return;
+                    }
+                }
                 if (toolId === 'chatbot') {
                     openChatWorkspace(true);
                 } else if (toolId === 'content-generator') {
                     openContentWorkspace(true);
+                } else if (toolId === 'crm') {
+                    openCrmWorkspace(true);
+                } else if (toolId === 'email-outreach') {
+                    openOutreachWorkspace(true);
                 }
             } else {
                 showComingSoonPopup(tool?.name || card.querySelector('.tool-card-title')?.textContent?.trim());
@@ -4472,10 +4570,37 @@ const JEVEXA_PLANS = {
     bindAction(document.getElementById('chatBackToStudio'), 'click', () => returnToStudio());
     bindAction(document.getElementById('contentBackToStudio'), 'click', () => returnToStudio());
     bindAction(document.getElementById('contentWorkspaceClose'), 'click', () => returnToStudio());
+    bindAction(document.getElementById('crmBackToStudio'), 'click', () => returnToStudio());
+    bindAction(document.getElementById('crmWorkspaceClose'), 'click', () => returnToStudio());
+    bindAction(document.getElementById('outreachBackToStudio'), 'click', () => returnToStudio());
+    bindAction(document.getElementById('outreachWorkspaceClose'), 'click', () => returnToStudio());
+
     document.querySelectorAll('.content-tool-link').forEach(link => {
         bindAction(link, 'click', (event) => {
             event.preventDefault();
             openContentWorkspace(true);
+        });
+    });
+    document.querySelectorAll('.crm-tool-link').forEach(link => {
+        bindAction(link, 'click', (event) => {
+            event.preventDefault();
+            if (!currentUser) {
+                showToast?.('Please sign in or create an account to open Mini CRM.');
+                openAuthModal?.('signup');
+                return;
+            }
+            openCrmWorkspace(true);
+        });
+    });
+    document.querySelectorAll('.outreach-tool-link').forEach(link => {
+        bindAction(link, 'click', (event) => {
+            event.preventDefault();
+            if (!currentUser) {
+                showToast?.('Please sign in or create an account to open Email & Outreach AI.');
+                openAuthModal?.('signup');
+                return;
+            }
+            openOutreachWorkspace(true);
         });
     });
 
@@ -4536,7 +4661,7 @@ const JEVEXA_PLANS = {
             if (comingSoonModal && (!comingSoonModal.hidden || comingSoonModal.classList.contains('is-open') || comingSoonModal.classList.contains('open') || comingSoonModal.style.display === 'flex')) {
                 event.preventDefault();
                 closeComingSoonModal();
-            } else if (contentWorkspace?.classList.contains('open') || chatbotWindow?.classList.contains('open')) {
+            } else if (contentWorkspace?.classList.contains('open') || chatbotWindow?.classList.contains('open') || crmWorkspace?.classList.contains('open') || outreachWorkspace?.classList.contains('open')) {
                 event.preventDefault();
                 returnToStudio();
             }

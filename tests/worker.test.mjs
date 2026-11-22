@@ -593,7 +593,7 @@ test("credit UI starts without a fabricated balance and displays only persisted 
 test("homepage metrics reflect the staged tool release without fabricating activity", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /data-count="100">0<\/span>[\s\S]*?New Account Grant/);
-  assert.match(html, /data-count="2">0<\/span>[\s\S]*?Live AI Tools/);
+  assert.match(html, /data-count="4">0<\/span>[\s\S]*?Live AI Tools/);
   assert.match(html, /data-count="10">0<\/span>[\s\S]*?AI Tools/);
   assert.match(html, /id="heroFeatureOrbit"/);
   assert.match(html, /AI Chat/);
@@ -1066,8 +1066,8 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(workerSource, /There are 10 tools planned across three releases/);
   assert.doesNotMatch(html, /class="stars"/);
   assert.equal((html.match(/class="feature-card glass tilt-card"/g) || []).length, 10);
-  assert.equal((html.match(/class="service-chip live"/g) || []).length, 2);
-  assert.equal((html.match(/class="service-chip soon"/g) || []).length, 8);
+  assert.equal((html.match(/class="service-chip live"/g) || []).length, 4);
+  assert.equal((html.match(/class="service-chip soon"/g) || []).length, 6);
   assert.equal((html.match(/class="feature-stage-heading"/g) || []).length, 3);
   for (const tool of [
     "AI Chat", "Content Generation", "Email &amp; Outreach AI", "Mini CRM",
@@ -1077,8 +1077,8 @@ test("public copy does not promise unavailable services or fabricate customer ra
     assert.ok(html.includes(tool), `Missing staged tool card: ${tool}`);
   }
   assert.match(html, /AI Chat and Content Generation are live now; the other eight tools roll out in three releases\./);
-  assert.match(html, /<strong>2<\/strong>[\s\S]*?Live AI tools/);
-  assert.match(html, /<strong>8<\/strong>[\s\S]*?Coming Soon/);
+  assert.match(html, /<strong>4<\/strong>[\s\S]*?Live AI tools/);
+  assert.match(html, /<strong>6<\/strong>[\s\S]*?Coming Soon/);
   assert.match(html, /data-pricing-plan="starter"/);
   assert.match(html, /data-pricing-plan="pro"/);
   assert.match(html, /data-pricing-plan="business"/);
@@ -2085,12 +2085,14 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   const toolCards = html.match(/class="tool-launcher-card\s+(tool-live|tool-locked)"/g) || [];
   assert.equal(toolCards.length, 10, "Launcher grid must contain all 10 AI tools");
 
-  // 2 Live Tools
+  // 4 Live Tools
   assert.match(html, /data-tool-id="chatbot"\s+data-status="live"/);
   assert.match(html, /data-tool-id="content-generator"\s+data-status="live"/);
+  assert.match(html, /data-tool-id="email-outreach"\s+data-status="live"/);
+  assert.match(html, /data-tool-id="crm"\s+data-status="live"/);
 
-  // 8 Coming Soon Tools
-  const comingSoonIds = ["email-outreach", "crm", "ocr", "social", "analytics", "admin", "workflows", "data"];
+  // 6 Coming Soon Tools
+  const comingSoonIds = ["ocr", "social", "analytics", "admin", "workflows", "data"];
   for (const id of comingSoonIds) {
     assert.match(html, new RegExp(`data-tool-id="${id}"\\s+data-status="coming_soon"`));
   }
@@ -2102,6 +2104,8 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   assert.match(script, /status:\s*['"]coming_soon['"]/);
   assert.match(script, /route:\s*['"]\/tools\/chatbot['"]/);
   assert.match(script, /route:\s*['"]\/tools\/content-generator['"]/);
+  assert.match(script, /route:\s*['"]\/tools\/crm['"]/);
+  assert.match(script, /route:\s*['"]\/tools\/outreach['"]/);
 
   // Coming Soon alert/toast text
   assert.match(script, /🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon\./);
@@ -5701,4 +5705,91 @@ test("Flagship upgrade: Unclipped sidebar three-dots menu with portal positionin
   // Mobile responsiveness touch target safeguards
   assert.match(styles, /@media\s*\(hover:\s*none\),\s*\(max-width:\s*767px\)\s*\{[\s\S]*?width:\s*32px;/);
   assert.match(styles, /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.chat-menu-item\s*\{[\s\S]*?min-height:\s*40px;/);
+});
+
+test("mini crm and email & outreach ai workspaces are fully configured, live, and integrated", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const crmJs = await readFile(new URL("../crm.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const sql = await readFile(new URL("../supabase/migrations/crm_and_outreach.sql", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. Hub counter & status badges
+  assert.match(html, /4 LIVE NOW • 6 ON ROADMAP/);
+  assert.match(html, /Live \(4\)/);
+  assert.match(html, /Roadmap \(6\)/);
+  assert.match(html, /data-tool-id="crm"[^>]*data-status="live"/);
+  assert.match(html, /data-tool-id="email-outreach"[^>]*data-status="live"/);
+
+  // 2. DOM Workspace containers
+  assert.match(html, /id="crmWorkspace"/);
+  assert.match(html, /id="outreachWorkspace"/);
+  assert.match(html, /class="crm-metrics-grid"/);
+  assert.match(html, /id="crmFreeTierBar"/);
+  assert.match(html, /id="crmKanbanContainer"/);
+  assert.match(html, /id="crmTableContainer"/);
+  assert.match(html, /id="crmLeadModal"/);
+  assert.match(html, /id="crmLeadDrawer"/);
+  assert.match(html, /class="outreach-step-tabs"/);
+  assert.match(html, /id="outreachEmailSubject"/);
+  assert.match(html, /id="outreachEmailBody"/);
+  assert.match(html, /id="outreachOpenGmailBtn"/);
+  assert.match(html, /id="outreachSyncCrmBtn"/);
+  assert.match(html, /src="\/crm\.js"/);
+  assert.match(html, /src="\/outreach\.js"/);
+
+  // 3. Script.js SPA navigation & Global Studio API
+  assert.match(script, /function openCrmWorkspace/);
+  assert.match(script, /function closeCrmWorkspace/);
+  assert.match(script, /function openOutreachWorkspace/);
+  assert.match(script, /function closeOutreachWorkspace/);
+  assert.match(script, /cleanPath === '\/tools\/crm'/);
+  assert.match(script, /cleanPath === '\/tools\/outreach'/);
+  assert.match(script, /openCrm:\s*\(\)\s*=>\s*openCrmWorkspace\(true\)/);
+  assert.match(script, /openOutreach:\s*\(lead\)\s*=>\s*openOutreachWorkspace\(true,\s*lead\)/);
+
+  // 4. SQL Migration
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.crm_leads/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.crm_activities/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.outreach_sequences/);
+  assert.match(sql, /ALTER TABLE public\.crm_leads ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /ALTER TABLE public\.crm_activities ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /ALTER TABLE public\.outreach_sequences ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /ON public\.crm_leads[\s\S]*?auth\.uid\(\)\s*=\s*user_id/);
+  assert.match(sql, /mini_crm/);
+  assert.match(sql, /email_outreach/);
+
+  // 5. CRM Controller: 50-lead free tier enforcement, CSV import/export, lead scoring
+  assert.match(crmJs, /maxFreeLeads:\s*50/);
+  assert.match(crmJs, /JEVEXA_SHOW_UPGRADE_MODAL/);
+  assert.match(crmJs, /exportCsv/);
+  assert.match(crmJs, /importCsv/);
+  assert.match(crmJs, /\/api\/crm\/score/);
+  assert.match(crmJs, /JEVEXA_UPDATE_CREDIT_BALANCE/);
+
+  // 6. Outreach Controller: Sequence generation, Gmail web compose, CRM sync
+  assert.match(outreachJs, /\/api\/outreach\/generate/);
+  assert.match(outreachJs, /mail\.google\.com\/mail\/\?view=cm&fs=1/);
+  assert.match(outreachJs, /mailto:/);
+  assert.match(outreachJs, /handleSyncCrm/);
+  assert.match(outreachJs, /Contacted/);
+
+  // 7. Worker API endpoints & multi-provider proxy
+  assert.match(workerJs, /\/api\/crm\/score/);
+  assert.match(workerJs, /\/api\/crm\/leads/);
+  assert.match(workerJs, /\/api\/outreach\/generate/);
+  assert.match(workerJs, /\/api\/outreach\/sequences/);
+  assert.match(workerJs, /CRM_SCORE_SYSTEM_PROMPT/);
+  assert.match(workerJs, /OUTREACH_SYSTEM_PROMPT/);
+  assert.match(workerJs, /handleCrmScore/);
+  assert.match(workerJs, /handleOutreachGenerate/);
+
+  // 8. Stylesheet rules
+  assert.match(styles, /\.crm-metrics-grid/);
+  assert.match(styles, /\.crm-kanban-board/);
+  assert.match(styles, /\.crm-lead-drawer/);
+  assert.match(styles, /\.outreach-workspace-grid/);
+  assert.match(styles, /\.outreach-email-card/);
 });

@@ -1227,6 +1227,127 @@ function parseContentPayload(body) {
   };
 }
 
+function parseCrmScorePayload(body) {
+  const lead = body?.lead;
+  if (!lead || typeof lead !== "object" || Array.isArray(lead)) {
+    return { error: "Lead details are required." };
+  }
+  const name = typeof lead.name === "string" ? lead.name.trim() : "";
+  if (!name || name.length > 200) {
+    return { error: "Lead name must be between 1 and 200 characters." };
+  }
+  if (typeof body?.requestId !== "string" || !REQUEST_ID_PATTERN.test(body.requestId)) {
+    return { error: "A valid request ID is required." };
+  }
+
+  const company = typeof lead.company === "string" ? lead.company.trim().slice(0, 200) : "";
+  const role = typeof lead.role === "string" ? lead.role.trim().slice(0, 200) : "";
+  const website = typeof lead.website === "string" ? lead.website.trim().slice(0, 300) : "";
+  const dealValue = Number(lead.deal_value) || 0;
+  const stage = typeof lead.stage === "string" ? lead.stage.trim() : "New";
+  const notes = typeof lead.notes === "string" ? lead.notes.trim().slice(0, 2000) : "";
+  const id = typeof lead.id === "string" && REQUEST_ID_PATTERN.test(lead.id) ? lead.id : null;
+
+  return {
+    lead: { id, name, company, role, website, deal_value: dealValue, stage, notes },
+    maxTokens: 1000,
+    estimatedTokens: Math.min(3500, 1200 + Math.ceil((name.length + company.length + notes.length) / 3)),
+    requestId: body.requestId
+  };
+}
+
+function parseOutreachPayload(body) {
+  const goal = typeof body?.goal === "string" ? body.goal.trim() : "";
+  if (!goal || goal.length > 2000) {
+    return { error: "Campaign value proposition or goal must be between 1 and 2,000 characters." };
+  }
+  if (typeof body?.requestId !== "string" || !REQUEST_ID_PATTERN.test(body.requestId)) {
+    return { error: "A valid request ID is required." };
+  }
+
+  const recipientName = typeof body?.recipient_name === "string" ? body.recipient_name.trim().slice(0, 200) : "Prospect";
+  const recipientEmail = typeof body?.recipient_email === "string" ? body.recipient_email.trim().slice(0, 200) : "";
+  const company = typeof body?.company === "string" ? body.company.trim().slice(0, 200) : "";
+  const role = typeof body?.role === "string" ? body.role.trim().slice(0, 200) : "";
+  const website = typeof body?.website === "string" ? body.website.trim().slice(0, 300) : "";
+  const tone = typeof body?.tone === "string" ? body.tone.trim().slice(0, 50) : "professional";
+  const callToAction = typeof body?.call_to_action === "string" ? body.call_to_action.trim().slice(0, 300) : "Book a 15-minute intro call";
+  const personalizationDepth = typeof body?.personalization_depth === "string" ? body.personalization_depth.trim() : "standard";
+  const leadId = typeof body?.lead_id === "string" && REQUEST_ID_PATTERN.test(body.lead_id) ? body.lead_id : null;
+
+  return {
+    lead_id: leadId,
+    recipient_name: recipientName,
+    recipient_email: recipientEmail,
+    company,
+    role,
+    website,
+    goal,
+    tone,
+    call_to_action: callToAction,
+    personalization_depth: personalizationDepth,
+    maxTokens: 1800,
+    estimatedTokens: Math.min(4500, 1800 + Math.ceil((goal.length + recipientName.length + company.length) / 3)),
+    requestId: body.requestId
+  };
+}
+
+function parseLlmJson(rawText) {
+  if (!rawText || typeof rawText !== "string") return null;
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+      } catch (_) {}
+    }
+    return null;
+  }
+}
+
+const CRM_SCORE_SYSTEM_PROMPT = `You are an elite B2B Sales Director and CRM Deal Qualification AI for JEVEXA AI Studio.
+Analyze the provided lead details (contact, role, company, deal value, stage, notes) with ruthless precision.
+You must return ONLY a valid, raw JSON object (without markdown code blocks, backticks, or extra commentary).
+JSON Schema:
+{
+  "lead_score": 85,
+  "conversion_likelihood": "High",
+  "summary": "2-3 sentence executive synthesis of this prospect opportunity and context",
+  "pain_points": ["specific pain point 1", "specific pain point 2", "specific pain point 3"],
+  "recommended_action": "tactical high-impact next step for the sales rep to advance the deal",
+  "suggested_outreach_angle": "compelling hook or angle for cold outreach or follow-up email"
+}`;
+
+const OUTREACH_SYSTEM_PROMPT = `You are a world-class cold email copywriter and outbound sales strategist for JEVEXA AI Studio.
+Generate a high-converting, personalized 3-step outreach sequence based on the prospect and offer details.
+The copy must be human, compelling, clear, and focused on recipient value with zero generic fluff.
+Return ONLY a valid, raw JSON object (without markdown code blocks, backticks, or commentary).
+JSON Schema:
+{
+  "initial": {
+    "subject": "punchy curiosity-inducing subject line under 7 words",
+    "alternative_subject": "compelling A/B test variant subject line",
+    "body": "personalized cold outreach email: concise, 75-150 words, clear value prop, low-friction CTA"
+  },
+  "followup_1": {
+    "day": "Day 3",
+    "subject": "follow-up subject or Re: initial subject",
+    "body": "quick bump/value-add follow-up: 50-90 words, sharing a brief perspective, social proof or metric"
+  },
+  "followup_2": {
+    "day": "Day 7",
+    "subject": "final polite check-in or breakup subject",
+    "body": "low-pressure 40-70 word closing email respecting their time with clear, easy exit or future touchpoint"
+  }
+}`;
+
 async function readJsonResponse(response) {
   return response.json().catch(() => ({}));
 }
@@ -2688,6 +2809,1133 @@ async function handleContent(request, env) {
   });
 }
 
+async function handleCrmScore(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+  const parsedBody = await readRequestJson(request, 16384);
+  if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+  const parsed = parseCrmScorePayload(parsedBody.body);
+  if (parsed.error) return json({ error: parsed.error }, 400);
+
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (idempotencyKey && (idempotencyKey !== parsed.requestId || !REQUEST_ID_PATTERN.test(idempotencyKey))) {
+    return json({ error: "The request ID does not match the idempotency key." }, 400);
+  }
+
+  let cfg;
+  try {
+    cfg = getSupabaseConfig(env);
+  } catch {
+    return json({ error: "Credit service is not configured." }, 503);
+  }
+
+  let user;
+  try {
+    user = await getAuthenticatedUser(request, cfg);
+  } catch {
+    return json({ error: "Could not verify your session. Please sign in again." }, 503);
+  }
+  if (!user) return json({ error: "Please sign in before scoring leads." }, 401);
+
+  const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+  if (!geminiApiKey && !groqApiKey) {
+    return json({
+      error: "AI service is currently being configured. Please contact JEVEXA Support."
+    }, 503);
+  }
+
+  let reservationResponse;
+  let reservation;
+  try {
+    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+      p_user_id: user.id,
+      p_request_id: parsed.requestId,
+      p_service: "mini_crm",
+      p_estimated_tokens: parsed.estimatedTokens
+    });
+    reservation = await readJsonResponse(reservationResponse);
+  } catch (error) {
+    console.error("CRM credit reservation failed:", error?.message || "network", parsed.requestId);
+    return json({
+      error: "The credit reservation outcome is uncertain and may be held for reconciliation. Do not retry with a new request ID.",
+      requestId: parsed.requestId
+    }, 503);
+  }
+
+  if (!reservationResponse.ok) {
+    try {
+      const fallbackResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+        p_user_id: user.id,
+        p_request_id: parsed.requestId,
+        p_service: "ai_chat",
+        p_estimated_tokens: parsed.estimatedTokens
+      });
+      const fallbackReservation = await readJsonResponse(fallbackResponse);
+      if (fallbackResponse.ok && fallbackReservation?.ok) {
+        reservationResponse = fallbackResponse;
+        reservation = fallbackReservation;
+      }
+    } catch (fbErr) {
+      console.warn("CRM base reservation fallback notice:", fbErr?.message || fbErr, parsed.requestId);
+    }
+  }
+
+  if (!reservationResponse.ok) {
+    try {
+      const balRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+      );
+      const balRows = await readJsonResponse(balRes);
+      if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+        const currentBal = Number.isInteger(balRows[0]?.balance) ? balRows[0].balance : 0;
+        const estimatedCredits = Math.max(1, Math.ceil(parsed.estimatedTokens / 1000));
+        if (currentBal < estimatedCredits) {
+          return json({
+            error: "You do not have enough credits to run AI Lead Scoring.",
+            code: "insufficient_credits",
+            requiredCredits: estimatedCredits,
+            availableCredits: currentBal
+          }, 402);
+        }
+        const patchRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: currentBal - estimatedCredits,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+        if (patchRes.ok) {
+          reservation = {
+            ok: true,
+            duplicate: false,
+            status: "reserved",
+            reserved_credits: estimatedCredits,
+            balance: currentBal - estimatedCredits,
+            fallbackDirect: true
+          };
+          reservationResponse = { ok: true, status: 200 };
+        }
+      }
+    } catch (directErr) {
+      console.warn("Direct CRM reservation fallback notice:", directErr?.message || directErr, parsed.requestId);
+    }
+  }
+
+  if (!reservationResponse.ok || !reservation || typeof reservation !== "object" || Array.isArray(reservation)) {
+    return json({
+      error: "The credit reservation outcome is uncertain and may be held for reconciliation. Do not retry with a new request ID.",
+      requestId: parsed.requestId
+    }, 503);
+  }
+
+  if (reservation.duplicate) {
+    return json({
+      error: reservation.status === "reserved"
+        ? "This lead scoring request is already processing. Please wait before retrying."
+        : "This lead scoring request has already been processed.",
+      status: reservation.status,
+      requestId: parsed.requestId,
+      balance: reservation.balance
+    }, 409);
+  }
+
+  if (!reservation.ok) {
+    if (reservation.error === "rate_limited") {
+      return json({ error: "Too many scoring requests. Please wait a minute and try again." }, 429);
+    }
+    if (reservation.error === "insufficient_credits") {
+      return json({
+        error: "You do not have enough credits to run AI Lead Scoring.",
+        code: "insufficient_credits",
+        requiredCredits: reservation.required_credits || 1,
+        availableCredits: reservation.available_credits || 0
+      }, 402);
+    }
+    return json({ error: "Could not confirm credit reservation. Please try again." }, 503);
+  }
+
+  const releaseWithError = async (message, status) => {
+    if (reservation?.fallbackDirect) {
+      try {
+        await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: (reservation.balance || 0) + (reservation.reserved_credits || 1),
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+      } catch (refundErr) {
+        console.error("Direct CRM refund notice:", refundErr?.message || refundErr, parsed.requestId);
+      }
+      return json({ error: message, requestId: parsed.requestId }, status);
+    }
+    const released = await releaseChatReservation(cfg, user.id, parsed.requestId);
+    return json({
+      error: released ? message : "AI Lead Scoring failed and its credit reservation is being held for safe reconciliation.",
+      requestId: parsed.requestId
+    }, status);
+  };
+
+  const promptUserContent = `Lead Details:\nName: ${parsed.lead.name}\nCompany: ${parsed.lead.company || "N/A"}\nRole: ${parsed.lead.role || "N/A"}\nWebsite: ${parsed.lead.website || "N/A"}\nDeal Value: $${parsed.lead.deal_value || 0}\nCurrent Stage: ${parsed.lead.stage || "New"}\nNotes: ${parsed.lead.notes || "None provided"}`;
+
+  let rawReply = "";
+  let totalTokens = parsed.estimatedTokens;
+  let promptTokens = null;
+  let completionTokens = null;
+  let tokenCountMeasured = false;
+  let executionSuccess = false;
+  let lastProviderError = null;
+
+  const executeGroq = async () => {
+    if (!groqApiKey) return false;
+    const groqModels = getGroqModels(env);
+    const res = await executeGroqWithFallback({
+      apiKey: groqApiKey,
+      systemInstruction: CRM_SCORE_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: promptUserContent }],
+      maxTokens: parsed.maxTokens,
+      temperature: 0.5,
+      requestId: parsed.requestId,
+      serviceName: "CRMScore",
+      models: groqModels
+    });
+    if (res.ok && res.reply) {
+      rawReply = res.reply;
+      promptTokens = res.promptTokens;
+      completionTokens = res.completionTokens;
+      if (Number.isInteger(res.totalTokens) && res.totalTokens > 0) {
+        totalTokens = res.totalTokens;
+        tokenCountMeasured = true;
+      }
+      executionSuccess = true;
+      return true;
+    }
+    lastProviderError = res;
+    return false;
+  };
+
+  const executeGemini = async () => {
+    if (!geminiApiKey) return false;
+    const contents = [{ role: "user", parts: [{ text: promptUserContent }] }];
+    const res = await executeGeminiWithFallback({
+      apiKey: geminiApiKey,
+      systemInstruction: CRM_SCORE_SYSTEM_PROMPT,
+      contents,
+      generationConfig: { temperature: 0.5, maxOutputTokens: parsed.maxTokens },
+      requestId: parsed.requestId,
+      serviceName: "CRMScore",
+      models: getGeminiModelsForTier("lite", env)
+    });
+    if (res.ok && res.reply) {
+      rawReply = res.reply;
+      promptTokens = res.promptTokens;
+      completionTokens = res.completionTokens;
+      if (Number.isInteger(res.totalTokens) && res.totalTokens > 0) {
+        totalTokens = res.totalTokens;
+        tokenCountMeasured = true;
+      }
+      executionSuccess = true;
+      return true;
+    }
+    lastProviderError = res;
+    return false;
+  };
+
+  const executeOpenRouter = async () => {
+    if (!openRouterApiKey) return false;
+    const res = await executeOpenRouterWithFallback({
+      apiKey: openRouterApiKey,
+      systemInstruction: CRM_SCORE_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: promptUserContent }],
+      maxTokens: parsed.maxTokens,
+      temperature: 0.5,
+      requestId: parsed.requestId,
+      serviceName: "CRMScore",
+      model: DEFAULT_OPENROUTER_MODELS.lite,
+      fallbackModel: DEFAULT_OPENROUTER_MODELS.max
+    });
+    if (res.ok && res.reply) {
+      rawReply = res.reply;
+      promptTokens = res.promptTokens;
+      completionTokens = res.completionTokens;
+      if (Number.isInteger(res.totalTokens) && res.totalTokens > 0) {
+        totalTokens = res.totalTokens;
+        tokenCountMeasured = true;
+      }
+      executionSuccess = true;
+      return true;
+    }
+    lastProviderError = res;
+    return false;
+  };
+
+  const primaryIsGemini = env?.AI_PRIMARY_PROVIDER === "gemini";
+  if (primaryIsGemini) {
+    await executeGemini();
+    if (!executionSuccess) await executeGroq();
+    if (!executionSuccess) await executeOpenRouter();
+  } else {
+    await executeGroq();
+    if (!executionSuccess) await executeGemini();
+    if (!executionSuccess) await executeOpenRouter();
+  }
+
+  if (!executionSuccess) {
+    if (lastProviderError?.timedOut) {
+      return json({
+        error: "AI Lead Scoring timed out. The credit reservation remains held; check your balance before retrying.",
+        requestId: parsed.requestId
+      }, 504);
+    }
+    if (lastProviderError?.isRateLimit) {
+      return releaseWithError("AI service is busy right now. Reserved credits were released; please try again shortly.", 429);
+    }
+    return releaseWithError("AI Lead Scoring is temporarily unavailable. Reserved credits were released; please try again.", 502);
+  }
+
+  const scoreData = parseLlmJson(rawReply);
+  const safeLeadScore = scoreData && Number.isInteger(scoreData.lead_score)
+    ? Math.max(0, Math.min(100, Math.round(scoreData.lead_score)))
+    : 75;
+  const safeLikelihood = scoreData?.conversion_likelihood || (safeLeadScore >= 70 ? "High" : safeLeadScore >= 40 ? "Medium" : "Low");
+  const safeSummary = scoreData?.summary || "Lead scored by JEVEXA AI based on available contact profile and parameters.";
+  const safePainPoints = Array.isArray(scoreData?.pain_points) ? scoreData.pain_points : ["Sales pipeline efficiency", "Workflow turnaround"];
+  const safeRecommendedAction = scoreData?.recommended_action || "Schedule a 15-minute qualification call with this prospect.";
+  const safeOutreachAngle = scoreData?.suggested_outreach_angle || "Focus on addressing manual operational overhead with AI automation.";
+
+  const usage = calculateUsageCredits({
+    tier: "lite",
+    thinkingLevel: "low",
+    promptTokens,
+    completionTokens,
+    totalTokens: tokenCountMeasured ? totalTokens : null,
+    inputText: promptUserContent,
+    outputText: rawReply,
+    service: "mini_crm"
+  });
+  totalTokens = usage.totalTokens;
+
+  let chargedCredits;
+  let remainingCredits;
+
+  if (reservation?.fallbackDirect) {
+    chargedCredits = Math.min(reservation.reserved_credits, Math.max(1, usage.credits));
+    const refundCredits = reservation.reserved_credits - chargedCredits;
+    let finalBalance = reservation.balance;
+    if (refundCredits > 0) {
+      finalBalance += refundCredits;
+      try {
+        await syncUserCreditsAndProfile(cfg, user.id, finalBalance);
+      } catch (_) {}
+    }
+    remainingCredits = finalBalance;
+  } else {
+    const maxAllowedTokens = reservation.reserved_credits
+      ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
+      : 50000;
+    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1000)));
+    try {
+      const settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
+        p_user_id: user.id,
+        p_request_id: parsed.requestId,
+        p_usage_tokens: safeTokens
+      });
+      const settlement = await readJsonResponse(settlementResponse);
+      if (settlement?.ok) {
+        chargedCredits = settlement.charged_credits;
+        remainingCredits = settlement.balance;
+        await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+      } else {
+        chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
+        remainingCredits = reservation.balance;
+      }
+    } catch {
+      chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
+      remainingCredits = reservation.balance;
+    }
+  }
+
+  if (parsed.lead.id) {
+    try {
+      await sbRequest(cfg, `/rest/v1/crm_leads?id=eq.${encodeURIComponent(parsed.lead.id)}&user_id=eq.${encodeURIComponent(user.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          lead_score: safeLeadScore,
+          ai_summary: safeSummary,
+          updated_at: new Date().toISOString()
+        })
+      });
+      await sbRequest(cfg, "/rest/v1/crm_activities", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: user.id,
+          lead_id: parsed.lead.id,
+          type: "ai_score",
+          description: `AI Lead Scoring: Score ${safeLeadScore}/100 (${safeLikelihood} Likelihood). Strategy: ${safeRecommendedAction}`
+        })
+      });
+    } catch (dbErr) {
+      console.warn("Could not save score to CRM database:", dbErr?.message || dbErr);
+    }
+  }
+
+  return json({
+    ok: true,
+    lead_score: safeLeadScore,
+    conversion_likelihood: safeLikelihood,
+    summary: safeSummary,
+    pain_points: safePainPoints,
+    recommended_action: safeRecommendedAction,
+    suggested_outreach_angle: safeOutreachAngle,
+    charged_credits: chargedCredits,
+    remaining_credits: remainingCredits,
+    creditsCharged: chargedCredits,
+    creditsRemaining: remainingCredits,
+    tokensUsed: totalTokens,
+    requestId: parsed.requestId
+  });
+}
+
+async function handleOutreachGenerate(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+  const parsedBody = await readRequestJson(request, 16384);
+  if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+  const parsed = parseOutreachPayload(parsedBody.body);
+  if (parsed.error) return json({ error: parsed.error }, 400);
+
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (idempotencyKey && (idempotencyKey !== parsed.requestId || !REQUEST_ID_PATTERN.test(idempotencyKey))) {
+    return json({ error: "The request ID does not match the idempotency key." }, 400);
+  }
+
+  let cfg;
+  try {
+    cfg = getSupabaseConfig(env);
+  } catch {
+    return json({ error: "Credit service is not configured." }, 503);
+  }
+
+  let user;
+  try {
+    user = await getAuthenticatedUser(request, cfg);
+  } catch {
+    return json({ error: "Could not verify your session. Please sign in again." }, 503);
+  }
+  if (!user) return json({ error: "Please sign in before generating outreach sequences." }, 401);
+
+  const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+  if (!geminiApiKey && !groqApiKey) {
+    return json({
+      error: "AI service is currently being configured. Please contact JEVEXA Support."
+    }, 503);
+  }
+
+  let reservationResponse;
+  let reservation;
+  try {
+    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+      p_user_id: user.id,
+      p_request_id: parsed.requestId,
+      p_service: "email_outreach",
+      p_estimated_tokens: parsed.estimatedTokens
+    });
+    reservation = await readJsonResponse(reservationResponse);
+  } catch (error) {
+    console.error("Outreach credit reservation failed:", error?.message || "network", parsed.requestId);
+    return json({
+      error: "The credit reservation outcome is uncertain and may be held for reconciliation. Do not retry with a new request ID.",
+      requestId: parsed.requestId
+    }, 503);
+  }
+
+  if (!reservationResponse.ok) {
+    try {
+      const fallbackResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+        p_user_id: user.id,
+        p_request_id: parsed.requestId,
+        p_service: "ai_chat",
+        p_estimated_tokens: parsed.estimatedTokens
+      });
+      const fallbackReservation = await readJsonResponse(fallbackResponse);
+      if (fallbackResponse.ok && fallbackReservation?.ok) {
+        reservationResponse = fallbackResponse;
+        reservation = fallbackReservation;
+      }
+    } catch (fbErr) {
+      console.warn("Outreach base reservation fallback notice:", fbErr?.message || fbErr, parsed.requestId);
+    }
+  }
+
+  if (!reservationResponse.ok) {
+    try {
+      const balRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+      );
+      const balRows = await readJsonResponse(balRes);
+      if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+        const currentBal = Number.isInteger(balRows[0]?.balance) ? balRows[0].balance : 0;
+        const estimatedCredits = Math.max(1, Math.ceil(parsed.estimatedTokens / 1000));
+        if (currentBal < estimatedCredits) {
+          return json({
+            error: "You do not have enough credits to generate this sequence.",
+            code: "insufficient_credits",
+            requiredCredits: estimatedCredits,
+            availableCredits: currentBal
+          }, 402);
+        }
+        const patchRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: currentBal - estimatedCredits,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+        if (patchRes.ok) {
+          reservation = {
+            ok: true,
+            duplicate: false,
+            status: "reserved",
+            reserved_credits: estimatedCredits,
+            balance: currentBal - estimatedCredits,
+            fallbackDirect: true
+          };
+          reservationResponse = { ok: true, status: 200 };
+        }
+      }
+    } catch (directErr) {
+      console.warn("Direct outreach reservation fallback notice:", directErr?.message || directErr, parsed.requestId);
+    }
+  }
+
+  if (!reservationResponse.ok || !reservation || typeof reservation !== "object" || Array.isArray(reservation)) {
+    return json({
+      error: "The credit reservation outcome is uncertain and may be held for reconciliation. Do not retry with a new request ID.",
+      requestId: parsed.requestId
+    }, 503);
+  }
+
+  if (reservation.duplicate) {
+    return json({
+      error: reservation.status === "reserved"
+        ? "This outreach sequence is already generating. Please wait before retrying."
+        : "This outreach sequence has already been processed.",
+      status: reservation.status,
+      requestId: parsed.requestId,
+      balance: reservation.balance
+    }, 409);
+  }
+
+  if (!reservation.ok) {
+    if (reservation.error === "rate_limited") {
+      return json({ error: "Too many requests. Please wait a minute and try again." }, 429);
+    }
+    if (reservation.error === "insufficient_credits") {
+      return json({
+        error: "You do not have enough credits to generate this sequence.",
+        code: "insufficient_credits",
+        requiredCredits: reservation.required_credits || 1,
+        availableCredits: reservation.available_credits || 0
+      }, 402);
+    }
+    return json({ error: "Could not confirm credit reservation. Please try again." }, 503);
+  }
+
+  const releaseWithError = async (message, status) => {
+    if (reservation?.fallbackDirect) {
+      try {
+        await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: (reservation.balance || 0) + (reservation.reserved_credits || 1),
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+      } catch (refundErr) {
+        console.error("Direct outreach refund notice:", refundErr?.message || refundErr, parsed.requestId);
+      }
+      return json({ error: message, requestId: parsed.requestId }, status);
+    }
+    const released = await releaseChatReservation(cfg, user.id, parsed.requestId);
+    return json({
+      error: released ? message : "Sequence generation failed and its credit reservation is being held for safe reconciliation.",
+      requestId: parsed.requestId
+    }, status);
+  };
+
+  const promptUserContent = `Campaign Details:\nRecipient: ${parsed.recipient_name}\nRecipient Email: ${parsed.recipient_email || "N/A"}\nCompany: ${parsed.company || "N/A"}\nRole: ${parsed.role || "N/A"}\nWebsite: ${parsed.website || "N/A"}\nTone: ${parsed.tone}\nCall To Action: ${parsed.call_to_action}\nPersonalization Depth: ${parsed.personalization_depth}\nValue Proposition & Goal: ${parsed.goal}`;
+
+  let rawReply = "";
+  let totalTokens = parsed.estimatedTokens;
+  let promptTokens = null;
+  let completionTokens = null;
+  let tokenCountMeasured = false;
+  let executionSuccess = false;
+  let lastProviderError = null;
+
+  const executeGroq = async () => {
+    if (!groqApiKey) return false;
+    const groqModels = getGroqModels(env);
+    const res = await executeGroqWithFallback({
+      apiKey: groqApiKey,
+      systemInstruction: OUTREACH_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: promptUserContent }],
+      maxTokens: parsed.maxTokens,
+      temperature: 0.7,
+      requestId: parsed.requestId,
+      serviceName: "Outreach",
+      models: groqModels
+    });
+    if (res.ok && res.reply) {
+      rawReply = res.reply;
+      promptTokens = res.promptTokens;
+      completionTokens = res.completionTokens;
+      if (Number.isInteger(res.totalTokens) && res.totalTokens > 0) {
+        totalTokens = res.totalTokens;
+        tokenCountMeasured = true;
+      }
+      executionSuccess = true;
+      return true;
+    }
+    lastProviderError = res;
+    return false;
+  };
+
+  const executeGemini = async () => {
+    if (!geminiApiKey) return false;
+    const contents = [{ role: "user", parts: [{ text: promptUserContent }] }];
+    const res = await executeGeminiWithFallback({
+      apiKey: geminiApiKey,
+      systemInstruction: OUTREACH_SYSTEM_PROMPT,
+      contents,
+      generationConfig: { temperature: 0.7, maxOutputTokens: parsed.maxTokens },
+      requestId: parsed.requestId,
+      serviceName: "Outreach",
+      models: getGeminiModelsForTier("lite", env)
+    });
+    if (res.ok && res.reply) {
+      rawReply = res.reply;
+      promptTokens = res.promptTokens;
+      completionTokens = res.completionTokens;
+      if (Number.isInteger(res.totalTokens) && res.totalTokens > 0) {
+        totalTokens = res.totalTokens;
+        tokenCountMeasured = true;
+      }
+      executionSuccess = true;
+      return true;
+    }
+    lastProviderError = res;
+    return false;
+  };
+
+  const executeOpenRouter = async () => {
+    if (!openRouterApiKey) return false;
+    const res = await executeOpenRouterWithFallback({
+      apiKey: openRouterApiKey,
+      systemInstruction: OUTREACH_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: promptUserContent }],
+      maxTokens: parsed.maxTokens,
+      temperature: 0.7,
+      requestId: parsed.requestId,
+      serviceName: "Outreach",
+      model: DEFAULT_OPENROUTER_MODELS.lite,
+      fallbackModel: DEFAULT_OPENROUTER_MODELS.max
+    });
+    if (res.ok && res.reply) {
+      rawReply = res.reply;
+      promptTokens = res.promptTokens;
+      completionTokens = res.completionTokens;
+      if (Number.isInteger(res.totalTokens) && res.totalTokens > 0) {
+        totalTokens = res.totalTokens;
+        tokenCountMeasured = true;
+      }
+      executionSuccess = true;
+      return true;
+    }
+    lastProviderError = res;
+    return false;
+  };
+
+  const primaryIsGemini = env?.AI_PRIMARY_PROVIDER === "gemini";
+  if (primaryIsGemini) {
+    await executeGemini();
+    if (!executionSuccess) await executeGroq();
+    if (!executionSuccess) await executeOpenRouter();
+  } else {
+    await executeGroq();
+    if (!executionSuccess) await executeGemini();
+    if (!executionSuccess) await executeOpenRouter();
+  }
+
+  if (!executionSuccess) {
+    if (lastProviderError?.timedOut) {
+      return json({
+        error: "Sequence generation timed out. The credit reservation remains held; check your balance before retrying.",
+        requestId: parsed.requestId
+      }, 504);
+    }
+    if (lastProviderError?.isRateLimit) {
+      return releaseWithError("Outreach generation is busy right now. Reserved credits were released; please try again shortly.", 429);
+    }
+    return releaseWithError("Outreach generation is temporarily unavailable. Reserved credits were released; please try again.", 502);
+  }
+
+  let seqData = parseLlmJson(rawReply);
+  if (!seqData || !seqData.initial) {
+    seqData = {
+      initial: {
+        subject: `Quick question regarding ${parsed.company || "your workflow"}`,
+        alternative_subject: `Idea for ${parsed.recipient_name} at ${parsed.company || "your team"}`,
+        body: rawReply.slice(0, 500)
+      },
+      followup_1: {
+        day: "Day 3",
+        subject: `Following up on ${parsed.company || "our note"}`,
+        body: "Hi " + parsed.recipient_name + ",\n\nFollowing up on my previous note. Would you have 10 minutes this Thursday to connect?\n\nBest regards,"
+      },
+      followup_2: {
+        day: "Day 7",
+        subject: `Permission to close file?`,
+        body: "Hi " + parsed.recipient_name + ",\n\nI realize you're busy! If timing isn't right, no problem at all. Feel free to reach out whenever automation is on your roadmap.\n\nBest,"
+      }
+    };
+  }
+
+  const safeSequence = {
+    initial: {
+      subject: seqData.initial?.subject || `Quick question for ${parsed.recipient_name}`,
+      alternative_subject: seqData.initial?.alternative_subject || `Ideas for ${parsed.company || "your team"}`,
+      body: seqData.initial?.body || rawReply
+    },
+    followup_1: {
+      day: "Day 3",
+      subject: seqData.followup_1?.subject || `Re: ${seqData.initial?.subject || "Quick note"}`,
+      body: seqData.followup_1?.body || "Just bumping this to the top of your inbox."
+    },
+    followup_2: {
+      day: "Day 7",
+      subject: seqData.followup_2?.subject || "Final check-in",
+      body: seqData.followup_2?.body || "Assuming you're focused on other priorities right now. Wishing you the best!"
+    }
+  };
+
+  const usage = calculateUsageCredits({
+    tier: "lite",
+    thinkingLevel: "low",
+    promptTokens,
+    completionTokens,
+    totalTokens: tokenCountMeasured ? totalTokens : null,
+    inputText: promptUserContent,
+    outputText: rawReply,
+    service: "email_outreach"
+  });
+  totalTokens = usage.totalTokens;
+
+  let chargedCredits;
+  let remainingCredits;
+
+  if (reservation?.fallbackDirect) {
+    chargedCredits = Math.min(reservation.reserved_credits, Math.max(1, usage.credits));
+    const refundCredits = reservation.reserved_credits - chargedCredits;
+    let finalBalance = reservation.balance;
+    if (refundCredits > 0) {
+      finalBalance += refundCredits;
+      try {
+        await syncUserCreditsAndProfile(cfg, user.id, finalBalance);
+      } catch (_) {}
+    }
+    remainingCredits = finalBalance;
+  } else {
+    const maxAllowedTokens = reservation.reserved_credits
+      ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
+      : 50000;
+    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1500)));
+    try {
+      const settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
+        p_user_id: user.id,
+        p_request_id: parsed.requestId,
+        p_usage_tokens: safeTokens
+      });
+      const settlement = await readJsonResponse(settlementResponse);
+      if (settlement?.ok) {
+        chargedCredits = settlement.charged_credits;
+        remainingCredits = settlement.balance;
+        await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+      } else {
+        chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
+        remainingCredits = reservation.balance;
+      }
+    } catch {
+      chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
+      remainingCredits = reservation.balance;
+    }
+  }
+
+  let sequenceId = null;
+  try {
+    const insertRes = await sbRequest(cfg, "/rest/v1/outreach_sequences", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        user_id: user.id,
+        lead_id: parsed.lead_id || null,
+        recipient_name: parsed.recipient_name,
+        recipient_email: parsed.recipient_email,
+        company: parsed.company,
+        goal: parsed.goal,
+        tone: parsed.tone,
+        initial_subject: safeSequence.initial.subject,
+        initial_body: safeSequence.initial.body,
+        followup_1_subject: safeSequence.followup_1.subject,
+        followup_1_body: safeSequence.followup_1.body,
+        followup_2_subject: safeSequence.followup_2.subject,
+        followup_2_body: safeSequence.followup_2.body,
+        status: "Draft",
+        created_at: new Date().toISOString()
+      })
+    });
+    const insertedRows = await readJsonResponse(insertRes);
+    if (insertRes.ok && Array.isArray(insertedRows) && insertedRows.length > 0) {
+      sequenceId = insertedRows[0].id;
+    }
+    if (parsed.lead_id) {
+      await sbRequest(cfg, "/rest/v1/crm_activities", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: user.id,
+          lead_id: parsed.lead_id,
+          type: "email_generated",
+          description: `Generated 3-step outreach campaign: "${safeSequence.initial.subject}"`
+        })
+      }).catch(() => {});
+    }
+  } catch (dbErr) {
+    console.warn("Could not persist outreach sequence to DB:", dbErr?.message || dbErr);
+  }
+
+  return json({
+    ok: true,
+    sequence_id: sequenceId,
+    sequence: safeSequence,
+    charged_credits: chargedCredits,
+    remaining_credits: remainingCredits,
+    creditsCharged: chargedCredits,
+    creditsRemaining: remainingCredits,
+    tokensUsed: totalTokens,
+    requestId: parsed.requestId
+  });
+}
+
+async function handleCrmLeads(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+
+  let cfg;
+  try {
+    cfg = getSupabaseConfig(env);
+  } catch {
+    return json({ error: "Database service is not configured." }, 503);
+  }
+
+  let user;
+  try {
+    user = await getAuthenticatedUser(request, cfg);
+  } catch {
+    return json({ error: "Could not verify your session. Please sign in again." }, 503);
+  }
+  if (!user) return json({ error: "Please sign in to manage CRM leads." }, 401);
+
+  const url = new URL(request.url);
+
+  if (request.method === "GET") {
+    try {
+      const res = await sbRequest(
+        cfg,
+        `/rest/v1/crm_leads?user_id=eq.${encodeURIComponent(user.id)}&order=created_at.desc`
+      );
+      const leads = await readJsonResponse(res);
+      if (res.ok && Array.isArray(leads)) {
+        return json({ ok: true, leads });
+      }
+      return json({ ok: true, leads: [] });
+    } catch (err) {
+      return json({ error: "Could not fetch leads: " + (err?.message || "error") }, 500);
+    }
+  }
+
+  if (request.method === "POST") {
+    const parsedBody = await readRequestJson(request, 8192);
+    if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+    const body = parsedBody.body;
+
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    if (!name) return json({ error: "Lead name is required." }, 400);
+
+    let userPlan = "free";
+    try {
+      const tierRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_credits?select=plan,balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+      );
+      const tierRows = await readJsonResponse(tierRes);
+      if (tierRes.ok && Array.isArray(tierRows) && tierRows.length > 0) {
+        userPlan = typeof tierRows[0]?.plan === "string" ? tierRows[0].plan.trim().toLowerCase() : "free";
+      }
+    } catch (_) {}
+
+    const isPaid = ["lite", "starter", "pro", "max", "business", "ultra"].includes(userPlan);
+    if (!isPaid) {
+      try {
+        const countRes = await sbRequest(
+          cfg,
+          `/rest/v1/crm_leads?select=id&user_id=eq.${encodeURIComponent(user.id)}`
+        );
+        const existingLeads = await readJsonResponse(countRes);
+        if (countRes.ok && Array.isArray(existingLeads) && existingLeads.length >= 50) {
+          return json({
+            error: "Free tier limit reached (50 active leads). Upgrade to Pro for unlimited leads.",
+            code: "lead_limit_reached"
+          }, 403);
+        }
+      } catch (_) {}
+    }
+
+    const newLead = {
+      user_id: user.id,
+      name,
+      email: typeof body?.email === "string" ? body.email.trim() : null,
+      phone: typeof body?.phone === "string" ? body.phone.trim() : null,
+      company: typeof body?.company === "string" ? body.company.trim() : null,
+      role: typeof body?.role === "string" ? body.role.trim() : null,
+      website: typeof body?.website === "string" ? body.website.trim() : null,
+      deal_value: Number(body?.deal_value) || 0,
+      stage: typeof body?.stage === "string" ? body.stage.trim() : "New",
+      notes: typeof body?.notes === "string" ? body.notes.trim() : null,
+      next_followup_at: body?.next_followup_at ? new Date(body.next_followup_at).toISOString() : null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const insertRes = await sbRequest(cfg, "/rest/v1/crm_leads", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(newLead)
+      });
+      const inserted = await readJsonResponse(insertRes);
+      if (insertRes.ok && Array.isArray(inserted) && inserted.length > 0) {
+        const lead = inserted[0];
+        await sbRequest(cfg, "/rest/v1/crm_activities", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: user.id,
+            lead_id: lead.id,
+            type: "note",
+            description: `Lead created with initial stage: ${lead.stage}`
+          })
+        }).catch(() => {});
+        return json({ ok: true, lead }, 201);
+      }
+      return json({ error: "Could not create lead." }, 500);
+    } catch (err) {
+      return json({ error: "Database error: " + (err?.message || "error") }, 500);
+    }
+  }
+
+  if (request.method === "PATCH") {
+    const parsedBody = await readRequestJson(request, 8192);
+    if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+    const body = parsedBody.body;
+    const leadId = body?.id || url.pathname.split("/").pop();
+    if (!leadId || !REQUEST_ID_PATTERN.test(leadId)) {
+      return json({ error: "Valid lead ID required." }, 400);
+    }
+
+    const updates = { ...body, updated_at: new Date().toISOString() };
+    delete updates.id;
+    delete updates.user_id;
+
+    try {
+      const patchRes = await sbRequest(
+        cfg,
+        `/rest/v1/crm_leads?id=eq.${encodeURIComponent(leadId)}&user_id=eq.${encodeURIComponent(user.id)}`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify(updates)
+        }
+      );
+      const patched = await readJsonResponse(patchRes);
+      if (patchRes.ok && Array.isArray(patched) && patched.length > 0) {
+        return json({ ok: true, lead: patched[0] });
+      }
+      return json({ error: "Could not update lead." }, 500);
+    } catch (err) {
+      return json({ error: "Database error: " + (err?.message || "error") }, 500);
+    }
+  }
+
+  if (request.method === "DELETE") {
+    const leadId = url.searchParams.get("id") || url.pathname.split("/").pop();
+    if (!leadId || !REQUEST_ID_PATTERN.test(leadId)) {
+      return json({ error: "Valid lead ID required." }, 400);
+    }
+    try {
+      const delRes = await sbRequest(
+        cfg,
+        `/rest/v1/crm_leads?id=eq.${encodeURIComponent(leadId)}&user_id=eq.${encodeURIComponent(user.id)}`,
+        { method: "DELETE" }
+      );
+      return json({ ok: delRes.ok });
+    } catch (err) {
+      return json({ error: "Could not delete lead." }, 500);
+    }
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
+async function handleOutreachSequences(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+
+  let cfg;
+  try {
+    cfg = getSupabaseConfig(env);
+  } catch {
+    return json({ error: "Database service is not configured." }, 503);
+  }
+
+  let user;
+  try {
+    user = await getAuthenticatedUser(request, cfg);
+  } catch {
+    return json({ error: "Could not verify your session. Please sign in again." }, 503);
+  }
+  if (!user) return json({ error: "Please sign in to manage sequences." }, 401);
+
+  const url = new URL(request.url);
+
+  if (request.method === "GET") {
+    try {
+      const res = await sbRequest(
+        cfg,
+        `/rest/v1/outreach_sequences?user_id=eq.${encodeURIComponent(user.id)}&order=created_at.desc`
+      );
+      const seqs = await readJsonResponse(res);
+      return json({ ok: true, sequences: Array.isArray(seqs) ? seqs : [] });
+    } catch (err) {
+      return json({ error: "Could not fetch sequences." }, 500);
+    }
+  }
+
+  if (request.method === "PATCH") {
+    const parsedBody = await readRequestJson(request, 8192);
+    if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+    const body = parsedBody.body;
+    const seqId = body?.id || url.pathname.split("/").pop();
+    if (!seqId || !REQUEST_ID_PATTERN.test(seqId)) {
+      return json({ error: "Valid sequence ID required." }, 400);
+    }
+
+    const status = body?.status;
+    const syncCrm = body?.sync_crm === true;
+    const leadId = body?.lead_id;
+
+    try {
+      if (status) {
+        await sbRequest(
+          cfg,
+          `/rest/v1/outreach_sequences?id=eq.${encodeURIComponent(seqId)}&user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ status })
+          }
+        );
+      }
+
+      if (status === "Sent" && syncCrm && leadId) {
+        const nextFollowup = new Date(Date.now() + 3 * 86400000).toISOString();
+        await sbRequest(
+          cfg,
+          `/rest/v1/crm_leads?id=eq.${encodeURIComponent(leadId)}&user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              stage: "Contacted",
+              last_contacted_at: new Date().toISOString(),
+              next_followup_at: nextFollowup,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+        await sbRequest(cfg, "/rest/v1/crm_activities", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: user.id,
+            lead_id: leadId,
+            type: "email_sent",
+            description: `Outreach email marked as sent. Lead stage moved to Contacted; follow-up scheduled for 3 days.`
+          })
+        }).catch(() => {});
+      }
+
+      return json({ ok: true });
+    } catch (err) {
+      return json({ error: "Could not update sequence." }, 500);
+    }
+  }
+
+  if (request.method === "DELETE") {
+    const seqId = url.searchParams.get("id") || url.pathname.split("/").pop();
+    if (!seqId || !REQUEST_ID_PATTERN.test(seqId)) {
+      return json({ error: "Valid sequence ID required." }, 400);
+    }
+    try {
+      const delRes = await sbRequest(
+        cfg,
+        `/rest/v1/outreach_sequences?id=eq.${encodeURIComponent(seqId)}&user_id=eq.${encodeURIComponent(user.id)}`,
+        { method: "DELETE" }
+      );
+      return json({ ok: delRes.ok });
+    } catch (err) {
+      return json({ error: "Could not delete sequence." }, 500);
+    }
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 async function handleContact(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
@@ -3744,6 +4992,22 @@ export default {
       return handleContent(request, env, ctx);
     }
 
+    if (url.pathname === "/api/crm/score") {
+      return handleCrmScore(request, env, ctx);
+    }
+
+    if (url.pathname === "/api/crm/leads" || url.pathname.startsWith("/api/crm/leads/")) {
+      return handleCrmLeads(request, env, ctx);
+    }
+
+    if (url.pathname === "/api/outreach/generate") {
+      return handleOutreachGenerate(request, env, ctx);
+    }
+
+    if (url.pathname === "/api/outreach/sequences" || url.pathname.startsWith("/api/outreach/sequences/")) {
+      return handleOutreachSequences(request, env, ctx);
+    }
+
     if (url.pathname === "/api/credits/quote") {
       return handleCreditQuote(request, env, ctx);
     }
@@ -3797,24 +5061,31 @@ export default {
         }
         const rows = await readJsonResponse(pricingRes);
         if (pricingRes.ok && Array.isArray(rows)) {
-          const requiredKeys = ["ai_chat", "ai_chat_pro", "ai_chat_max", "ai_chat_ultra", "content_generation"];
-          const missingOrUnfixed = requiredKeys.some(k => {
+          const coreKeys = ["ai_chat", "ai_chat_pro", "ai_chat_max", "ai_chat_ultra", "content_generation"];
+          const missingCore = coreKeys.some(k => {
             const row = rows.find(r => r.service_key === k);
             return !row || (k.startsWith("ai_chat") && (!Number.isInteger(row.fixed_credits) || row.fixed_credits < 1));
           });
-          if (missingOrUnfixed) {
-            await sbRequest(cfg, "/rest/v1/jevexa_service_pricing", {
-              method: "POST",
-              headers: { Prefer: "resolution=merge-duplicates" },
-              body: JSON.stringify([
-                { service_key: "ai_chat", display_name: "AI Chat — Lite", integration_status: "available", fixed_credits: 1, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "ai_chat_pro", display_name: "AI Chat — Pro", integration_status: "available", fixed_credits: 2, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "ai_chat_max", display_name: "AI Chat — Max", integration_status: "available", fixed_credits: 4, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "ai_chat_ultra", display_name: "AI Chat — Ultra", integration_status: "available", fixed_credits: 8, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "content_generation", display_name: "Content Generation", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true }
-              ])
-            });
-            pricingStatus = "seeded";
+          const missingTools = ["mini_crm", "email_outreach"].some(k => !rows.find(r => r.service_key === k));
+          if (missingCore || missingTools) {
+            try {
+              await sbRequest(cfg, "/rest/v1/jevexa_service_pricing", {
+                method: "POST",
+                headers: { Prefer: "resolution=merge-duplicates" },
+                body: JSON.stringify([
+                  { service_key: "ai_chat", display_name: "AI Chat — Lite", integration_status: "available", fixed_credits: 1, credits_per_1000_tokens: null, enabled: true },
+                  { service_key: "ai_chat_pro", display_name: "AI Chat — Pro", integration_status: "available", fixed_credits: 2, credits_per_1000_tokens: null, enabled: true },
+                  { service_key: "ai_chat_max", display_name: "AI Chat — Max", integration_status: "available", fixed_credits: 4, credits_per_1000_tokens: null, enabled: true },
+                  { service_key: "ai_chat_ultra", display_name: "AI Chat — Ultra", integration_status: "available", fixed_credits: 8, credits_per_1000_tokens: null, enabled: true },
+                  { service_key: "content_generation", display_name: "Content Generation", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true },
+                  { service_key: "mini_crm", display_name: "Mini CRM", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true },
+                  { service_key: "email_outreach", display_name: "Email & Outreach AI", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true }
+                ])
+              });
+              if (missingCore) {
+                pricingStatus = "seeded";
+              }
+            } catch (_) {}
           }
         }
       } catch (err) {

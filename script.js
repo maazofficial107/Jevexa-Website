@@ -3137,6 +3137,7 @@ function setChatbotToggleHidden(hidden) {
 function closeChatbot() {
     window.abortChatRequest?.();
     window.removeChatTyping?.();
+    window.JEVEXA_CLOSE_SELECTORS?.();
     try {
         localStorage.removeItem('jevexa_last_workspace');
         sessionStorage.removeItem('jevexa_last_workspace');
@@ -4335,6 +4336,7 @@ const JEVEXA_PLANS = {
     function closeChatWorkspace(pushState = true) {
         window.abortChatRequest?.();
         window.removeChatTyping?.();
+        window.JEVEXA_CLOSE_SELECTORS?.();
         try {
             localStorage.removeItem('jevexa_last_workspace');
             sessionStorage.removeItem('jevexa_last_workspace');

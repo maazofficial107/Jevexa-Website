@@ -118,12 +118,72 @@
         control.trigger.setAttribute('aria-label', `${control.label}: ${selected?.dataset.label || 'Choose'}`);
     }
 
+    function positionChatSelectMenu(name) {
+        const control = selectorControls[name];
+        if (!control?.menu || !control.trigger || control.menu.hidden) return;
+        const triggerRect = control.trigger.getBoundingClientRect();
+        const vw = (window.visualViewport ? window.visualViewport.width : window.innerWidth) || 360;
+        const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight) || 640;
+        const vTop = (window.visualViewport ? window.visualViewport.offsetTop : 0) || 0;
+        const vLeft = (window.visualViewport ? window.visualViewport.offsetLeft : 0) || 0;
+        const margin = 8;
+
+        const portalTarget = document.getElementById('chatbotWindow') || document.body;
+        if (control.menu.parentElement !== portalTarget) {
+            portalTarget.appendChild(control.menu);
+        }
+
+        control.menu.style.position = 'fixed';
+        control.menu.style.zIndex = '100005';
+        control.menu.style.maxWidth = `calc(${Math.round(vw)}px - 16px)`;
+        control.menu.style.maxHeight = `calc(${Math.round(Math.min(vh * 0.65, 320))}px)`;
+        control.menu.style.overflowY = 'auto';
+        control.menu.style.overscrollBehavior = 'contain';
+        control.menu.style.webkitOverflowScrolling = 'touch';
+
+        const menuWidth = Math.min(260, Math.max(190, control.menu.offsetWidth || 210));
+        const menuHeight = Math.max(120, control.menu.offsetHeight || 180);
+
+        const spaceAbove = triggerRect.top - vTop - margin;
+        const spaceBelow = (vTop + vh) - triggerRect.bottom - margin;
+
+        let top;
+        if (spaceAbove >= menuHeight || spaceAbove >= spaceBelow) {
+            top = triggerRect.top - menuHeight - 6;
+            if (top < vTop + margin) top = vTop + margin;
+        } else {
+            top = triggerRect.bottom + 6;
+            if (top + menuHeight > vTop + vh - margin) {
+                top = Math.max(vTop + margin, vTop + vh - menuHeight - margin);
+            }
+        }
+
+        let left;
+        if (name === 'thinking') {
+            left = triggerRect.right - menuWidth;
+        } else {
+            left = triggerRect.left;
+        }
+
+        if (left + menuWidth > vLeft + vw - margin) {
+            left = vLeft + vw - menuWidth - margin;
+        }
+        if (left < vLeft + margin) {
+            left = vLeft + margin;
+        }
+
+        control.menu.style.top = `${Math.round(top)}px`;
+        control.menu.style.left = `${Math.round(left)}px`;
+        control.menu.style.right = 'auto';
+        control.menu.style.bottom = 'auto';
+    }
+
     function closeSelector(name, returnFocus = false) {
         const control = selectorControls[name];
         if (!control?.menu || !control.trigger) return;
         control.menu.hidden = true;
         control.trigger.setAttribute('aria-expanded', 'false');
-        if (returnFocus) control.trigger.focus();
+        if (returnFocus) control.trigger.focus({ preventScroll: true });
     }
 
     function closeOtherSelectors(exceptName) {
@@ -138,9 +198,16 @@
         closeOtherSelectors(name);
         control.menu.hidden = false;
         control.trigger.setAttribute('aria-expanded', 'true');
+        positionChatSelectMenu(name);
+        requestAnimationFrame(() => {
+            positionChatSelectMenu(name);
+        });
         if (focusSelected) {
-            const selected = selectorOptions(name).find(option => option.dataset.value === control.input?.value);
-            (selected || selectorOptions(name)[0])?.focus();
+            const isTouch = Boolean(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+            if (!isTouch) {
+                const selected = selectorOptions(name).find(option => option.dataset.value === control.input?.value);
+                (selected || selectorOptions(name)[0])?.focus({ preventScroll: true });
+            }
         }
     }
 
@@ -177,7 +244,7 @@
             } else {
                 setStatus(`Upgrade to ${requiredPlan} Plan to unlock this feature.`);
             }
-            if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL !== 'function') control.trigger.focus();
+            if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL !== 'function') control.trigger.focus({ preventScroll: true });
             return;
         }
         control.input.value = value;
@@ -189,9 +256,14 @@
     function wireCustomSelector(name) {
         const control = selectorControls[name];
         if (!control?.trigger || !control.menu) return;
-        bindSafe(control.trigger, 'click', () => {
+        bindSafe(control.trigger, 'click', (event) => {
+            event?.stopPropagation?.();
             if (control.menu.hidden) openSelector(name);
             else closeSelector(name);
+        }, {
+            getKey: () => control.trigger,
+            preventDefaultOnDebounce: false,
+            debounceMs: 100
         });
         control.trigger.addEventListener('keydown', event => {
             if (!['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) return;
@@ -200,8 +272,15 @@
         });
         bindSafe(control.menu, 'click', event => {
             const target = event.target instanceof Element ? event.target.closest('[role="option"]') : null;
-            if (target && control.menu.contains(target)) selectOption(name, target);
-        }, { getKey: event => event.target instanceof Element ? event.target.closest('[role="option"]') || control.menu : control.menu });
+            if (target && control.menu.contains(target)) {
+                event?.stopPropagation?.();
+                selectOption(name, target);
+            }
+        }, {
+            getKey: event => event.target instanceof Element ? event.target.closest('[role="option"]') || control.menu : control.menu,
+            preventDefaultOnDebounce: false,
+            debounceMs: 80
+        });
         control.menu.addEventListener('keydown', event => {
             const options = selectorOptions(name);
             const currentIndex = options.indexOf(event.target);
@@ -220,20 +299,48 @@
                 return;
             } else return;
             event.preventDefault();
-            options[nextIndex]?.focus();
+            options[nextIndex]?.focus({ preventScroll: true });
         });
         updateSelectorDisplay(name);
     }
 
     Object.keys(selectorControls).forEach(wireCustomSelector);
-    bindSafe(document, 'click', event => {
+    function handleOutsideSelectClick(event) {
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest('.chat-select')) return;
+        if (target?.closest('.chat-select, .chat-select-menu')) return;
         Object.keys(selectorControls).forEach(name => closeSelector(name));
-    }, {
-        getKey: event => event.target instanceof Element ? event.target.closest('.chat-select') || event.target : document,
+    }
+    bindSafe(document, 'click', handleOutsideSelectClick, {
+        getKey: event => event.target instanceof Element ? event.target.closest('.chat-select, .chat-select-menu') || event.target : document,
         preventDefaultOnDebounce: false
     });
+    document.addEventListener('pointerdown', event => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target?.closest('.chat-select, .chat-select-menu')) {
+            Object.keys(selectorControls).forEach(name => closeSelector(name));
+        }
+    }, { passive: true });
+
+    const repositionOpenSelectors = () => {
+        Object.keys(selectorControls).forEach(name => {
+            if (!selectorControls[name]?.menu?.hidden) {
+                positionChatSelectMenu(name);
+            }
+        });
+    };
+    window.addEventListener('resize', repositionOpenSelectors, { passive: true });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', repositionOpenSelectors, { passive: true });
+        window.visualViewport.addEventListener('scroll', repositionOpenSelectors, { passive: true });
+    }
+    messages?.addEventListener('scroll', () => {
+        Object.keys(selectorControls).forEach(name => closeSelector(name));
+    }, { passive: true });
+
+    window.JEVEXA_CLOSE_SELECTORS = () => {
+        Object.keys(selectorControls).forEach(name => closeSelector(name));
+    };
+    window.JEVEXA_POSITION_SELECTORS = repositionOpenSelectors;
 
     function appendSearchHighlight(element, text, query) {
         const lowerText = text.toLowerCase();
@@ -1266,6 +1373,7 @@
                     chatbotWin.style.top = '0px';
                 }
             }
+            repositionOpenSelectors();
         }
 
         if (typeof window !== 'undefined') {

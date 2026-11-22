@@ -6154,3 +6154,63 @@ test("End-to-End Residual Verification Pass: UI Zoom Safety, Modal/Drawer Ergono
   // Support route normalization
   assert.match(workerJs, /if \(url\.pathname === "\/api\/support" \|\| url\.pathname === "\/api\/support\/ai"\)/);
 });
+
+test("Mobile UX & Ergonomics: Model & Thinking Selectors, Viewport Safety, Z-Index, and Touch Handling", async () => {
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // 1. HTML semantics and ARIA markup for Model and Thinking controls
+  assert.match(html, /id="chatTierTrigger"[^>]*role="combobox"[^>]*aria-haspopup="listbox"[^>]*aria-controls="chatTierOptions"/);
+  assert.match(html, /id="chatTierOptions"[^>]*role="listbox"/);
+  assert.match(html, /data-value="lite"[^>]*data-label="Jevexa Lite"/);
+  assert.match(html, /data-value="pro"[^>]*data-label="Jevexa Pro"/);
+  assert.match(html, /data-value="max"[^>]*data-label="Jevexa Max"/);
+  assert.match(html, /data-value="ultra"[^>]*data-label="Jevexa Ultra"/);
+
+  assert.match(html, /id="chatThinkingTrigger"[^>]*role="combobox"[^>]*aria-haspopup="listbox"[^>]*aria-controls="chatThinkingOptions"/);
+  assert.match(html, /id="chatThinkingOptions"[^>]*role="listbox"/);
+  assert.match(html, /data-value="low"[^>]*data-label="Low"/);
+  assert.match(html, /data-value="standard"[^>]*data-label="Standard"/);
+  assert.match(html, /data-value="max"[^>]*data-label="Max"/);
+
+  // 2. credits.js: Viewport-aware positioning & portal mounting to guarantee zero clipping
+  assert.match(credits, /function positionChatSelectMenu\(name\)/);
+  assert.match(credits, /portalTarget\.appendChild\(control\.menu\)/);
+  assert.match(credits, /control\.menu\.style\.position\s*=\s*'fixed'/);
+  assert.match(credits, /control\.menu\.style\.zIndex\s*=\s*'100005'/);
+  assert.match(credits, /name === 'thinking'/);
+  assert.match(credits, /triggerRect\.right - menuWidth/);
+  assert.match(credits, /repositionOpenSelectors/);
+  assert.match(credits, /window\.JEVEXA_CLOSE_SELECTORS/);
+
+  // 3. Touch ergonomics & keyboard prevention: preventScroll & coarse pointer safeguards
+  assert.match(credits, /pointer:\s*coarse/);
+  assert.match(credits, /preventScroll:\s*true/);
+  assert.match(credits, /handleOutsideSelectClick/);
+
+  // 4. styles.css: Desktop & Mobile selector styling & overflow: visible
+  assert.match(styles, /\.chat-tier-controls\s*\{[^}]*overflow:\s*visible/);
+  assert.match(styles, /\.chat-select-menu\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*100005;/);
+  assert.match(styles, /\.chat-select-trigger\s*\{[^}]*min-height:\s*44px;/);
+  assert.match(styles, /\.chat-select-option\s*\{[^}]*min-height:\s*44px;/);
+
+  // Mobile viewport rules (< 768px): zero overflow clipping & adaptive flex sizing
+  assert.match(styles, /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.chat-tier-controls\s*\{[\s\S]*?overflow:\s*visible\s*!important/);
+  assert.match(styles, /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.chat-select\s*\{[\s\S]*?flex:\s*1\s+1\s+0/);
+  assert.match(styles, /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.chat-select-menu\s*\{[\s\S]*?position:\s*fixed\s*!important/);
+  assert.match(styles, /@media\s*\(max-width:\s*767px\)\s*\{[\s\S]*?\.chat-select-menu\s*\{[\s\S]*?z-index:\s*100005\s*!important/);
+
+  // Narrow mobile screens (<= 360px & <= 330px)
+  assert.match(styles, /@media\s*\(max-width:\s*360px\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*330px\)\s*\{\s*\.chat-select-label\s*\{\s*display:\s*none;\s*\}\s*\}/);
+
+  // 5. Mobile touch targets >= 42px / >= 44px across all critical chat actions
+  assert.match(styles, /@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*?\.chat-send,[\s\S]*?\.chat-attach,[\s\S]*?\.chat-select-trigger,[\s\S]*?\.chat-new-button,[\s\S]*?\.chat-personalize-trigger[\s\S]*?min-height:\s*44px/);
+  assert.match(styles, /@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*?\.chat-sidebar-close,[\s\S]*?\.chatbot-header-settings-btn,[\s\S]*?\.chat-search-clear[\s\S]*?min-width:\s*42px\s*!important/);
+
+  // 6. script.js: Close selectors when chatbot or chat workspace is closed
+  assert.match(script, /function closeChatbot\(\)\s*\{[\s\S]*?window\.JEVEXA_CLOSE_SELECTORS\?\.\(\);/);
+  assert.match(script, /function closeChatWorkspace\([\s\S]*?window\.JEVEXA_CLOSE_SELECTORS\?\.\(\);/);
+});

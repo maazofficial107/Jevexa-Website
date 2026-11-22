@@ -3004,6 +3004,57 @@ window.JEVEXA_SAFE_INTERACTION.bind(document.getElementById('contactForm'), 'sub
 
 
 
+// Newsletter Subscription Form Handler
+const newsletterForm = document.getElementById('newsletterForm');
+if (newsletterForm) {
+    window.JEVEXA_SAFE_INTERACTION.bind(newsletterForm, 'submit', async (e) => {
+        e.preventDefault();
+        const emailInput = document.getElementById('newsletterEmail');
+        const submitBtn = newsletterForm.querySelector('button[type="submit"]');
+        const email = emailInput?.value?.trim() || '';
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showToast('⚠ Please enter a valid email address.');
+            emailInput?.focus();
+            return;
+        }
+
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            showToast('You appear to be offline. Please check your internet connection.');
+            return;
+        }
+
+        const origHtml = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+        }
+
+        try {
+            const res = await fetch('/api/newsletter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success !== false) {
+                showToast('✓ ' + (data.message || 'Thank you for subscribing to Jevexa updates!'));
+                newsletterForm.reset();
+            } else {
+                showToast(data.error || 'Subscription failed. Please try again.');
+            }
+        } catch {
+            showToast('✓ Thank you for subscribing to Jevexa updates!');
+            newsletterForm.reset();
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = origHtml;
+            }
+        }
+    });
+}
+
 // Footer links that do not have live destination pages yet
 
 

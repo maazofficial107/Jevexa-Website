@@ -52,14 +52,18 @@
     color: #cffafe;
     pointer-events: none;
 }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: clip; max-width: 100%; }
 body {
     font-family: var(--font-body);
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
-    overflow-x: hidden;
-    
+    overflow-x: clip;
+    max-width: 100%;
+}
+select option {
+    background: #0d111e;
+    color: #f1f5f9;
 }
 a { text-decoration: none; color: inherit; }
 ul { list-style: none; }
@@ -352,10 +356,11 @@ button, input, textarea { font-family: inherit; }
     min-height: 100vh; display: flex; align-items: center;
     position: relative; padding: 120px 24px 80px;
     max-width: 1200px; margin: 0 auto;
+    overflow-x: clip;
 }
 .hero-glow {
     position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
-    width: 800px; height: 600px;
+    width: min(800px, 100%); height: 600px;
     background: radial-gradient(ellipse, rgba(139,92,246,0.2), transparent 60%);
     pointer-events: none; animation: glowPulse 6s ease-in-out infinite;
 }
@@ -1457,8 +1462,13 @@ section { padding: 100px 0; position: relative; }
     position: absolute;
     top: 16px;
     right: 16px;
-    width: 36px;
-    height: 36px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--border);
     border-radius: 50%;
     background: transparent;
@@ -2070,7 +2080,7 @@ section { padding: 100px 0; position: relative; }
 .login-modal {
     position: fixed !important;
     inset: 0 !important;
-    width: 100vw;
+    width: 100%;
     height: 100vh;
 
     display: none;
@@ -2324,7 +2334,7 @@ section { padding: 100px 0; position: relative; }
     position: fixed !important;
     inset: 0 !important;
 
-    width: 100vw !important;
+    width: 100% !important;
     height: 100dvh !important;
 
     display: none !important;
@@ -3375,7 +3385,7 @@ section { padding: 100px 0; position: relative; }
     position: fixed !important;
     inset: 0 !important;
 
-    width: 100vw !important;
+    width: 100% !important;
     height: 100dvh !important;
 
     display: none !important;
@@ -3955,7 +3965,7 @@ section { padding: 100px 0; position: relative; }
     position: fixed !important;
     inset: 0 !important;
 
-    width: 100vw;
+    width: 100%;
     height: 100vh;
 
     display: none !important;
@@ -4846,7 +4856,7 @@ section { padding: 100px 0; position: relative; }
     position: fixed !important;
     inset: 0 !important;
 
-    width: 100vw !important;
+    width: 100% !important;
     height: 100vh !important;
 
     display: none !important;
@@ -6065,7 +6075,7 @@ body.login-open {
     position: fixed !important;
     inset: 0 !important;
 
-    width: 100vw !important;
+    width: 100% !important;
     height: 100vh !important;
 
     display: none !important;
@@ -7560,8 +7570,8 @@ body {
 
 /* Account overlay */
 #jevexaAccountBackdrop {
-    width: 100vw !important;
-    max-width: 100vw !important;
+    width: 100% !important;
+    max-width: 100% !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     padding: 12px !important;
@@ -8239,7 +8249,7 @@ body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
     left: 0;
     right: 0;
     bottom: auto;
-    width: 100vw;
+    width: 100%;
     height: var(--vvh, 100dvh);
     max-height: var(--vvh, 100dvh);
     display: grid;
@@ -10178,7 +10188,7 @@ body.chat-is-resizing {
 .tool-workspace {
     position: fixed;
     inset: 0;
-    width: 100vw;
+    width: 100%;
     height: 100vh;
     height: 100dvh;
     z-index: 99999;
@@ -10496,8 +10506,13 @@ body.coming-soon-open {
     position: absolute;
     top: 16px;
     right: 16px;
-    width: 32px;
-    height: 32px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -11302,7 +11317,7 @@ body.is-offline .offline-indicator {
     background: #070b14;
     color: #f1f5f9;
     width: 100% !important;
-    max-width: 100vw !important;
+    max-width: 100% !important;
     overflow-x: clip !important;
     box-sizing: border-box;
 }
@@ -12228,13 +12243,16 @@ body.is-offline .offline-indicator {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 8px;
-    width: 32px;
-    height: 32px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     color: #94a3b8;
     font-size: 18px;
     line-height: 1;
-    display: grid;
-    place-items: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
 }
@@ -13006,9 +13024,25 @@ body.is-offline .offline-indicator {
         grid-template-columns: 1fr;
     }
     .crm-kanban-board {
-        grid-auto-columns: minmax(84vw, 320px);
+        grid-auto-columns: minmax(min(270px, calc(100% - 20px)), calc(100% - 20px));
         scroll-snap-type: x mandatory;
         gap: 10px;
+    }
+    .crm-kanban-col,
+    .crm-kanban-column {
+        scroll-snap-align: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .crm-view-btn,
+    .crm-toolbar-right button,
+    .crm-btn-primary,
+    .crm-btn-secondary,
+    .outreach-step-tab,
+    .outreach-actions-bar button,
+    .crm-modal-actions button {
+        min-height: 42px;
     }
 }
 

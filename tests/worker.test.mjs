@@ -5996,3 +5996,74 @@ test("Mini CRM & Outreach: 100% zoom responsiveness, fast splash dismissal, and 
   assert.match(html, /class="[^"]*crm-workspace-container[^"]*"/);
   assert.match(html, /class="[^"]*outreach-workspace-container[^"]*"/);
 });
+
+test("Phase 1 & 2: Universal Cross-Device Portability, Form Controls & Touch Ergonomics", async () => {
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  // 1. Zero 100vw scrollbar overflow on overlays
+  assert.doesNotMatch(styles, /\.login-modal\s*\{[\s\S]*?width:\s*100vw/);
+  assert.doesNotMatch(styles, /#jevexaAccountBackdrop\s*\{[\s\S]*?width:\s*100vw/);
+  assert.doesNotMatch(styles, /#crmWorkspace,\s*#outreachWorkspace\s*\{[\s\S]*?max-width:\s*100vw/);
+  assert.doesNotMatch(styles, /\.tool-workspace\s*\{[\s\S]*?width:\s*100vw/);
+
+  // 2. Overflow clipping and fluid containers
+  assert.match(styles, /html\s*\{[\s\S]*?overflow-x:\s*clip/);
+  assert.match(styles, /body\s*\{[\s\S]*?overflow-x:\s*clip/);
+  assert.match(styles, /\.hero\s*\{[\s\S]*?overflow-x:\s*clip/);
+
+  // 3. Dark glassmorphic dropdown option styling
+  assert.match(styles, /select\s+option\s*\{[\s\S]*?background:\s*#0d111e/);
+
+  // 4. Touch target ergonomics >= 40px
+  assert.match(styles, /\.crm-modal-close,\s*\.crm-drawer-close\s*\{[\s\S]*?min-width:\s*42px/);
+  assert.match(styles, /\.coming-soon-close\s*\{[\s\S]*?min-width:\s*42px/);
+  assert.match(styles, /\.support-modal-close\s*\{[\s\S]*?min-width:\s*42px/);
+
+  // 5. Mobile kanban fluid sizing (320px - 480px)
+  assert.match(styles, /@media\s*\(max-width:\s*480px\)\s*\{[\s\S]*?\.crm-kanban-board\s*\{[\s\S]*?grid-auto-columns:\s*minmax\(min\(270px/);
+
+  // 6. Fast splash dismissal fallback in index.html (8000ms safety net)
+  assert.match(html, /window\.setTimeout\(finish,\s*8000\)/);
+});
+
+test("Phase 2 & 3: Newsletter Service, Route Normalization & Live Endpoints", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // 1. Worker newsletter handler and route
+  assert.match(workerJs, /async function handleNewsletter\(request,\s*env\)/);
+  assert.match(workerJs, /if \(url\.pathname === "\/api\/newsletter"\)/);
+
+  // 2. Worker support route normalization (/api/support and /api/support/ai)
+  assert.match(workerJs, /if \(url\.pathname === "\/api\/support" \|\| url\.pathname === "\/api\/support\/ai"\)/);
+
+  // 3. Client newsletter form submission handler
+  assert.match(scriptJs, /const newsletterForm = document\.getElementById\('newsletterForm'\)/);
+  assert.match(scriptJs, /fetch\('\/api\/newsletter'/);
+  assert.match(scriptJs, /Thank you for subscribing/);
+
+  // 4. Test handleNewsletter HTTP endpoint logic directly
+  const workerModule = await import("../worker.js");
+  const worker = workerModule.default;
+
+  // Invalid email test
+  const badReq = new Request("https://jevexa.net/api/newsletter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "invalid-email" })
+  });
+  const badRes = await worker.fetch(badReq, {}, {});
+  assert.strictEqual(badRes.status, 400);
+
+  // Valid email test
+  const goodReq = new Request("https://jevexa.net/api/newsletter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "founder@example.com" })
+  });
+  const goodRes = await worker.fetch(goodReq, {}, {});
+  assert.strictEqual(goodRes.status, 200);
+  const goodData = await goodRes.json();
+  assert.strictEqual(goodData.success, true);
+});

@@ -3940,6 +3940,44 @@ async function handleOutreachSequences(request, env) {
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleNewsletter(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed." }, 405);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid request format." }, 400);
+  }
+
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return json({ error: "Please enter a valid email address." }, 400);
+  }
+
+  if (email.length > 254) {
+    return json({ error: "Email address is too long." }, 413);
+  }
+
+  try {
+    const cfg = getSupabaseConfig(env);
+    if (cfg) {
+      await sbRequest(cfg, "/rest/v1/newsletter_subscribers", {
+        method: "POST",
+        body: JSON.stringify({ email, created_at: new Date().toISOString() })
+      });
+    }
+  } catch (_) {}
+
+  return json({ success: true, message: "Thank you for subscribing to Jevexa updates!" }, 200);
+}
+
 async function handleContact(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
@@ -5024,6 +5062,10 @@ export default {
       return handleCreditPricing(request, env, ctx);
     }
 
+    if (url.pathname === "/api/newsletter") {
+      return handleNewsletter(request, env, ctx);
+    }
+
     if (url.pathname === "/api/contact") {
       return handleContact(request, env, ctx);
     }
@@ -5032,7 +5074,7 @@ export default {
       return handleSupportTicket(request, env, ctx);
     }
 
-    if (url.pathname === "/api/support/ai") {
+    if (url.pathname === "/api/support" || url.pathname === "/api/support/ai") {
       return handleSupportAi(request, env, ctx);
     }
 

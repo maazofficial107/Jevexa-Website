@@ -249,7 +249,10 @@ Terms: Net 30`
             requestId,
             documentText: text,
             documentType: docTypeSelect ? docTypeSelect.value : 'auto',
-            currency: currencySelect ? currencySelect.value : 'USD'
+            currency: currencySelect ? currencySelect.value : 'USD',
+            fileData: state.uploadedFileData || undefined,
+            fileName: state.uploadedFileName || undefined,
+            fileSizeBytes: state.uploadedFileSize || undefined
         };
 
         try {
@@ -265,16 +268,25 @@ Terms: Net 30`
 
             const result = await res.json();
             if (!res.ok) {
+                if (res.status === 402) {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Document AI & OCR credits');
+                }
                 throw new Error(result.error || 'Failed to extract document data.');
             }
 
             renderExtraction(result.data, text);
+            if (result.remaining_credits !== undefined) {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            }
+            window.JEVEXA_CREDITS?.fetchBalance?.();
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+
             if (statusEl) {
-                statusEl.textContent = 'Data extracted successfully!';
+                const costText = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+                statusEl.textContent = `Data extracted successfully!${costText}`;
                 statusEl.className = 'ocr-status-msg success';
             }
             window.showToast?.('Document data extracted successfully!');
-            window.JEVEXA_CREDITS?.fetchBalance?.();
         } catch (err) {
             console.error('OCR Extraction error:', err);
             if (statusEl) {
@@ -300,6 +312,9 @@ Terms: Net 30`
         if (sampleSelect) {
             bindSafe(sampleSelect, 'change', () => {
                 const val = sampleSelect.value;
+                state.uploadedFileData = null;
+                state.uploadedFileName = null;
+                state.uploadedFileSize = null;
                 if (SAMPLE_DOCS[val] && textInput) {
                     textInput.value = SAMPLE_DOCS[val];
                     if (statusEl) {
@@ -310,21 +325,40 @@ Terms: Net 30`
             });
         }
 
-        // File dropzone simulation
+        // File dropzone simulation & real file upload
         if (dropzone && fileInput) {
             bindSafe(dropzone, 'click', () => fileInput.click());
             bindSafe(fileInput, 'change', () => {
                 const file = fileInput.files?.[0];
                 if (file) {
+                    state.uploadedFileName = file.name;
+                    state.uploadedFileSize = file.size;
+                    const isBinary = file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
                     const reader = new FileReader();
-                    reader.onload = (e) => {
-                        if (textInput) textInput.value = e.target.result;
-                        if (statusEl) {
-                            statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
-                            statusEl.className = 'ocr-status-msg info';
-                        }
-                    };
-                    reader.readAsText(file);
+
+                    if (isBinary) {
+                        reader.onload = (e) => {
+                            state.uploadedFileData = e.target?.result || null;
+                            if (textInput) {
+                                textInput.value = `[Uploaded Binary File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\nReady for OCR extraction and token-weighted processing.`;
+                            }
+                            if (statusEl) {
+                                statusEl.textContent = `Document "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
+                                statusEl.className = 'ocr-status-msg info';
+                            }
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        reader.onload = (e) => {
+                            state.uploadedFileData = null;
+                            if (textInput) textInput.value = e.target?.result || '';
+                            if (statusEl) {
+                                statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
+                                statusEl.className = 'ocr-status-msg info';
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
                 }
             });
         }

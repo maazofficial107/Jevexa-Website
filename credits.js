@@ -3238,6 +3238,13 @@
     };
 
     window.JEVEXA_CREDITS = {
-        refreshHistory: loadCreditDetails
+        refreshHistory: loadCreditDetails,
+        fetchBalance: refreshDisplayedCredits,
+        updateBalance: (newBalance) => {
+            if (newBalance !== undefined && newBalance !== null) {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(newBalance);
+            }
+            return refreshDisplayedCredits();
+        }
     };
 })();

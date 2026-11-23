@@ -285,6 +285,9 @@
 
             const result = await res.json();
             if (!res.ok) {
+                if (res.status === 402) {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Business Analytics credits');
+                }
                 throw new Error(result.error || 'Failed to generate analytics report.');
             }
 
@@ -292,12 +295,18 @@
             renderSvgCharts(result.kpis);
             renderReport(result.report);
 
+            if (result.remaining_credits !== undefined) {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            }
+            window.JEVEXA_CREDITS?.fetchBalance?.();
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+
             if (statusEl) {
-                statusEl.textContent = 'KPIs and scenario forecasts updated!';
+                const costText = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+                statusEl.textContent = `KPIs and scenario forecasts updated!${costText}`;
                 statusEl.className = 'analytics-status-msg success';
             }
             window.showToast?.('Business Analytics report generated!');
-            window.JEVEXA_CREDITS?.fetchBalance?.();
         } catch (err) {
             console.error('Analytics error:', err);
             if (statusEl) {

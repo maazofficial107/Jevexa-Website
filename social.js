@@ -226,16 +226,25 @@
 
             const result = await res.json();
             if (!res.ok) {
+                if (res.status === 402) {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Social Media Assistant credits');
+                }
                 throw new Error(result.error || 'Failed to generate social media content.');
             }
 
             renderPostPreview(result.data);
+            if (result.remaining_credits !== undefined) {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            }
+            window.JEVEXA_CREDITS?.fetchBalance?.();
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+
             if (statusEl) {
-                statusEl.textContent = 'Post draft and viral hooks generated!';
+                const costText = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+                statusEl.textContent = `Post draft and viral hooks generated!${costText}`;
                 statusEl.className = 'social-status-msg success';
             }
             window.showToast?.('Social post generated!');
-            window.JEVEXA_CREDITS?.fetchBalance?.();
         } catch (err) {
             console.error('Social generation error:', err);
             if (statusEl) {
@@ -277,28 +286,35 @@
         if (!calendarGrid) return;
         calendarGrid.innerHTML = '';
 
-        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        days.forEach((day, index) => {
+        const isMonth = state.calendarView === 'month';
+        const count = isMonth ? 28 : 7;
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+        calendarGrid.classList.toggle('is-month-grid', isMonth);
+
+        for (let index = 0; index < count; index++) {
             const dayCard = document.createElement('div');
-            dayCard.className = 'social-cal-day glass';
-            const scheduledPost = state.scheduledCalendar[index % state.scheduledCalendar.length];
+            dayCard.className = `social-cal-day glass${isMonth ? ' is-month-cell' : ''}`;
+            const scheduledPost = state.scheduledCalendar[index % (state.scheduledCalendar.length || 1)];
+            const hasPost = state.scheduledCalendar.length > 0 && (index < state.scheduledCalendar.length || (!isMonth && index % 2 === 0));
+            const dayLabel = isMonth ? `Day ${index + 1}` : dayNames[index % 7];
 
             dayCard.innerHTML = `
                 <div class="social-cal-day-header">
-                    <strong>${day}</strong>
+                    <strong>${dayLabel}</strong>
                     <span class="social-cal-date">+${index + 1}d</span>
                 </div>
                 <div class="social-cal-day-body">
-                    ${scheduledPost ? `
+                    ${hasPost && scheduledPost ? `
                         <div class="social-cal-entry status-${scheduledPost.status.toLowerCase()}">
                             <span class="social-cal-platform"><i class="fab fa-${scheduledPost.platform}"></i> ${scheduledPost.platform}</span>
-                            <p class="social-cal-snippet">${escapeHtml(scheduledPost.content.slice(0, 75))}...</p>
+                            <p class="social-cal-snippet">${escapeHtml(scheduledPost.content.slice(0, isMonth ? 45 : 75))}...</p>
                         </div>
                     ` : '<span class="social-cal-empty">No post scheduled</span>'}
                 </div>
             `;
             calendarGrid.appendChild(dayCard);
-        });
+        }
     }
 
     function init() {
@@ -308,6 +324,24 @@
 
         if (postBodyEl) {
             postBodyEl.addEventListener('input', updateCharCount);
+        }
+
+        // View toggle (Week vs Month)
+        if (calendarViewWeekBtn) {
+            bindSafe(calendarViewWeekBtn, 'click', () => {
+                state.calendarView = 'week';
+                calendarViewWeekBtn.classList.add('active');
+                calendarViewMonthBtn?.classList.remove('active');
+                renderCalendar();
+            });
+        }
+        if (calendarViewMonthBtn) {
+            bindSafe(calendarViewMonthBtn, 'click', () => {
+                state.calendarView = 'month';
+                calendarViewMonthBtn.classList.add('active');
+                calendarViewWeekBtn?.classList.remove('active');
+                renderCalendar();
+            });
         }
 
         // Preset selector

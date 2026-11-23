@@ -211,11 +211,21 @@
 
             const result = await res.json();
             if (!res.ok) {
+                if (res.status === 402) {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Workflow Automation credits');
+                }
                 throw new Error(result.error || 'Workflow execution failed.');
             }
 
             if (execProgressFill) execProgressFill.style.width = '100%';
-            if (execProgressText) execProgressText.textContent = 'Sequence completed successfully in ' + (result.durationMs || 120) + 'ms!';
+            const chargedNote = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+            if (execProgressText) execProgressText.textContent = `Sequence completed successfully in ${result.durationMs || 120}ms!${chargedNote}`;
+
+            if (result.remaining_credits !== undefined) {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            }
+            window.JEVEXA_CREDITS?.fetchBalance?.();
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (execLogsEl && Array.isArray(result.stepsExecuted)) {
                 result.stepsExecuted.forEach((step, i) => {
@@ -239,7 +249,6 @@
             renderHistory();
 
             window.showToast?.('Workflow executed successfully!');
-            window.JEVEXA_CREDITS?.fetchBalance?.();
         } catch (err) {
             console.error('Workflow error:', err);
             if (execProgressText) execProgressText.textContent = 'Pipeline execution failed.';
@@ -300,6 +309,21 @@
         if (execModalClose) {
             bindSafe(execModalClose, 'click', () => {
                 if (execModal) {
+                    execModal.hidden = true;
+                    execModal.classList.remove('open');
+                }
+            });
+        }
+
+        if (execModal) {
+            bindSafe(execModal, 'click', (e) => {
+                if (e.target === execModal) {
+                    execModal.hidden = true;
+                    execModal.classList.remove('open');
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !execModal.hidden) {
                     execModal.hidden = true;
                     execModal.classList.remove('open');
                 }

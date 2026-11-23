@@ -456,7 +456,9 @@ function calculateUsageCredits({
   outputText = "",
   service = "ai_chat",
   hasVision = false,
-  modelMultiplierOverride = null
+  modelMultiplierOverride = null,
+  workloadFactor = 1.0,
+  extraSurcharge = 0
 } = {}) {
   const normTier = typeof tier === "string" ? tier.trim().toLowerCase() : "lite";
   const normThinking = typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "low";
@@ -486,11 +488,12 @@ function calculateUsageCredits({
     measured = false;
   }
 
-  // Bound tokens to safe PostgreSQL range [1, 50000]
-  tokens = Math.max(1, Math.min(50000, tokens));
+  const safeWorkload = (typeof workloadFactor === "number" && workloadFactor > 0) ? workloadFactor : 1.0;
+  const safeExtraSurcharge = (Number.isInteger(extraSurcharge) && extraSurcharge > 0) ? extraSurcharge : 0;
+  tokens = Math.max(1, Math.min(50000, Math.ceil(tokens * safeWorkload)));
 
-  // Formula: Math.max(1, Math.ceil(((inputTokens + outputTokens) / 500) * modelMultiplier)) + attachmentSurcharge
-  const calculatedCredits = Math.max(1, Math.ceil((tokens / 500) * modelMultiplier)) + attachmentSurcharge;
+  // Formula: Math.max(1, Math.ceil((tokens / 500) * modelMultiplier)) + attachmentSurcharge + extraSurcharge
+  const calculatedCredits = Math.max(1, Math.ceil((tokens / 500) * modelMultiplier)) + attachmentSurcharge + safeExtraSurcharge;
 
   return {
     credits: calculatedCredits,
@@ -502,8 +505,178 @@ function calculateUsageCredits({
     thinkingLevel: normThinking,
     modelMultiplier,
     attachmentSurcharge,
+    extraSurcharge: safeExtraSurcharge,
+    workloadFactor: safeWorkload,
     baseCredits: TIER_BASE_CREDITS[normTier] || 1,
     thinkingMultiplier: THINKING_MULTIPLIERS[normThinking] || 1.0
+  };
+}
+
+async function reserveServiceCredits({
+  cfg,
+  user,
+  requestId,
+  serviceKey,
+  fallbackServiceKey = "ai_chat",
+  estimatedTokens,
+  serviceName = "AI Service",
+  userTier = "lite"
+}) {
+  let reservationResponse;
+  let reservation;
+  try {
+    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+      p_user_id: user.id,
+      p_request_id: requestId,
+      p_service: serviceKey,
+      p_estimated_tokens: estimatedTokens
+    });
+    reservation = await readJsonResponse(reservationResponse);
+  } catch (err) {
+    console.error(`${serviceName} credit reservation failed:`, err?.message || err, requestId);
+  }
+
+  const needsFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
+  if (needsFallback && fallbackServiceKey) {
+    try {
+      const fbRes = await callCreditRpc(cfg, "jevexa_credit_reserve", {
+        p_user_id: user.id,
+        p_request_id: requestId,
+        p_service: fallbackServiceKey,
+        p_estimated_tokens: estimatedTokens
+      });
+      const fbData = await readJsonResponse(fbRes);
+      if (fbRes.ok && (fbData?.ok || fbData?.error === "insufficient_credits" || fbData?.error === "rate_limited" || fbData?.duplicate)) {
+        reservationResponse = fbRes;
+        reservation = fbData;
+      }
+    } catch (_) {}
+  }
+
+  const needsDirectFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
+  if (needsDirectFallback) {
+    try {
+      const balRes = await sbRequest(
+        cfg,
+        `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+      );
+      const balRows = await readJsonResponse(balRes);
+      if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+        const currentBal = Number.isInteger(balRows[0]?.balance) ? balRows[0].balance : 0;
+        const multiplier = getModelMultiplier(userTier);
+        const estimatedCredits = Math.max(1, Math.ceil((estimatedTokens / 500) * multiplier));
+        if (currentBal < estimatedCredits) {
+          return {
+            errorResponse: json({
+              error: `You do not have enough credits to run ${serviceName}.`,
+              code: "insufficient_credits",
+              requiredCredits: estimatedCredits,
+              availableCredits: currentBal
+            }, 402)
+          };
+        }
+        const patchRes = await sbRequest(
+          cfg,
+          `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              balance: currentBal - estimatedCredits,
+              updated_at: new Date().toISOString()
+            })
+          }
+        );
+        if (patchRes.ok) {
+          reservation = {
+            ok: true,
+            duplicate: false,
+            status: "reserved",
+            reserved_credits: estimatedCredits,
+            balance: currentBal - estimatedCredits,
+            fallbackDirect: true
+          };
+          reservationResponse = { ok: true, status: 200 };
+        }
+      }
+    } catch (directErr) {
+      console.warn(`Direct ${serviceName} reservation fallback notice:`, directErr?.message || directErr, requestId);
+    }
+  }
+
+  if (reservation?.duplicate) {
+    return {
+      errorResponse: json({
+        error: "Duplicate request ID detected. Please generate a new request.",
+        code: "duplicate_request"
+      }, 409)
+    };
+  }
+
+  if (reservation && !reservation.ok && reservation.error === "insufficient_credits") {
+    return {
+      errorResponse: json({
+        error: `You do not have enough credits to run ${serviceName}.`,
+        code: "insufficient_credits",
+        requiredCredits: reservation.required_credits || 1,
+        availableCredits: reservation.available_credits || 0
+      }, 402)
+    };
+  }
+
+  return { reservation, reservationResponse };
+}
+
+async function settleServiceCredits({
+  cfg,
+  user,
+  requestId,
+  reservation,
+  usageCredits,
+  totalTokens
+}) {
+  let chargedCredits;
+  let remainingCredits;
+
+  if (reservation?.fallbackDirect) {
+    chargedCredits = Math.min(reservation.reserved_credits || 1, Math.max(1, usageCredits));
+    const refundCredits = (reservation.reserved_credits || 1) - chargedCredits;
+    let finalBalance = reservation.balance;
+    if (refundCredits > 0) {
+      finalBalance += refundCredits;
+      try {
+        await syncUserCreditsAndProfile(cfg, user.id, finalBalance);
+      } catch (_) {}
+    }
+    remainingCredits = finalBalance;
+  } else {
+    const maxAllowedTokens = reservation?.reserved_credits
+      ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
+      : 50000;
+    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1000)));
+    try {
+      const settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
+        p_user_id: user.id,
+        p_request_id: requestId,
+        p_usage_tokens: safeTokens
+      });
+      const settlement = await readJsonResponse(settlementResponse);
+      if (settlement?.ok) {
+        chargedCredits = settlement.charged_credits;
+        remainingCredits = settlement.balance;
+        await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+      } else {
+        chargedCredits = Math.min(reservation?.reserved_credits || 1, usageCredits);
+        remainingCredits = reservation?.balance;
+      }
+    } catch {
+      chargedCredits = Math.min(reservation?.reserved_credits || 1, usageCredits);
+      remainingCredits = reservation?.balance;
+    }
+  }
+
+  return {
+    chargedCredits: Number.isInteger(chargedCredits) ? chargedCredits : Math.max(1, usageCredits),
+    remainingCredits: Number.isInteger(remainingCredits) ? remainingCredits : undefined
   };
 }
 
@@ -1499,6 +1672,11 @@ function parseOcrPayload(body) {
     return { error: "Document text or uploaded file content is required." };
   }
 
+  const rawBytesOrChars = documentText.length || (fileData ? Math.ceil(fileData.length * 0.75) : 500);
+  const baseTokens = Math.max(1000, Math.ceil(rawBytesOrChars / 4));
+  const pageEstimate = Math.max(1, Math.ceil(fileSizeBytes / 150000));
+  const estimatedTokens = Math.min(10000, baseTokens);
+
   return {
     requestId: body.requestId,
     documentText: documentText.slice(0, 50000),
@@ -1507,8 +1685,9 @@ function parseOcrPayload(body) {
     documentType,
     currency,
     fileSizeBytes,
+    pageEstimate,
     maxTokens: 1800,
-    estimatedTokens: Math.min(4500, 1500 + Math.ceil((documentText.length || fileData.length) / 8))
+    estimatedTokens
   };
 }
 
@@ -1525,6 +1704,9 @@ function parseSocialPayload(body) {
   const goal = typeof body?.goal === "string" ? body.goal.trim() : "engagement";
   const cta = typeof body?.cta === "string" ? body.cta.trim().slice(0, 300) : "";
 
+  const platformWeight = platform === "linkedin" ? 1.2 : (platform === "twitter" ? 0.9 : 1.0);
+  const estimatedTokens = Math.min(5000, Math.max(1000, Math.ceil((800 + Math.ceil(topic.length / 2)) * platformWeight)));
+
   return {
     requestId: body.requestId,
     topic,
@@ -1532,8 +1714,9 @@ function parseSocialPayload(body) {
     tone,
     goal,
     cta,
+    platformWeight,
     maxTokens: 1200,
-    estimatedTokens: Math.min(3500, 1200 + Math.ceil(topic.length / 3))
+    estimatedTokens
   };
 }
 
@@ -1546,14 +1729,21 @@ function parseAnalyticsPayload(body) {
   const businessType = typeof body?.businessType === "string" ? body.businessType.trim() : "saas";
   const timeframe = typeof body?.timeframe === "string" ? body.timeframe.trim() : "90d";
 
+  const tf = timeframe.toLowerCase();
+  const tfFactor = tf === "365d" ? 2.0 : tf === "180d" ? 1.75 : tf === "90d" ? 1.5 : tf === "60d" ? 1.25 : 1.0;
+  const timeframeMultiplier = tfFactor;
+  const rowTokens = Math.ceil((csvText?.length || 200) / 4);
+  const estimatedTokens = Math.min(12000, Math.max(1200, Math.ceil((1200 + rowTokens) * timeframeMultiplier)));
+
   return {
     requestId: body.requestId,
     metrics,
     csvText,
     businessType,
     timeframe,
+    timeframeMultiplier,
     maxTokens: 1400,
-    estimatedTokens: Math.min(4000, 1500 + Math.ceil(csvText.length / 8))
+    estimatedTokens
   };
 }
 
@@ -1568,6 +1758,8 @@ function parseWorkflowPayload(body) {
     return { error: "At least one workflow step is required." };
   }
   const inputData = (body?.inputData && typeof body.inputData === "object") ? body.inputData : {};
+  const stepFactor = 1.0 + Math.min(1.5, steps.length * 0.1);
+  const estimatedTokens = Math.min(15000, Math.max(1000, Math.ceil((500 + steps.length * 500) * stepFactor)));
 
   return {
     requestId: body.requestId,
@@ -1575,8 +1767,9 @@ function parseWorkflowPayload(body) {
     trigger,
     steps: steps.slice(0, 50),
     inputData,
+    stepFactor,
     maxTokens: 2000,
-    estimatedTokens: Math.min(4000, 1500 + steps.length * 300)
+    estimatedTokens
   };
 }
 
@@ -1601,7 +1794,10 @@ function parseDataCleanPayload(body) {
     normalizeDates: true,
     detectAnomalies: true
   };
+  const activeOps = Object.values(operations).filter(Boolean).length;
+  const opMultiplier = 1.0 + Math.min(0.5, activeOps * 0.05);
   const dedupKey = typeof body?.dedupKey === "string" ? body.dedupKey.trim() : "email";
+  const estimatedTokens = Math.min(25000, Math.max(1000, Math.ceil((500 + records.length * 25 + activeOps * 100) * opMultiplier)));
 
   return {
     requestId: body.requestId,
@@ -1609,7 +1805,7 @@ function parseDataCleanPayload(body) {
     operations,
     dedupKey,
     maxTokens: 1000,
-    estimatedTokens: Math.min(3000, 800 + records.length * 10)
+    estimatedTokens
   };
 }
 
@@ -4443,15 +4639,18 @@ function deterministicDataClean(records, operations, dedupKey) {
   const seenKeys = new Set();
   const cleanedRecords = [];
 
-  const keyToDedup = dedupKey || "email";
+  const rawDedupKey = dedupKey || "email";
+  const doDedup = Boolean(operations.deduplicate ?? operations.removeDuplicates ?? true);
+  const sampleRow = records[0] || {};
+  const foundKey = Object.keys(sampleRow).find(k => k.toLowerCase() === rawDedupKey.toLowerCase()) || rawDedupKey;
 
   for (let i = 0; i < records.length; i++) {
     const row = { ...records[i] };
     let skipRow = false;
 
     // Deduplication
-    if (operations.deduplicate && row[keyToDedup]) {
-      const normKey = String(row[keyToDedup]).trim().toLowerCase();
+    if (doDedup && row[foundKey] !== undefined && row[foundKey] !== null) {
+      const normKey = String(row[foundKey]).trim().toLowerCase();
       if (seenKeys.has(normKey)) {
         duplicatesRemoved++;
         skipRow = true;
@@ -4575,47 +4774,25 @@ async function handleOcrExtract(request, env) {
     }, 400);
   }
 
-  let reservationResponse;
-  let reservation;
-  try {
-    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_service: "document_ocr",
-      p_estimated_tokens: parsed.estimatedTokens
-    });
-    reservation = await readJsonResponse(reservationResponse);
-  } catch (err) {
-    console.error("OCR reservation failed:", err?.message || err, parsed.requestId);
-  }
-
-  const needsFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
-  if (needsFallback) {
-    try {
-      const fbRes = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_service: "ai_chat",
-        p_estimated_tokens: parsed.estimatedTokens
-      });
-      reservation = await readJsonResponse(fbRes);
-    } catch (_) {}
-  }
-
-  if (reservation?.duplicate) {
-    return json({ error: "Duplicate request ID detected. Please generate a new request.", code: "duplicate_request" }, 409);
-  }
-  if (reservation && !reservation.ok && reservation.error === "insufficient_credits") {
-    return json({
-      error: "You do not have enough credits to run Document AI & OCR.",
-      code: "insufficient_credits",
-      requiredCredits: reservation.required_credits || 1,
-      availableCredits: reservation.available_credits || 0
-    }, 402);
-  }
+  const fileSurcharge = (parsed.fileData || parsed.fileSizeBytes > 50000) ? 2 : 0;
+  const reserveResult = await reserveServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    serviceKey: "document_ocr",
+    fallbackServiceKey: "ai_chat",
+    estimatedTokens: parsed.estimatedTokens,
+    serviceName: "Document AI & OCR",
+    userTier
+  });
+  if (reserveResult.errorResponse) return reserveResult.errorResponse;
+  const reservation = reserveResult.reservation;
 
   // LLM execution with deterministic fallback
   let extractedResult = null;
+  let measuredPromptTokens = null;
+  let measuredCompletionTokens = null;
+  let measuredTotalTokens = null;
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
   const promptText = `Document Type: ${parsed.documentType}\nCurrency: ${parsed.currency}\nDocument Text Content:\n${parsed.documentText || "(Image/binary OCR data provided)"}`;
 
@@ -4633,6 +4810,9 @@ async function handleOcrExtract(request, env) {
       });
       if (geminiRes?.ok && geminiRes?.reply) {
         extractedResult = parseLlmJson(geminiRes.reply);
+        measuredPromptTokens = geminiRes.promptTokens;
+        measuredCompletionTokens = geminiRes.completionTokens;
+        measuredTotalTokens = geminiRes.totalTokens;
       }
     } catch (_) {}
   }
@@ -4641,20 +4821,35 @@ async function handleOcrExtract(request, env) {
     extractedResult = deterministicOcrExtract(parsed.documentText, parsed.documentType, parsed.currency);
   }
 
-  // Settle credits
-  try {
-    await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_actual_tokens: parsed.estimatedTokens
-    });
-  } catch (_) {}
+  const usage = calculateUsageCredits({
+    tier: userTier,
+    promptTokens: measuredPromptTokens,
+    completionTokens: measuredCompletionTokens,
+    totalTokens: measuredTotalTokens,
+    inputText: promptText,
+    outputText: JSON.stringify(extractedResult),
+    workloadFactor: 1.25,
+    extraSurcharge: fileSurcharge,
+    service: "document_ocr"
+  });
+
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens
+  });
 
   return json({
     ok: true,
     data: extractedResult,
     tier: userTier,
-    requestId: parsed.requestId
+    requestId: parsed.requestId,
+    charged_credits: settlement.chargedCredits,
+    remaining_credits: settlement.remainingCredits,
+    tokens: usage.totalTokens
   });
 }
 
@@ -4689,46 +4884,23 @@ async function handleSocialGenerate(request, env) {
 
   const userTier = await getUserAccountTier(user.id, cfg);
 
-  let reservationResponse;
-  let reservation;
-  try {
-    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_service: "social_assistant",
-      p_estimated_tokens: parsed.estimatedTokens
-    });
-    reservation = await readJsonResponse(reservationResponse);
-  } catch (err) {
-    console.error("Social reservation failed:", err?.message || err, parsed.requestId);
-  }
-
-  const needsFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
-  if (needsFallback) {
-    try {
-      const fbRes = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_service: "content_generation",
-        p_estimated_tokens: parsed.estimatedTokens
-      });
-      reservation = await readJsonResponse(fbRes);
-    } catch (_) {}
-  }
-
-  if (reservation?.duplicate) {
-    return json({ error: "Duplicate request ID detected. Please generate a new request.", code: "duplicate_request" }, 409);
-  }
-  if (reservation && !reservation.ok && reservation.error === "insufficient_credits") {
-    return json({
-      error: "You do not have enough credits to generate social content.",
-      code: "insufficient_credits",
-      requiredCredits: reservation.required_credits || 1,
-      availableCredits: reservation.available_credits || 0
-    }, 402);
-  }
+  const reserveResult = await reserveServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    serviceKey: "social_assistant",
+    fallbackServiceKey: "content_generation",
+    estimatedTokens: parsed.estimatedTokens,
+    serviceName: "Social Media Assistant",
+    userTier
+  });
+  if (reserveResult.errorResponse) return reserveResult.errorResponse;
+  const reservation = reserveResult.reservation;
 
   let socialResult = null;
+  let measuredPromptTokens = null;
+  let measuredCompletionTokens = null;
+  let measuredTotalTokens = null;
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
   const promptText = `Platform: ${parsed.platform}\nTone: ${parsed.tone}\nGoal: ${parsed.goal}\nCTA: ${parsed.cta || "N/A"}\nTopic / Message:\n${parsed.topic}`;
 
@@ -4746,6 +4918,9 @@ async function handleSocialGenerate(request, env) {
       });
       if (geminiRes?.ok && geminiRes?.reply) {
         socialResult = parseLlmJson(geminiRes.reply);
+        measuredPromptTokens = geminiRes.promptTokens;
+        measuredCompletionTokens = geminiRes.completionTokens;
+        measuredTotalTokens = geminiRes.totalTokens;
       }
     } catch (_) {}
   }
@@ -4754,19 +4929,33 @@ async function handleSocialGenerate(request, env) {
     socialResult = deterministicSocialGenerate(parsed.topic, parsed.platform, parsed.tone, parsed.goal, parsed.cta);
   }
 
-  try {
-    await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_actual_tokens: parsed.estimatedTokens
-    });
-  } catch (_) {}
+  const usage = calculateUsageCredits({
+    tier: userTier,
+    promptTokens: measuredPromptTokens,
+    completionTokens: measuredCompletionTokens,
+    totalTokens: measuredTotalTokens,
+    inputText: promptText,
+    outputText: JSON.stringify(socialResult),
+    service: "social_assistant"
+  });
+
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens
+  });
 
   return json({
     ok: true,
     data: socialResult,
     tier: userTier,
-    requestId: parsed.requestId
+    requestId: parsed.requestId,
+    charged_credits: settlement.chargedCredits,
+    remaining_credits: settlement.remainingCredits,
+    tokens: usage.totalTokens
   });
 }
 
@@ -4800,63 +4989,51 @@ async function handleAnalyticsReport(request, env) {
   if (!user) return json({ error: "Please sign in before generating analytics reports." }, 401);
 
   const userTier = await getUserAccountTier(user.id, cfg);
-  const planCaps = TIER_PLAN_LIMITS[userTier] || TIER_PLAN_LIMITS.free;
 
-  let reservationResponse;
-  let reservation;
-  try {
-    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_service: "business_analytics",
-      p_estimated_tokens: parsed.estimatedTokens
-    });
-    reservation = await readJsonResponse(reservationResponse);
-  } catch (err) {
-    console.error("Analytics reservation failed:", err?.message || err, parsed.requestId);
-  }
-
-  const needsFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
-  if (needsFallback) {
-    try {
-      const fbRes = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_service: "ai_chat",
-        p_estimated_tokens: parsed.estimatedTokens
-      });
-      reservation = await readJsonResponse(fbRes);
-    } catch (_) {}
-  }
-
-  if (reservation?.duplicate) {
-    return json({ error: "Duplicate request ID detected. Please generate a new request.", code: "duplicate_request" }, 409);
-  }
-  if (reservation && !reservation.ok && reservation.error === "insufficient_credits") {
-    return json({
-      error: "You do not have enough credits to generate analytics reports.",
-      code: "insufficient_credits",
-      requiredCredits: reservation.required_credits || 1,
-      availableCredits: reservation.available_credits || 0
-    }, 402);
-  }
+  const reserveResult = await reserveServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    serviceKey: "business_analytics",
+    fallbackServiceKey: "ai_chat",
+    estimatedTokens: parsed.estimatedTokens,
+    serviceName: "Business Analytics",
+    userTier
+  });
+  if (reserveResult.errorResponse) return reserveResult.errorResponse;
+  const reservation = reserveResult.reservation;
 
   const analyticsBase = deterministicAnalyticsReport(parsed.metrics, parsed.businessType, parsed.timeframe);
 
-  try {
-    await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_actual_tokens: parsed.estimatedTokens
-    });
-  } catch (_) {}
+  const tf = (parsed.timeframe || "90d").toLowerCase();
+  const tfFactor = tf === "365d" ? 2.0 : tf === "180d" ? 1.75 : tf === "90d" ? 1.5 : tf === "60d" ? 1.25 : 1.0;
+  const rowTokens = Math.ceil((parsed.csvText?.length || 200) / 4);
+  const totalTokens = Math.min(12000, Math.ceil((1200 + rowTokens) * tfFactor));
+
+  const usage = calculateUsageCredits({
+    tier: userTier,
+    totalTokens,
+    service: "business_analytics"
+  });
+
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens
+  });
 
   return json({
     ok: true,
     kpis: analyticsBase.kpis,
     report: analyticsBase.report,
     tier: userTier,
-    requestId: parsed.requestId
+    requestId: parsed.requestId,
+    charged_credits: settlement.chargedCredits,
+    remaining_credits: settlement.remainingCredits,
+    tokens: usage.totalTokens
   });
 }
 
@@ -4959,6 +5136,15 @@ async function handleTeamInvite(request, env) {
   const userTier = await getUserAccountTier(user.id, cfg);
   const planCaps = TIER_PLAN_LIMITS[userTier] || TIER_PLAN_LIMITS.free;
   const maxSeats = planCaps.teamMaxSeats || 3;
+  const currentMemberCount = Number(parsedBody.body?.currentMemberCount);
+  if (Number.isInteger(currentMemberCount) && currentMemberCount >= maxSeats) {
+    return json({
+      error: `You have reached the maximum seat limit (${maxSeats}) for your ${userTier.toUpperCase()} plan. Upgrade your plan to invite more team members.`,
+      code: "seat_limit_reached",
+      maxSeats,
+      tier: userTier
+    }, 402);
+  }
 
   const newMember = {
     id: "mem_" + Math.random().toString(36).slice(2, 10),
@@ -5061,54 +5247,36 @@ async function handleWorkflowsRun(request, env) {
     }, 400);
   }
 
-  let reservationResponse;
-  let reservation;
-  try {
-    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_service: "workflow_automation",
-      p_estimated_tokens: parsed.estimatedTokens
-    });
-    reservation = await readJsonResponse(reservationResponse);
-  } catch (err) {
-    console.error("Workflow reservation failed:", err?.message || err, parsed.requestId);
-  }
-
-  const needsFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
-  if (needsFallback) {
-    try {
-      const fbRes = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_service: "ai_chat",
-        p_estimated_tokens: parsed.estimatedTokens
-      });
-      reservation = await readJsonResponse(fbRes);
-    } catch (_) {}
-  }
-
-  if (reservation?.duplicate) {
-    return json({ error: "Duplicate request ID detected. Please generate a new request.", code: "duplicate_request" }, 409);
-  }
-  if (reservation && !reservation.ok && reservation.error === "insufficient_credits") {
-    return json({
-      error: "You do not have enough credits to run Workflow Automation.",
-      code: "insufficient_credits",
-      requiredCredits: reservation.required_credits || 1,
-      availableCredits: reservation.available_credits || 0
-    }, 402);
-  }
+  const reserveResult = await reserveServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    serviceKey: "workflow_automation",
+    fallbackServiceKey: "ai_chat",
+    estimatedTokens: parsed.estimatedTokens,
+    serviceName: "Workflow Automation",
+    userTier
+  });
+  if (reserveResult.errorResponse) return reserveResult.errorResponse;
+  const reservation = reserveResult.reservation;
 
   const runResult = deterministicWorkflowRun(parsed.steps, parsed.inputData);
 
-  try {
-    await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_actual_tokens: parsed.estimatedTokens
-    });
-  } catch (_) {}
+  const stepTokens = Math.min(15000, 500 + parsed.steps.length * 500);
+  const usage = calculateUsageCredits({
+    tier: userTier,
+    totalTokens: stepTokens,
+    service: "workflow_automation"
+  });
+
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens
+  });
 
   return json({
     ok: true,
@@ -5117,7 +5285,10 @@ async function handleWorkflowsRun(request, env) {
     stepsExecuted: runResult.stepsExecuted,
     status: runResult.status,
     tier: userTier,
-    requestId: parsed.requestId
+    requestId: parsed.requestId,
+    charged_credits: settlement.chargedCredits,
+    remaining_credits: settlement.remainingCredits,
+    tokens: usage.totalTokens
   });
 }
 
@@ -5162,54 +5333,37 @@ async function handleDataClean(request, env) {
     }, 400);
   }
 
-  let reservationResponse;
-  let reservation;
-  try {
-    reservationResponse = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_service: "data_management",
-      p_estimated_tokens: parsed.estimatedTokens
-    });
-    reservation = await readJsonResponse(reservationResponse);
-  } catch (err) {
-    console.error("Data clean reservation failed:", err?.message || err, parsed.requestId);
-  }
-
-  const needsFallback = !reservationResponse?.ok || (reservation && !reservation.ok && reservation.error !== "insufficient_credits" && reservation.error !== "rate_limited" && !reservation.duplicate);
-  if (needsFallback) {
-    try {
-      const fbRes = await callCreditRpc(cfg, "jevexa_credit_reserve", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_service: "content_generation",
-        p_estimated_tokens: parsed.estimatedTokens
-      });
-      reservation = await readJsonResponse(fbRes);
-    } catch (_) {}
-  }
-
-  if (reservation?.duplicate) {
-    return json({ error: "Duplicate request ID detected. Please generate a new request.", code: "duplicate_request" }, 409);
-  }
-  if (reservation && !reservation.ok && reservation.error === "insufficient_credits") {
-    return json({
-      error: "You do not have enough credits to clean datasets.",
-      code: "insufficient_credits",
-      requiredCredits: reservation.required_credits || 1,
-      availableCredits: reservation.available_credits || 0
-    }, 402);
-  }
+  const reserveResult = await reserveServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    serviceKey: "data_management",
+    fallbackServiceKey: "content_generation",
+    estimatedTokens: parsed.estimatedTokens,
+    serviceName: "Data Management",
+    userTier
+  });
+  if (reserveResult.errorResponse) return reserveResult.errorResponse;
+  const reservation = reserveResult.reservation;
 
   const cleanResult = deterministicDataClean(parsed.records, parsed.operations, parsed.dedupKey);
 
-  try {
-    await callCreditRpc(cfg, "jevexa_credit_settle", {
-      p_user_id: user.id,
-      p_request_id: parsed.requestId,
-      p_actual_tokens: parsed.estimatedTokens
-    });
-  } catch (_) {}
+  const activeOps = Object.values(parsed.operations || {}).filter(Boolean).length;
+  const totalTokens = Math.min(25000, 500 + parsed.records.length * 25 + activeOps * 100);
+  const usage = calculateUsageCredits({
+    tier: userTier,
+    totalTokens,
+    service: "data_management"
+  });
+
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens
+  });
 
   return json({
     ok: true,
@@ -5218,7 +5372,10 @@ async function handleDataClean(request, env) {
     anomalies: cleanResult.anomalies,
     csv: cleanResult.csv,
     tier: userTier,
-    requestId: parsed.requestId
+    requestId: parsed.requestId,
+    charged_credits: settlement.chargedCredits,
+    remaining_credits: settlement.remainingCredits,
+    tokens: usage.totalTokens
   });
 }
 
@@ -5777,6 +5934,21 @@ async function sbRequest(cfg, path, options = {}, useService = true) {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+async function getUserAccountTier(userId, cfg) {
+  if (!userId) return "free";
+  try {
+    const res = await sbRequest(
+      cfg,
+      `/rest/v1/user_credits?select=plan,balance&user_id=eq.${encodeURIComponent(userId)}&limit=1`
+    );
+    const rows = await readJsonResponse(res);
+    if (res.ok && Array.isArray(rows) && rows.length > 0) {
+      return typeof rows[0]?.plan === "string" ? rows[0].plan.trim().toLowerCase() : "free";
+    }
+  } catch (_) {}
+  return "free";
 }
 
 async function getAuthenticatedUser(request, cfg) {

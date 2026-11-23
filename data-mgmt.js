@@ -241,16 +241,25 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
 
             const result = await res.json();
             if (!res.ok) {
+                if (res.status === 402) {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Data Management credits');
+                }
                 throw new Error(result.error || 'Failed to clean dataset.');
             }
 
             renderResults(result, text);
+            if (result.remaining_credits !== undefined) {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            }
+            window.JEVEXA_CREDITS?.fetchBalance?.();
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+
             if (statusEl) {
-                statusEl.textContent = `Cleaned ${result.summary?.cleanedCount || 0} records (${result.summary?.duplicatesRemoved || 0} duplicates purged).`;
+                const costText = result.charged_credits ? ` • ${result.charged_credits} credits used` : '';
+                statusEl.textContent = `Cleaned ${result.summary?.cleanedCount || 0} records (${result.summary?.duplicatesRemoved || 0} duplicates purged)${costText}.`;
                 statusEl.className = 'data-status-msg success';
             }
             window.showToast?.('Dataset cleaned and normalized successfully!');
-            window.JEVEXA_CREDITS?.fetchBalance?.();
         } catch (err) {
             console.error('Data clean error:', err);
             if (statusEl) {

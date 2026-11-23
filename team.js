@@ -204,10 +204,15 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`
                 },
-                body: JSON.stringify({ email, role })
+                body: JSON.stringify({ email, role, currentMemberCount: state.members.length })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to dispatch invitation.');
+            if (!res.ok) {
+                if (res.status === 402 || res.status === 403) {
+                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Team seat expansion');
+                }
+                throw new Error(data.error || 'Failed to dispatch invitation.');
+            }
 
             state.members.push(data.member);
             renderMembers();
@@ -231,6 +236,15 @@
         bindSafe(inviteModalClose, 'click', closeInviteModal);
         bindSafe(inviteModalCancel, 'click', closeInviteModal);
         bindSafe(inviteForm, 'submit', handleInviteSubmit);
+
+        if (inviteModal) {
+            bindSafe(inviteModal, 'click', (e) => {
+                if (e.target === inviteModal) closeInviteModal();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !inviteModal.hidden) closeInviteModal();
+            });
+        }
 
         bindSafe(refreshAuditBtn, 'click', fetchAuditLogs);
 

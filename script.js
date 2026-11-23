@@ -4258,7 +4258,7 @@ const JEVEXA_PLANS = {
         const countEl = document.getElementById('creditsCount');
         const raw = countEl ? countEl.textContent.trim() : '';
         const count = raw && raw !== '—' && raw !== '…' && raw !== '...' ? raw : (currentUser ? '…' : '—');
-        document.querySelectorAll('.workspace-credits-val').forEach(el => {
+        document.querySelectorAll('.workspace-credits-val, .workspace-credits-badge .credits-count').forEach(el => {
             el.textContent = count;
         });
     }
@@ -4274,7 +4274,7 @@ const JEVEXA_PLANS = {
         try {
             localStorage.setItem('jevexa_persisted_credits', str);
         } catch (_) {}
-        document.querySelectorAll('.workspace-credits-val').forEach(el => {
+        document.querySelectorAll('.workspace-credits-val, .workspace-credits-badge .credits-count').forEach(el => {
             el.textContent = str;
         });
         window.dispatchEvent(new CustomEvent('jevexa:credits-updated', { detail: { balance: newBalance } }));
@@ -4731,7 +4731,7 @@ const JEVEXA_PLANS = {
             openSocialWorkspace(false);
         } else if (cleanPath === '/tools/analytics' || cleanHash === '#/tools/analytics') {
             openAnalyticsWorkspace(false);
-        } else if (cleanPath === '/tools/admin' || cleanHash === '#/tools/admin') {
+        } else if (cleanPath === '/tools/admin' || cleanHash === '#/tools/admin' || cleanPath === '/tools/team' || cleanHash === '#/tools/team') {
             openTeamAdminWorkspace(false);
         } else if (cleanPath === '/tools/workflows' || cleanHash === '#/tools/workflows') {
             openWorkflowsWorkspace(false);

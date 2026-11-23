@@ -6329,3 +6329,239 @@ test("all 6 unlocked workspace HTML structures and client controllers are wired 
   assert.match(script, /bindAction\(document\.getElementById\('dataBackToStudio'\)/);
 });
 
+test("Token & Weight-Based Credit System: dynamic token calculations, workload multipliers, and accurate settlement parameters", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // calculateUsageCredits supports workloadFactor and extraSurcharge
+  assert.match(workerJs, /workloadFactor\s*=\s*1/);
+  assert.match(workerJs, /extraSurcharge\s*=\s*0/);
+  assert.match(workerJs, /tokens\s*=\s*Math\.max\(1,\s*Math\.min\(50000,\s*Math\.ceil\(tokens\s*\*\s*safeWorkload\)\)\);/);
+
+  // Settlement RPC uses p_usage_tokens (matching supabase jevexa_credit_settle schema)
+  assert.match(workerJs, /p_usage_tokens:\s*safeTokens/);
+  assert.doesNotMatch(workerJs, /p_actual_tokens:\s*safeTokens/);
+
+  // Payload parsers compute dynamic weighted tokens
+  assert.match(workerJs, /function parseOcrPayload\(/);
+  assert.match(workerJs, /fileSizeBytes/);
+  assert.match(workerJs, /pageEstimate/);
+
+  assert.match(workerJs, /function parseSocialPayload\(/);
+  assert.match(workerJs, /platformWeight/);
+
+  assert.match(workerJs, /function parseAnalyticsPayload\(/);
+  assert.match(workerJs, /timeframeMultiplier/);
+
+  assert.match(workerJs, /function parseWorkflowPayload\(/);
+  assert.match(workerJs, /stepFactor/);
+
+  assert.match(workerJs, /function parseDataCleanPayload\(/);
+  assert.match(workerJs, /opMultiplier/);
+
+  // Helper functions reserveServiceCredits and settleServiceCredits exist and handle fallback
+  assert.match(workerJs, /async function reserveServiceCredits\(/);
+  assert.match(workerJs, /async function settleServiceCredits\(/);
+});
+
+test("End-to-End API Handlers: Unlocked tools enforce reservations, settle token-weighted credits, and return balance metadata", async () => {
+  let settledUsageTokens = null;
+  let settledRequestId = null;
+
+  const mock = mockFetch(async (url, options) => {
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      const body = JSON.parse(options.body);
+      return Response.json({
+        ok: true,
+        duplicate: false,
+        status: "reserved",
+        reserved_credits: body.p_credits || 5,
+        balance: 495,
+        account_tier: "pro"
+      });
+    }
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
+      const body = JSON.parse(options.body);
+      settledUsageTokens = body.p_usage_tokens;
+      settledRequestId = body.p_request_id;
+      return Response.json({
+        ok: true,
+        charged_credits: 4,
+        balance: 496,
+        status: "settled"
+      });
+    }
+    if (url.pathname === "/rest/v1/user_credits" && options.method === "PATCH") {
+      return Response.json([{ credits_balance: 496, plan: "pro" }]);
+    }
+    return null;
+  }, () => Response.json({ id: userId }), "pro");
+
+  try {
+    // 1. OCR Extract
+    const ocrReq = makeRequest("/api/ocr/extract", {
+      body: {
+        requestId: "00000000-0000-4000-8000-000000000101",
+        documentText: "INVOICE #98234\nTotal Due: $1,250.00\nVendor: Acme Cloud Systems Inc.",
+        documentType: "invoice",
+        currency: "USD"
+      }
+    });
+    const ocrRes = await worker.fetch(ocrReq, env);
+    assert.equal(ocrRes.status, 200);
+    const ocrData = await ocrRes.json();
+    assert.equal(ocrData.ok, true);
+    assert.equal(typeof ocrData.charged_credits, "number");
+    assert.equal(ocrData.remaining_credits, 496);
+    assert.ok(settledUsageTokens > 0);
+    assert.equal(settledRequestId, "00000000-0000-4000-8000-000000000101");
+
+    // 2. Social Media Assistant
+    const socialReq = makeRequest("/api/social/generate", {
+      body: {
+        requestId: "00000000-0000-4000-8000-000000000102",
+        topic: "Launching autonomous workflows for high-growth SaaS founders",
+        platform: "linkedin",
+        tone: "thought_leader",
+        goal: "conversion",
+        cta: "Sign up today at jevexa.net"
+      }
+    });
+    const socialRes = await worker.fetch(socialReq, env);
+    assert.equal(socialRes.status, 200);
+    const socialData = await socialRes.json();
+    assert.equal(socialData.ok, true);
+    assert.ok(Array.isArray(socialData.data.hooks));
+    assert.ok(socialData.data.post_body);
+
+    // 3. Business Analytics
+    const analyticsReq = makeRequest("/api/analytics/report", {
+      body: {
+        requestId: "00000000-0000-4000-8000-000000000103",
+        metrics: ["mrr", "churn", "cac", "ltv"],
+        businessType: "saas",
+        timeframe: "quarter"
+      }
+    });
+    const analyticsRes = await worker.fetch(analyticsReq, env);
+    assert.equal(analyticsRes.status, 200);
+    const analyticsData = await analyticsRes.json();
+    assert.equal(analyticsData.ok, true);
+    assert.ok(analyticsData.kpis.mrr);
+
+    // 4. Workflow Automation
+    const workflowReq = makeRequest("/api/workflows/run", {
+      body: {
+        requestId: "00000000-0000-4000-8000-000000000104",
+        workflowId: "lead_conversion",
+        steps: [
+          { name: "Capture Inbound Lead", action: "crm_capture" },
+          { name: "AI Lead Scoring", action: "ai_score" },
+          { name: "Trigger Outreach", action: "send_email" }
+        ]
+      }
+    });
+    const workflowRes = await worker.fetch(workflowReq, env);
+    assert.equal(workflowRes.status, 200);
+    const workflowData = await workflowRes.json();
+    assert.equal(workflowData.ok, true);
+    assert.equal(workflowData.stepsExecuted.length, 3);
+
+    // 5. Data Management Clean
+    const dataReq = makeRequest("/api/data/clean", {
+      body: {
+        requestId: "00000000-0000-4000-8000-000000000105",
+        csvText: "Name,Email,Company\nAlice,alice@example.com,Acme\nAlice,alice@example.com,Acme",
+        operations: { removeDuplicates: true, trimWhitespace: true },
+        dedupKey: "Email"
+      }
+    });
+    const dataRes = await worker.fetch(dataReq, env);
+    assert.equal(dataRes.status, 200);
+    const dataCleaned = await dataRes.json();
+    assert.equal(dataCleaned.ok, true);
+    assert.equal(dataCleaned.summary.duplicatesRemoved, 1);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Team Management: enforces seat limits based on plan tier", async () => {
+  const mock = mockFetch(async (url, options) => {
+    if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
+      return Response.json({ ok: true, reserved_credits: 1, balance: 99, account_tier: "free" });
+    }
+    return null;
+  }, () => Response.json({ id: userId }), "free");
+
+  try {
+    // Free plan has max 3 seats. When currentMemberCount is 3, invite must be rejected with 402/Seat limit
+    const inviteReq = makeRequest("/api/team/invite", {
+      body: {
+        email: "colleague@example.com",
+        role: "Member",
+        currentMemberCount: 3
+      }
+    });
+    const inviteRes = await worker.fetch(inviteReq, env);
+    assert.equal(inviteRes.status, 402);
+    const payload = await inviteRes.json();
+    assert.match(payload.error, /seat limit/i);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Frontend Integration: credit managers, workspace synchronization, and modal isolation", async () => {
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const ocrJs = await readFile(new URL("../ocr.js", import.meta.url), "utf8");
+  const socialJs = await readFile(new URL("../social.js", import.meta.url), "utf8");
+  const analyticsJs = await readFile(new URL("../analytics.js", import.meta.url), "utf8");
+  const workflowsJs = await readFile(new URL("../workflows.js", import.meta.url), "utf8");
+  const dataJs = await readFile(new URL("../data-mgmt.js", import.meta.url), "utf8");
+  const teamJs = await readFile(new URL("../team.js", import.meta.url), "utf8");
+
+  // window.JEVEXA_CREDITS exposes fetchBalance and updateBalance
+  assert.match(creditsJs, /window\.JEVEXA_CREDITS\s*=\s*\{[\s\S]*?fetchBalance:\s*refreshDisplayedCredits/);
+  assert.match(creditsJs, /updateBalance:\s*\(newBalance\)/);
+
+  // All 5 unlocked tool badges in index.html have workspace-credits-val
+  assert.match(html, /id="ocrWorkspaceCredits"[\s\S]*?workspace-credits-val/);
+  assert.match(html, /id="socialWorkspaceCredits"[\s\S]*?workspace-credits-val/);
+  assert.match(html, /id="analyticsWorkspaceCredits"[\s\S]*?workspace-credits-val/);
+  assert.match(html, /id="workflowsWorkspaceCredits"[\s\S]*?workspace-credits-val/);
+  assert.match(html, /id="dataWorkspaceCredits"[\s\S]*?workspace-credits-val/);
+
+  // script.js synchronizes all workspace credit badges and routes /tools/team
+  assert.match(scriptJs, /document\.querySelectorAll\('\.workspace-credits-val, \.workspace-credits-badge \.credits-count'\)/);
+  assert.match(scriptJs, /cleanPath === '\/tools\/team'/);
+
+  // OCR supports binary file ingestion
+  assert.match(ocrJs, /readAsDataURL\(file\)/);
+  assert.match(ocrJs, /fileSizeBytes:\s*state\.uploadedFileSize/);
+  assert.match(ocrJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+
+  // Social supports week/month toggle and upgrade modal
+  assert.match(socialJs, /calendarViewWeekBtn/);
+  assert.match(socialJs, /calendarViewMonthBtn/);
+  assert.match(socialJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+
+  // Analytics triggers upgrade modal on 402 and syncs balance
+  assert.match(analyticsJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+  assert.match(analyticsJs, /window\.JEVEXA_UPDATE_CREDIT_BALANCE/);
+
+  // Workflows has modal backdrop & Escape key handling
+  assert.match(workflowsJs, /e\.key === 'Escape'/);
+  assert.match(workflowsJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+
+  // Data management triggers upgrade modal on 402 and syncs balance
+  assert.match(dataJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+  assert.match(dataJs, /window\.JEVEXA_UPDATE_CREDIT_BALANCE/);
+
+  // Team has modal backdrop & Escape key handling and passes member count
+  assert.match(teamJs, /currentMemberCount:\s*state\.members\.length/);
+  assert.match(teamJs, /e\.key === 'Escape'/);
+  assert.match(teamJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+});
+

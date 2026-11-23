@@ -1028,14 +1028,15 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.doesNotMatch(publicCopy, /simple AI tools|solo founder|tools for solo business|coming soon: more tools/i);
   assert.doesNotMatch(readme, /simple AI tools|solo founder|Stage [123]/i);
   assert.match(html, /10 AI Tools for Your <span class="gradient-text">Business<\/span>/);
-  assert.match(html, /<h3>Release 1<\/h3>[\s\S]*?<h3>Release 2<\/h3>[\s\S]*?<h3>Release 3<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Release [123]<\/h3>/);
+  assert.match(html, /id="tryChatLink"/);
   assert.match(html, /id="heroFeatureOrbit"/);
   assert.match(html, /10 AI Tools • One Credit Wallet/);
   assert.match(html, /100 welcome credits included\. No payment info needed to start\./);
   assert.match(html, /students &amp; solo starters/);
   assert.match(html, /freelancers &amp; (creators|small shops)/);
   assert.match(html, /growing (businesses|small businesses)/);
-  assert.match(html, /AI Chat and Content Generation are live now; the other eight tools roll out in three releases\./);
+  assert.match(html, /All 10 AI tools are live and unlocked/);
   assert.match(html, /10 AI tools for your business\. One credit wallet\. Start free with 100 credits\./);
   assert.equal((html.match(/data-hero-feature-card/g) || []).length, 3);
   assert.match(html, /AI Chat[\s\S]*?Document AI &amp; OCR[\s\S]*?Workflow Automation/);
@@ -1063,12 +1064,13 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(script, /hoverTarget\.addEventListener\('mouseenter', \(\) =>/);
   assert.match(script, /hoverTarget\.addEventListener\('mouseleave', \(\) =>/);
   assert.match(script, /window\.addEventListener\('jevexa-motion-change', updateMotionPreference\)/);
-  assert.match(workerSource, /There are 10 tools planned across three releases/);
+  assert.match(workerSource, /JEVEXA features 10 live AI tools for businesses/);
+  assert.doesNotMatch(workerSource, /Release [123]/);
   assert.doesNotMatch(html, /class="stars"/);
   assert.equal((html.match(/class="feature-card glass tilt-card"/g) || []).length, 10);
   assert.equal((html.match(/class="service-chip live"/g) || []).length, 10);
   assert.equal((html.match(/class="service-chip soon"/g) || []).length, 0);
-  assert.equal((html.match(/class="feature-stage-heading"/g) || []).length, 3);
+  assert.equal((html.match(/class="feature-stage-heading"/g) || []).length, 0);
   for (const tool of [
     "AI Chat", "Content Generation", "Email &amp; Outreach AI", "Mini CRM",
     "Document AI &amp; OCR", "Social Media Assistant", "Business Analytics",
@@ -1076,7 +1078,7 @@ test("public copy does not promise unavailable services or fabricate customer ra
   ]) {
     assert.ok(html.includes(tool), `Missing staged tool card: ${tool}`);
   }
-  assert.match(html, /AI Chat and Content Generation are live now; the other eight tools roll out in three releases\./);
+  assert.match(html, /All 10 AI tools are live and unlocked/);
   assert.match(html, /<strong>10<\/strong>[\s\S]*?Live AI tools/);
   assert.match(html, /<strong>0<\/strong>[\s\S]*?Coming Soon/);
   assert.match(html, /data-pricing-plan="starter"/);
@@ -6563,5 +6565,64 @@ test("Frontend Integration: credit managers, workspace synchronization, and moda
   assert.match(teamJs, /currentMemberCount:\s*state\.members\.length/);
   assert.match(teamJs, /e\.key === 'Escape'/);
   assert.match(teamJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL/);
+});
+
+test("Flagship Release & Viewport Overhaul: Screenshot fixes, keyboard ergonomics, clean logout, and edge hardening", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const aboutHtml = await readFile(new URL("../about.html", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+
+  // 1. Stats Grid: Redundant 10 AI Tools removed and replaced with clean highlight
+  assert.match(html, /<span class="stat-number" data-count="100">0<\/span>[\s\S]*?<span class="stat-label">New Account Grant<\/span>/);
+  assert.match(html, /<span class="stat-number" data-count="10">0<\/span>[\s\S]*?<span class="stat-label">Live AI Tools<\/span>/);
+  assert.match(html, /<span class="stat-number" data-count="1">0<\/span>[\s\S]*?<span class="stat-label">Unified Credit Wallet<\/span>/);
+  assert.doesNotMatch(html, /<span class="stat-label">AI Tools<\/span>/);
+
+  // 2. Try link on 01 AI Chat and continuous color-changing animation
+  assert.match(html, /class="chat-tool-link feature-try-link"[^>]*id="tryChatLink"[^>]*>Try AI Chat/);
+  assert.match(scriptJs, /document\.querySelectorAll\('\.chat-tool-link'\)\.forEach/);
+  assert.match(scriptJs, /openChatWorkspace\(true\)/);
+  assert.match(styles, /@keyframes tryLinkColorCycle\s*\{/);
+  assert.match(styles, /animation:\s*tryLinkColorCycle/);
+  assert.match(styles, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?animation:\s*none\s*!important/);
+
+  // 3. Complete elimination of Release 1 / Release 2 / Release 3 across HTML, JS, README, worker
+  assert.doesNotMatch(html, /Release [123]/);
+  assert.doesNotMatch(workerJs, /Release [123]/);
+  assert.doesNotMatch(aboutHtml, /Release [123]/);
+  assert.doesNotMatch(readme, /Release [123]/);
+
+  // 4. AI Tools Hub Card / Preview layout & spacious styling
+  assert.match(styles, /\.tools-launcher-grid\s*\{[\s\S]*?max-height:\s*480px;/);
+  assert.match(styles, /\.tool-card-footer\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
+  assert.match(styles, /\.tool-card-cta\.live-cta\s*\{[\s\S]*?white-space:\s*nowrap;/);
+  assert.match(styles, /\.tool-card-badge-pill\s*\{[\s\S]*?white-space:\s*nowrap;/);
+
+  // 5. Mobile Virtual Keyboard & Viewport Tracking
+  assert.match(creditsJs, /function scrollToBottom\(smooth = true\)\s*\{/);
+  assert.match(creditsJs, /window\.JEVEXA_SCROLL_TO_BOTTOM = scrollToBottom;/);
+  assert.match(creditsJs, /chatMessages\.scrollHeight - chatMessages\.clientHeight/);
+  assert.match(creditsJs, /chatInput\.scrollIntoView/);
+  assert.match(styles, /\.chatbot-window,\s*[\s\S]*?\.tool-workspace\s*\{[\s\S]*?top:\s*var\(--vvh-top,\s*0px\)\s*!important;/);
+  assert.match(styles, /\.chat-input-area\s*\{[\s\S]*?padding-bottom:\s*max\(12px,\s*env\(safe-area-inset-bottom\)\)\s*!important;/);
+  assert.match(styles, /\.login-modal \.login-box\s*\{[\s\S]*?max-height:\s*calc\(var\(--vvh,\s*100dvh\)\s*-\s*20px\)\s*!important;/);
+
+  // 6. Clean Logout Flow
+  assert.match(scriptJs, /async function logoutUser\(\)\s*\{/);
+  assert.match(scriptJs, /applyAuthState\(null\);/);
+  assert.match(scriptJs, /closeLogin\(\);/);
+  assert.match(scriptJs, /closeAllWorkspaces\(\)/);
+  assert.match(scriptJs, /closeChatWorkspace\(false\)/);
+  assert.match(scriptJs, /returnToStudio\(\)/);
+  assert.match(scriptJs, /window\.abortChatRequest\?\.\(\);/);
+
+  // 7. Edge Hardening & secureAssetResponse
+  assert.match(workerJs, /function secureAssetResponse\(assetResponse, options = \{\}\)\s*\{/);
+  assert.match(workerJs, /hopByHopHeaders/);
+  assert.match(workerJs, /secured\.headers\.set\("Accept-Ranges",\s*"bytes"\);/);
 });
 

@@ -1766,12 +1766,42 @@ async function logoutUser() {
     if (!supabaseClient) return showSupabaseUnavailable();
     try {
         const { error } = await supabaseClient.auth.signOut();
-        if (error) throw error;
+        if (error) console.warn('Supabase signOut notice:', error);
     } catch (error) {
-        console.error('Logout error:', error);
-        showToast('Could not log out. Please try again.');
-        return;
+        console.warn('Logout notice:', error);
     }
+
+    // Always cleanly reset auth state and UI regardless of network glitches
+    applyAuthState(null);
+
+    // Clean up all modals and backdrops
+    closeLogin();
+    const accountBackdrop = document.getElementById('jevexaAccountBackdrop');
+    if (accountBackdrop) accountBackdrop.style.display = 'none';
+    const settingsPanel = document.getElementById('settingsPanel');
+    if (settingsPanel) settingsPanel.remove();
+    const comingSoonModal = document.getElementById('comingSoonModal');
+    if (comingSoonModal) {
+        comingSoonModal.classList.remove('open');
+        comingSoonModal.setAttribute('aria-hidden', 'true');
+    }
+    const supportModal = document.getElementById('supportModal');
+    if (supportModal) {
+        supportModal.hidden = true;
+        supportModal.style.display = 'none';
+    }
+    const upgradeModal = document.getElementById('upgradeModal');
+    if (upgradeModal) upgradeModal.classList.remove('is-open');
+
+    // Cleanly close any open tool workspaces and return to studio
+    if (typeof closeAllWorkspaces === 'function') closeAllWorkspaces();
+    if (typeof closeChatWorkspace === 'function') closeChatWorkspace(false);
+    if (typeof returnToStudio === 'function') returnToStudio();
+
+    // Abort active chat requests and typing cues
+    window.abortChatRequest?.();
+    window.removeChatTyping?.();
+
     showToast('You have been logged out.');
 }
 
@@ -4879,6 +4909,12 @@ const JEVEXA_PLANS = {
     bindAction(document.getElementById('dataBackToStudio'), 'click', () => returnToStudio());
     bindAction(document.getElementById('dataWorkspaceClose'), 'click', () => returnToStudio());
 
+    document.querySelectorAll('.chat-tool-link').forEach(link => {
+        bindAction(link, 'click', (event) => {
+            event.preventDefault();
+            openChatWorkspace(true);
+        });
+    });
     document.querySelectorAll('.content-tool-link').forEach(link => {
         bindAction(link, 'click', (event) => {
             event.preventDefault();

@@ -1343,6 +1343,27 @@
         const chatInput = document.getElementById('chatInput');
         const chatMessages = document.getElementById('chatMessages');
 
+        function scrollToBottom(smooth = true) {
+            if (chatMessages) {
+                const target = chatMessages.scrollHeight - chatMessages.clientHeight;
+                if (target > 0) {
+                    if (smooth && typeof chatMessages.scrollTo === 'function') {
+                        chatMessages.scrollTo({ top: target, behavior: 'smooth' });
+                    } else {
+                        chatMessages.scrollTop = target;
+                    }
+                }
+            }
+            if (chatInput && typeof chatInput.scrollIntoView === 'function') {
+                try {
+                    chatInput.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: smooth ? 'smooth' : 'auto' });
+                } catch (_) {}
+            }
+        }
+        if (typeof window !== 'undefined') {
+            window.JEVEXA_SCROLL_TO_BOTTOM = scrollToBottom;
+        }
+
         function updateViewport() {
             if (!chatbotWin) return;
             if (typeof window !== 'undefined' && window.visualViewport) {

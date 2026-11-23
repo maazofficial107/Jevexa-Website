@@ -71,11 +71,10 @@ const TIER_PLAN_LIMITS = Object.freeze({
 const SYSTEM_PROMPT = `You are JEVEXA AI Assistant — the friendly, sharp and natural AI voice of JEVEXA AI Automation Studio (jevexa.net).
 
 ABOUT JEVEXA:
-- JEVEXA is a catalog of 10 AI tools for businesses.
-- There are 10 tools planned across three releases:
-  * Release 1 includes AI Chat, Content Generation, Email & Outreach AI, Mini CRM, and Document AI & OCR.
-  * Release 2 includes Social Media Assistant, Business Analytics, and User & Admin Management.
-  * Release 3 includes Workflow Automation and Data Management.
+- JEVEXA features 10 live AI tools for businesses:
+  * AI Chat, Content Generation, Email & Outreach AI, Mini CRM, and Document AI & OCR.
+  * Social Media Assistant, Business Analytics, and User & Admin Management.
+  * Workflow Automation and Data Management.
   All 10 tools are live and unlocked in the unified studio workspace.
 - The app also provides account sign-in, a credit wallet, and a 100-credit welcome grant for new accounts.
 
@@ -6466,6 +6465,46 @@ function getAssetMimeType(pathname) {
   return null;
 }
 
+function secureAssetResponse(assetResponse, options = {}) {
+  const secured = new Response(assetResponse.body, assetResponse);
+  
+  // Hop-by-hop headers forbidden in HTTP/2 and HTTP/3 / QUIC
+  const hopByHopHeaders = [
+    "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+    "te", "trailers", "transfer-encoding", "upgrade"
+  ];
+  for (const h of hopByHopHeaders) {
+    if (secured.headers.has(h)) secured.headers.delete(h);
+  }
+
+  // Edge security & performance hardening
+  secured.headers.set("X-Content-Type-Options", "nosniff");
+  secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (!options.isStaticAsset) {
+    secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+  }
+  secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  secured.headers.set("Accept-Ranges", "bytes");
+
+  if (options.mime) {
+    const currentType = secured.headers.get("Content-Type") || "";
+    if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
+      secured.headers.set("Content-Type", options.mime);
+    }
+  } else if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
+    secured.headers.set("Content-Type", options.isHtml ? "text/html; charset=utf-8" : "text/plain; charset=utf-8");
+  }
+
+  if (options.cacheControl) {
+    secured.headers.set("Cache-Control", options.cacheControl);
+  } else if (!secured.headers.has("Cache-Control")) {
+    secured.headers.set("Cache-Control", options.isHtml ? "public, max-age=0, must-revalidate" : "public, max-age=86400, stale-while-revalidate=604800");
+  }
+
+  return secured;
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -6670,19 +6709,7 @@ export default {
           pageReq = new Request(new URL("/index.html", request.url), request);
           assetResponse = await env.ASSETS.fetch(pageReq);
         }
-        const secured = new Response(assetResponse.body, assetResponse);
-        secured.headers.set("X-Content-Type-Options", "nosniff");
-        secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-        secured.headers.set("X-Frame-Options", "SAMEORIGIN");
-        secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-        secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-        if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
-          secured.headers.set("Content-Type", "text/html; charset=utf-8");
-        }
-        if (!secured.headers.has("Cache-Control")) {
-          secured.headers.set("Cache-Control", "public, max-age=0, must-revalidate");
-        }
-        return secured;
+        return secureAssetResponse(assetResponse, { isHtml: true, cacheControl: "public, max-age=0, must-revalidate" });
       }
 
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
@@ -6702,56 +6729,26 @@ export default {
           spaRequest = new Request(new URL("/index.html", request.url), request);
           assetResponse = await env.ASSETS.fetch(spaRequest);
         }
-        const secured = new Response(assetResponse.body, assetResponse);
-        secured.headers.set("X-Content-Type-Options", "nosniff");
-        secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-        if (!isStaticAsset) {
-          secured.headers.set("X-Frame-Options", "SAMEORIGIN");
-          if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
-            secured.headers.set("Content-Type", "text/html; charset=utf-8");
-          }
-          if (!secured.headers.has("Cache-Control")) {
-            secured.headers.set("Cache-Control", "public, max-age=0, must-revalidate");
-          }
-        } else {
-          const mime = getAssetMimeType(targetPath);
-          if (mime) {
-            const currentType = secured.headers.get("Content-Type") || "";
-            if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
-              secured.headers.set("Content-Type", mime);
-            }
-          }
-          if (!secured.headers.has("Cache-Control")) {
-            secured.headers.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
-          }
-        }
-        secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-        secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-        return secured;
+        return secureAssetResponse(assetResponse, {
+          isStaticAsset,
+          mime: isStaticAsset ? getAssetMimeType(targetPath) : null,
+          isHtml: !isStaticAsset,
+          cacheControl: isStaticAsset ? "public, max-age=86400, stale-while-revalidate=604800" : "public, max-age=0, must-revalidate"
+        });
       }
       let assetResponse = await env.ASSETS.fetch(request);
       if (assetResponse.status === 404 && (url.pathname === "/" || url.pathname === "")) {
         const indexReq = new Request(new URL("/index.html", request.url), request);
         assetResponse = await env.ASSETS.fetch(indexReq);
       }
-      const secured = new Response(assetResponse.body, assetResponse);
-      secured.headers.set("X-Content-Type-Options", "nosniff");
-      secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-      secured.headers.set("X-Frame-Options", "SAMEORIGIN");
-      secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-      secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
       const mime = getAssetMimeType(url.pathname);
-      if (mime) {
-        const currentType = secured.headers.get("Content-Type") || "";
-        if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
-          secured.headers.set("Content-Type", mime);
-        }
-      }
-      if (!secured.headers.has("Cache-Control")) {
-        const isHtml = url.pathname.endsWith(".html") || url.pathname === "/" || !url.pathname.includes(".");
-        secured.headers.set("Cache-Control", isHtml ? "public, max-age=0, must-revalidate" : "public, max-age=86400, stale-while-revalidate=604800");
-      }
-      return secured;
+      const isHtml = url.pathname.endsWith(".html") || url.pathname === "/" || !url.pathname.includes(".");
+      return secureAssetResponse(assetResponse, {
+        isStaticAsset: !isHtml,
+        mime,
+        isHtml,
+        cacheControl: isHtml ? "public, max-age=0, must-revalidate" : "public, max-age=86400, stale-while-revalidate=604800"
+      });
     }
 
     return new Response("JEVEXA API is running.", {

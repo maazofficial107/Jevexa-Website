@@ -19,23 +19,18 @@ A 10-tool AI platform for businesses, with AI Chat, Content Generation, and a cr
 - Premium preloader
 
 ### AI Tool Suite
-JEVEXA plans to offer these 10 tools across three releases. **AI Chat and Content Generation are live**; the other eight are labeled Coming Soon and are not usable yet.
+JEVEXA features 10 specialized AI tools in one unified studio. **All 10 tools are live and unlocked** today:
 
-Release 1 — Everyday tools:
 1. AI Chat — Live
 2. Content Generation — Live
-3. Email & Outreach AI — Coming Soon
-4. Mini CRM — Coming Soon
-5. Document AI & OCR — Coming Soon
-
-Release 2 — Business growth tools:
-6. Social Media Assistant — Coming Soon
-7. Business Analytics — Coming Soon
-8. User & Admin Management — Coming Soon
-
-Release 3 — Operations tools:
-9. Workflow Automation — Coming Soon
-10. Data Management — Coming Soon
+3. Email & Outreach AI — Live
+4. Mini CRM — Live
+5. Document AI & OCR — Live
+6. Social Media Assistant — Live
+7. Business Analytics — Live
+8. User & Admin Management — Live
+9. Workflow Automation — Live
+10. Data Management — Live
 
 ### Premium Chatbot
 - Luxury floating button (glow + rotating ring + gradient core + AI badge)

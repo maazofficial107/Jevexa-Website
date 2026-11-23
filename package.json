@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --persist-to ../.jevexa-wrangler-state",
-    "check": "node --check script.js && node --check worker.js && node --check credits.js && node --check content.js && node --check support.js && node --check crm.js && node --check outreach.js",
+    "check": "node --check script.js && node --check worker.js && node --check credits.js && node --check content.js && node --check support.js && node --check crm.js && node --check outreach.js && node --check ocr.js && node --check social.js && node --check analytics.js && node --check team.js && node --check workflows.js && node --check data-mgmt.js",
     "test": "npm run check && node --test",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy"

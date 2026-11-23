@@ -593,7 +593,7 @@ test("credit UI starts without a fabricated balance and displays only persisted 
 test("homepage metrics reflect the staged tool release without fabricating activity", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /data-count="100">0<\/span>[\s\S]*?New Account Grant/);
-  assert.match(html, /data-count="4">0<\/span>[\s\S]*?Live AI Tools/);
+  assert.match(html, /data-count="10">0<\/span>[\s\S]*?Live AI Tools/);
   assert.match(html, /data-count="10">0<\/span>[\s\S]*?AI Tools/);
   assert.match(html, /id="heroFeatureOrbit"/);
   assert.match(html, /AI Chat/);
@@ -1066,8 +1066,8 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(workerSource, /There are 10 tools planned across three releases/);
   assert.doesNotMatch(html, /class="stars"/);
   assert.equal((html.match(/class="feature-card glass tilt-card"/g) || []).length, 10);
-  assert.equal((html.match(/class="service-chip live"/g) || []).length, 4);
-  assert.equal((html.match(/class="service-chip soon"/g) || []).length, 6);
+  assert.equal((html.match(/class="service-chip live"/g) || []).length, 10);
+  assert.equal((html.match(/class="service-chip soon"/g) || []).length, 0);
   assert.equal((html.match(/class="feature-stage-heading"/g) || []).length, 3);
   for (const tool of [
     "AI Chat", "Content Generation", "Email &amp; Outreach AI", "Mini CRM",
@@ -1077,8 +1077,8 @@ test("public copy does not promise unavailable services or fabricate customer ra
     assert.ok(html.includes(tool), `Missing staged tool card: ${tool}`);
   }
   assert.match(html, /AI Chat and Content Generation are live now; the other eight tools roll out in three releases\./);
-  assert.match(html, /<strong>4<\/strong>[\s\S]*?Live AI tools/);
-  assert.match(html, /<strong>6<\/strong>[\s\S]*?Coming Soon/);
+  assert.match(html, /<strong>10<\/strong>[\s\S]*?Live AI tools/);
+  assert.match(html, /<strong>0<\/strong>[\s\S]*?Coming Soon/);
   assert.match(html, /data-pricing-plan="starter"/);
   assert.match(html, /data-pricing-plan="pro"/);
   assert.match(html, /data-pricing-plan="business"/);
@@ -2085,23 +2085,17 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   const toolCards = html.match(/class="tool-launcher-card\s+(tool-live|tool-locked)"/g) || [];
   assert.equal(toolCards.length, 10, "Launcher grid must contain all 10 AI tools");
 
-  // 4 Live Tools
-  assert.match(html, /data-tool-id="chatbot"\s+data-status="live"/);
-  assert.match(html, /data-tool-id="content-generator"\s+data-status="live"/);
-  assert.match(html, /data-tool-id="email-outreach"\s+data-status="live"/);
-  assert.match(html, /data-tool-id="crm"\s+data-status="live"/);
-
-  // 6 Coming Soon Tools
-  const comingSoonIds = ["ocr", "social", "analytics", "admin", "workflows", "data"];
-  for (const id of comingSoonIds) {
-    assert.match(html, new RegExp(`data-tool-id="${id}"\\s+data-status="coming_soon"`));
+  // All 10 Live Tools
+  const allToolIds = ["chatbot", "content-generator", "email-outreach", "crm", "ocr", "social", "analytics", "admin", "workflows", "data"];
+  for (const id of allToolIds) {
+    assert.match(html, new RegExp(`data-tool-id="${id}"\\s+data-status="live"`));
   }
 
   // Scalable toolsConfig in script.js
   assert.match(script, /const toolsConfig\s*=\s*\[/);
   assert.match(script, /window\.JEVEXA_TOOLS_CONFIG\s*=\s*toolsConfig/);
   assert.match(script, /status:\s*['"]live['"]/);
-  assert.match(script, /status:\s*['"]coming_soon['"]/);
+  assert.match(script, /tool\.status === 'coming_soon'/);
   assert.match(script, /route:\s*['"]\/tools\/chatbot['"]/);
   assert.match(script, /route:\s*['"]\/tools\/content-generator['"]/);
   assert.match(script, /route:\s*['"]\/tools\/crm['"]/);
@@ -2114,8 +2108,6 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   // Visual hierarchy, live-first ordering, badges, and action cues
   assert.match(html, /class="tool-status-badge badge-live">[\s\S]*?LIVE NOW/);
   assert.match(html, /class="tool-card-cta live-cta">Open Workspace/);
-  assert.match(html, /class="tool-status-badge badge-locked">[\s\S]*?COMING SOON/);
-  assert.match(html, /class="tool-card-cta locked">[\s\S]*?Click for release info/);
 
   // CSS live-first ordering, electric border glow & muted locked card finish
   assert.match(css, /\.tool-launcher-card\.tool-live\s*\{[\s\S]*?order:\s*-1;/);
@@ -5717,9 +5709,9 @@ test("mini crm and email & outreach ai workspaces are fully configured, live, an
   const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
   // 1. Hub counter & status badges
-  assert.match(html, /4 LIVE NOW • 6 ON ROADMAP/);
-  assert.match(html, /Live \(4\)/);
-  assert.match(html, /Roadmap \(6\)/);
+  assert.match(html, /10 LIVE NOW • FULL SUITE UNLOCKED/);
+  assert.match(html, /Live \(10\)/);
+  assert.match(html, /Roadmap \(0\)/);
   assert.match(html, /data-tool-id="crm"[^>]*data-status="live"/);
   assert.match(html, /data-tool-id="email-outreach"[^>]*data-status="live"/);
 
@@ -6214,3 +6206,126 @@ test("Mobile UX & Ergonomics: Model & Thinking Selectors, Viewport Safety, Z-Ind
   assert.match(script, /function closeChatbot\(\)\s*\{[\s\S]*?window\.JEVEXA_CLOSE_SELECTORS\?\.\(\);/);
   assert.match(script, /function closeChatWorkspace\([\s\S]*?window\.JEVEXA_CLOSE_SELECTORS\?\.\(\);/);
 });
+
+test("all 6 unlocked tools are routed in worker.js with deterministic fallback handlers and system prompts", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // System prompts exist
+  assert.match(workerJs, /const OCR_SYSTEM_PROMPT =/);
+  assert.match(workerJs, /const SOCIAL_SYSTEM_PROMPT =/);
+  assert.match(workerJs, /const ANALYTICS_SYSTEM_PROMPT =/);
+
+  // Deterministic fallback processors exist
+  assert.match(workerJs, /function deterministicOcrExtract\(/);
+  assert.match(workerJs, /function deterministicSocialGenerate\(/);
+  assert.match(workerJs, /function deterministicAnalyticsReport\(/);
+  assert.match(workerJs, /function deterministicWorkflowRun\(/);
+  assert.match(workerJs, /function deterministicDataClean\(/);
+
+  // Endpoint handlers exist
+  assert.match(workerJs, /async function handleOcrExtract\(/);
+  assert.match(workerJs, /async function handleSocialGenerate\(/);
+  assert.match(workerJs, /async function handleAnalyticsReport\(/);
+  assert.match(workerJs, /async function handleTeamMembers\(/);
+  assert.match(workerJs, /async function handleTeamInvite\(/);
+  assert.match(workerJs, /async function handleTeamAudit\(/);
+  assert.match(workerJs, /async function handleWorkflowsRun\(/);
+  assert.match(workerJs, /async function handleDataClean\(/);
+
+  // Router bindings in fetch()
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/ocr\/extract['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/social\/generate['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/analytics\/report['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/team\/members['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/team\/invite['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/team\/audit['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/workflows\/run['"]/);
+  assert.match(workerJs, /url\.pathname === ['"]\/api\/data\/clean['"]/);
+
+  // Service pricing seeds in /api/health include all 6 new keys
+  assert.match(workerJs, /service_key:\s*['"]document_ocr['"]/);
+  assert.match(workerJs, /service_key:\s*['"]social_assistant['"]/);
+  assert.match(workerJs, /service_key:\s*['"]business_analytics['"]/);
+  assert.match(workerJs, /service_key:\s*['"]team_admin['"]/);
+  assert.match(workerJs, /service_key:\s*['"]workflow_automation['"]/);
+  assert.match(workerJs, /service_key:\s*['"]data_management['"]/);
+});
+
+test("tier plan limits enforce Cloudflare/Supabase safe quotas proportionally across Free to Ultra", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Single Source of Truth TIER_PLAN_LIMITS
+  assert.match(workerJs, /const TIER_PLAN_LIMITS = (Object\.freeze\()?\{/);
+
+  // Free Tier constraints
+  assert.match(workerJs, /free:\s*\{[\s\S]*?ocrMaxFileMb:\s*2/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?ocrMaxDocsPerDay:\s*3/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?socialGensPerDay:\s*5/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?analyticsMaxRows:\s*50/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?analyticsForecastDays:\s*30/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?teamMaxSeats:\s*3/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?workflowMaxSteps:\s*3/);
+  assert.match(workerJs, /free:\s*\{[\s\S]*?dataMaxRows:\s*100/);
+
+  // Ultra Tier proportional scaling
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?ocrMaxFileMb:\s*100/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?ocrMaxDocsPerDay:\s*1000/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?socialGensPerDay:\s*2000/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?analyticsMaxRows:\s*100000/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?analyticsForecastDays:\s*365/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?teamMaxSeats:\s*250/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?workflowMaxSteps:\s*50/);
+  assert.match(workerJs, /ultra:\s*\{[\s\S]*?dataMaxRows:\s*250000/);
+});
+
+test("all 6 unlocked workspace HTML structures and client controllers are wired cleanly", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const ocrJs = await readFile(new URL("../ocr.js", import.meta.url), "utf8");
+  const socialJs = await readFile(new URL("../social.js", import.meta.url), "utf8");
+  const analyticsJs = await readFile(new URL("../analytics.js", import.meta.url), "utf8");
+  const teamJs = await readFile(new URL("../team.js", import.meta.url), "utf8");
+  const workflowsJs = await readFile(new URL("../workflows.js", import.meta.url), "utf8");
+  const dataJs = await readFile(new URL("../data-mgmt.js", import.meta.url), "utf8");
+
+  // DOM Workspace containers in index.html
+  assert.match(html, /id="ocrWorkspace"/);
+  assert.match(html, /id="socialWorkspace"/);
+  assert.match(html, /id="analyticsWorkspace"/);
+  assert.match(html, /id="teamAdminWorkspace"/);
+  assert.match(html, /id="workflowsWorkspace"/);
+  assert.match(html, /id="dataWorkspace"/);
+
+  // Script tags in index.html
+  assert.match(html, /src="\/ocr\.js"/);
+  assert.match(html, /src="\/social\.js"/);
+  assert.match(html, /src="\/analytics\.js"/);
+  assert.match(html, /src="\/team\.js"/);
+  assert.match(html, /src="\/workflows\.js"/);
+  assert.match(html, /src="\/data-mgmt\.js"/);
+
+  // Global controller exposures
+  assert.match(ocrJs, /window\.JEVEXA_OCR\s*=/);
+  assert.match(socialJs, /window\.JEVEXA_SOCIAL\s*=/);
+  assert.match(analyticsJs, /window\.JEVEXA_ANALYTICS\s*=/);
+  assert.match(teamJs, /window\.JEVEXA_TEAM\s*=/);
+  assert.match(workflowsJs, /window\.JEVEXA_WORKFLOWS\s*=/);
+  assert.match(dataJs, /window\.JEVEXA_DATA_MGMT\s*=/);
+
+  // Global Studio API in script.js has open functions for all 10 tools
+  assert.match(script, /openOcr:\s*\(\)\s*=>\s*openOcrWorkspace\(true\)/);
+  assert.match(script, /openSocial:\s*\(\)\s*=>\s*openSocialWorkspace\(true\)/);
+  assert.match(script, /openAnalytics:\s*\(\)\s*=>\s*openAnalyticsWorkspace\(true\)/);
+  assert.match(script, /openTeamAdmin:\s*\(\)\s*=>\s*openTeamAdminWorkspace\(true\)/);
+  assert.match(script, /openWorkflows:\s*\(\)\s*=>\s*openWorkflowsWorkspace\(true\)/);
+  assert.match(script, /openData:\s*\(\)\s*=>\s*openDataWorkspace\(true\)/);
+
+  // Back to Studio buttons bound in script.js
+  assert.match(script, /bindAction\(document\.getElementById\('ocrBackToStudio'\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('socialBackToStudio'\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('analyticsBackToStudio'\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('teamAdminBackToStudio'\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('workflowsBackToStudio'\)/);
+  assert.match(script, /bindAction\(document\.getElementById\('dataBackToStudio'\)/);
+});
+

@@ -11445,6 +11445,12 @@ body.is-offline .offline-indicator {
 /* Strict hidden safety guards across all viewports */
 #crmWorkspace[hidden],
 #outreachWorkspace[hidden],
+#ocrWorkspace[hidden],
+#socialWorkspace[hidden],
+#analyticsWorkspace[hidden],
+#teamAdminWorkspace[hidden],
+#workflowsWorkspace[hidden],
+#dataWorkspace[hidden],
 #crmLeadModal[hidden],
 #crmDrawerBackdrop[hidden],
 #crmLeadDrawer[hidden],
@@ -11453,11 +11459,15 @@ body.is-offline .offline-indicator {
 #crmTableContainer[hidden],
 #crmDrawerAiScoreBox[hidden],
 #outreachAbSubjectContainer[hidden],
+#teamInviteModal[hidden],
+#workflowRunModal[hidden],
 .crm-modal-backdrop[hidden],
 .crm-drawer-backdrop[hidden],
 .crm-lead-drawer[hidden],
 .crm-modal-backdrop:not(.open),
-.crm-drawer-backdrop:not(.open) {
+.crm-drawer-backdrop:not(.open),
+.team-modal-backdrop:not(.open),
+.workflow-modal-backdrop:not(.open) {
     display: none !important;
     opacity: 0 !important;
     visibility: hidden !important;
@@ -11475,8 +11485,37 @@ body.is-offline .offline-indicator {
     box-sizing: border-box;
 }
 
+#ocrWorkspace,
+#socialWorkspace,
+#analyticsWorkspace,
+#teamAdminWorkspace,
+#workflowsWorkspace,
+#dataWorkspace {
+    background: #070b14;
+    color: #f1f5f9;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: clip !important;
+    box-sizing: border-box;
+}
+
 #crmWorkspace .workspace-scroll-wrap,
 #outreachWorkspace .workspace-scroll-wrap {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: clip !important;
+    overflow-y: auto !important;
+    box-sizing: border-box;
+    padding: 24px 20px max(40px, env(safe-area-inset-bottom));
+}
+
+#ocrWorkspace .workspace-scroll-wrap,
+#socialWorkspace .workspace-scroll-wrap,
+#analyticsWorkspace .workspace-scroll-wrap,
+#teamAdminWorkspace .workspace-scroll-wrap,
+#workflowsWorkspace .workspace-scroll-wrap,
+#dataWorkspace .workspace-scroll-wrap {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -11511,6 +11550,20 @@ body.is-offline .offline-indicator {
     overflow-x: clip;
 }
 
+.ocr-workspace-container,
+.social-workspace-container,
+.analytics-workspace-container,
+.team-workspace-container,
+.workflow-workspace-container,
+.data-workspace-container {
+    max-width: 1600px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 16px;
+    box-sizing: border-box;
+    overflow-x: clip;
+}
+
 #crmTool .workspace-container,
 #outreachTool .workspace-container {
     max-width: 1600px;
@@ -11524,6 +11577,12 @@ body.is-offline .offline-indicator {
 @media (max-width: 640px) {
     .crm-workspace-container,
     .outreach-workspace-container,
+    .ocr-workspace-container,
+    .social-workspace-container,
+    .analytics-workspace-container,
+    .team-workspace-container,
+    .workflow-workspace-container,
+    .data-workspace-container,
     #crmTool .workspace-container,
     #outreachTool .workspace-container {
         padding: 0 8px;
@@ -13198,4 +13257,482 @@ body.is-offline .offline-indicator {
         min-height: 42px;
     }
 }
+
+/* ==========================================================================
+   UNLOCKED WORKSPACES STYLING (OCR, SOCIAL, ANALYTICS, TEAM, WORKFLOWS, DATA)
+   ========================================================================== */
+
+/* Shared Workspace Grid & Layout */
+.workspace-two-col-grid {
+    display: grid;
+    grid-template-columns: minmax(320px, 440px) 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .workspace-two-col-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+
+/* Document AI & OCR */
+.ocr-dropzone {
+    border: 2px dashed rgba(34, 211, 238, 0.35);
+    background: rgba(15, 23, 42, 0.55);
+    border-radius: 14px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+.ocr-dropzone:hover,
+.ocr-dropzone.dragover {
+    border-color: #22d3ee;
+    background: rgba(34, 211, 238, 0.08);
+    box-shadow: 0 0 24px rgba(34, 211, 238, 0.2);
+}
+.ocr-dropzone-icon {
+    font-size: 2.2rem;
+    color: #22d3ee;
+}
+.ocr-preset-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+.ocr-preset-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.ocr-preset-btn:hover {
+    color: #f8fafc;
+    border-color: #22d3ee;
+    background: rgba(34, 211, 238, 0.12);
+}
+.ocr-confidence-gauge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.ocr-table-wrap {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ocr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+.ocr-table th,
+.ocr-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ocr-table th {
+    background: rgba(15, 23, 42, 0.8);
+    color: #94a3b8;
+    font-weight: 600;
+}
+.ocr-totals-box {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ocr-total-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #94a3b8;
+}
+.ocr-total-row.grand-total {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #22d3ee;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+    margin-top: 4px;
+}
+
+/* Social Media Assistant */
+.social-hooks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+.social-hook-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+.social-hook-card:hover {
+    border-color: #a855f7;
+    background: rgba(168, 85, 247, 0.06);
+}
+.social-hook-score {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: rgba(168, 85, 247, 0.2);
+    color: #c084fc;
+}
+.social-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+}
+@media (max-width: 768px) {
+    .social-calendar-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 480px) {
+    .social-calendar-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.social-cal-day {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 90px;
+}
+.social-cal-day-header {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+.social-char-bar-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    margin-top: 6px;
+}
+.social-char-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: #22d3ee;
+    transition: width 0.3s ease;
+}
+
+/* Business Analytics */
+.analytics-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.analytics-kpi-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+    overflow: hidden;
+}
+.analytics-kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #22d3ee, #6366f1);
+}
+.analytics-kpi-val {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.02em;
+}
+.analytics-kpi-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.analytics-kpi-delta.pos { color: #34d399; }
+.analytics-kpi-delta.neg { color: #f43f5e; }
+.analytics-charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+    .analytics-charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.analytics-chart-container {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 20px;
+    position: relative;
+}
+.analytics-svg-chart {
+    width: 100%;
+    height: 220px;
+    overflow: visible;
+}
+.analytics-funnel-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+/* User & Admin Management */
+.team-seat-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.team-table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 23, 42, 0.65);
+}
+.team-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.team-table th,
+.team-table td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.team-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #22d3ee);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #fff;
+    margin-right: 10px;
+}
+.rbac-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+}
+.rbac-matrix-table th,
+.rbac-matrix-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: center;
+}
+.rbac-matrix-table th:first-child,
+.rbac-matrix-table td:first-child {
+    text-align: left;
+}
+.audit-log-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.88rem;
+}
+.audit-chip {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(34, 211, 238, 0.15);
+    color: #22d3ee;
+}
+
+/* Workflow Automation */
+.workflow-canvas-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+}
+.workflow-step-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    transition: all 0.2s ease;
+}
+.workflow-step-card:hover {
+    border-color: #6366f1;
+}
+.step-connector {
+    width: 2px;
+    height: 20px;
+    background: linear-gradient(180deg, #6366f1, #22d3ee);
+    margin: 0 auto;
+}
+.workflow-templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+.workflow-template-card {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.workflow-template-card:hover {
+    border-color: #22d3ee;
+    background: rgba(34, 211, 238, 0.06);
+}
+
+/* Data Management */
+.data-rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+.data-rule-card {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.data-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.data-diff-table th,
+.data-diff-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.data-diff-clean {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.08);
+}
+.data-diff-flagged {
+    color: #f43f5e;
+    background: rgba(244, 63, 94, 0.08);
+    text-decoration: line-through;
+}
+
+/* Modals & Dialogs for New Workspaces */
+.team-modal-backdrop,
+.workflow-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.team-modal-card,
+.workflow-modal-card {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    max-width: 520px;
+    width: 100%;
+    padding: 24px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Responsive Viewport Optimizations */
+@media (max-width: 640px) {
+    .ocr-dropzone {
+        padding: 24px 14px;
+    }
+    .ocr-preset-chips {
+        justify-content: center;
+    }
+    .analytics-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+    .analytics-charts-grid {
+        grid-template-columns: 1fr;
+    }
+    .team-seat-banner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .workflow-step-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .data-rules-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 

@@ -6993,7 +6993,9 @@ test("Audit & Hardening: Calendar toggles, Data Management upload/metrics, respo
   assert.match(scriptJs, /#chatCustomizationModal:not\(\[hidden\]\)/);
   assert.match(scriptJs, /#supportModal:not\(\[hidden\]\)/);
 
-  // 5. Complete modal and drawer cleanup on logoutUser
+  // 5. Complete modal, drawer, and workspace cleanup on logoutUser & closeAllWorkspacesAndModals
+  assert.match(scriptJs, /closeAllWorkspacesAndModals\(\)/);
+  assert.match(scriptJs, /'contentWorkspace',[\s\S]*?'crmWorkspace',[\s\S]*?'outreachWorkspace',[\s\S]*?'ocrWorkspace',[\s\S]*?'socialWorkspace',[\s\S]*?'analyticsWorkspace',[\s\S]*?'teamAdminWorkspace',[\s\S]*?'workflowsWorkspace',[\s\S]*?'dataWorkspace'/);
   assert.match(scriptJs, /chatCustomModal\.classList\.remove\('open'\)/);
   assert.match(scriptJs, /crmModal\.classList\.remove\('open'\)/);
   assert.match(scriptJs, /crmDrawer\.classList\.remove\('open'\)/);

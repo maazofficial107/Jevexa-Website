@@ -117,12 +117,25 @@ function closeAllWorkspacesAndModals() {
     const chatSidebar = document.getElementById('chatSidebar');
     if (chatSidebar) chatSidebar.classList.remove('open');
 
-    const contentWorkspace = document.getElementById('contentWorkspace');
-    if (contentWorkspace) {
-        contentWorkspace.classList.remove('open');
-        contentWorkspace.setAttribute('aria-hidden', 'true');
-        contentWorkspace.hidden = true;
-    }
+    const workspaceIds = [
+        'contentWorkspace',
+        'crmWorkspace',
+        'outreachWorkspace',
+        'ocrWorkspace',
+        'socialWorkspace',
+        'analyticsWorkspace',
+        'teamAdminWorkspace',
+        'workflowsWorkspace',
+        'dataWorkspace'
+    ];
+    workspaceIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('open');
+            el.setAttribute('aria-hidden', 'true');
+            el.hidden = true;
+        }
+    });
 
     if (typeof window.closeComingSoonModal === 'function') {
         window.closeComingSoonModal();
@@ -1814,8 +1827,11 @@ async function logoutUser() {
     if (upgradeModal) upgradeModal.classList.remove('is-open');
 
     // Cleanly close any open tool workspaces and return to studio
+    closeAllWorkspacesAndModals();
+    if (typeof window.closeAllWorkspaces === 'function') window.closeAllWorkspaces();
     if (typeof closeAllWorkspaces === 'function') closeAllWorkspaces();
     if (typeof closeChatWorkspace === 'function') closeChatWorkspace(false);
+    if (typeof window.returnToStudio === 'function') window.returnToStudio();
     if (typeof returnToStudio === 'function') returnToStudio();
 
     // Abort active chat requests and typing cues
@@ -4378,6 +4394,7 @@ const JEVEXA_PLANS = {
         if (except !== 'data') closeDataWorkspace(false);
         closeComingSoonModal();
     }
+    window.closeAllWorkspaces = closeAllWorkspaces;
 
     function openChatWorkspace(pushState = true) {
         closeAllWorkspaces('chat');
@@ -4708,6 +4725,7 @@ const JEVEXA_PLANS = {
             }
         }
     }
+    window.returnToStudio = returnToStudio;
 
     // Routing Manager
     function navigateToRoute(route) {

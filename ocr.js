@@ -323,6 +323,9 @@ Terms: Net 30`
                     }
                 }
             });
+            if (textInput && !textInput.value.trim() && sampleSelect.value && SAMPLE_DOCS[sampleSelect.value]) {
+                textInput.value = SAMPLE_DOCS[sampleSelect.value];
+            }
         }
 
         // File dropzone simulation & real file upload

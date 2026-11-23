@@ -115,6 +115,7 @@
 
         state.members.forEach(member => {
             const tr = document.createElement('tr');
+            const isOwner = member.role === 'Owner';
             tr.innerHTML = `
                 <td>
                     <div class="team-member-cell">
@@ -125,11 +126,25 @@
                         </div>
                     </div>
                 </td>
-                <td><span class="team-role-pill role-${(member.role || 'member').toLowerCase()}">${escapeHtml(member.role || 'Member')}</span></td>
-                <td><span class="team-status-pill status-${(member.status || 'active').toLowerCase().replace(/\s+/g, '-')}">${escapeHtml(member.status || 'Active')}</span></td>
+                <td>
+                    ${isOwner ? '<span class="team-role-pill role-owner">Owner</span>' : `
+                        <select class="team-role-select" data-email="${escapeHtml(member.email)}" aria-label="Change role">
+                            <option value="Admin"${member.role === 'Admin' ? ' selected' : ''}>Admin</option>
+                            <option value="Member"${member.role === 'Member' ? ' selected' : ''}>Member</option>
+                            <option value="Viewer"${member.role === 'Viewer' ? ' selected' : ''}>Viewer</option>
+                        </select>
+                    `}
+                </td>
+                <td>
+                    ${isOwner ? '<span class="team-status-pill status-active">Active</span>' : `
+                        <button type="button" class="team-status-toggle status-${(member.status || 'Active').toLowerCase()}" data-email="${escapeHtml(member.email)}" title="Click to toggle status">
+                            <i class="fas fa-${member.status === 'Suspended' ? 'ban' : 'check-circle'}"></i> ${escapeHtml(member.status || 'Active')}
+                        </button>
+                    `}
+                </td>
                 <td><span class="team-last-active">${member.last_active_at ? new Date(member.last_active_at).toLocaleDateString() : 'Active now'}</span></td>
                 <td>
-                    ${member.role === 'Owner' ? '<span class="team-action-locked">Primary Owner</span>' : `
+                    ${isOwner ? '<span class="team-action-locked">Primary Owner</span>' : `
                         <button type="button" class="btn btn-xs btn-outline team-remove-btn" data-email="${escapeHtml(member.email)}">Remove</button>
                     `}
                 </td>
@@ -137,11 +152,60 @@
             memberTableBody.appendChild(tr);
         });
 
+        // Event listeners for role change, status toggle, remove
+        memberTableBody.querySelectorAll('.team-role-select').forEach(sel => {
+            sel.addEventListener('change', (e) => {
+                const targetEmail = e.currentTarget.dataset.email;
+                const newRole = e.currentTarget.value;
+                const targetMember = state.members.find(m => m.email === targetEmail);
+                if (targetMember) {
+                    targetMember.role = newRole;
+                    state.auditLogs.unshift({
+                        timestamp: new Date().toISOString(),
+                        action: "Role Changed",
+                        actor: "Workspace Admin",
+                        details: `Assigned role ${newRole} to ${targetEmail}`,
+                        status: "Success"
+                    });
+                    renderAuditLogs();
+                    window.showToast?.(`Updated role of ${targetEmail} to ${newRole}.`);
+                }
+            });
+        });
+
+        memberTableBody.querySelectorAll('.team-status-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetEmail = e.currentTarget.dataset.email;
+                const targetMember = state.members.find(m => m.email === targetEmail);
+                if (targetMember) {
+                    targetMember.status = targetMember.status === 'Suspended' ? 'Active' : 'Suspended';
+                    state.auditLogs.unshift({
+                        timestamp: new Date().toISOString(),
+                        action: "Status Changed",
+                        actor: "Workspace Admin",
+                        details: `Set ${targetEmail} status to ${targetMember.status}`,
+                        status: "Success"
+                    });
+                    renderMembers();
+                    renderAuditLogs();
+                    window.showToast?.(`Member ${targetEmail} is now ${targetMember.status}.`);
+                }
+            });
+        });
+
         memberTableBody.querySelectorAll('.team-remove-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const targetEmail = e.currentTarget.dataset.email;
                 state.members = state.members.filter(m => m.email !== targetEmail);
+                state.auditLogs.unshift({
+                    timestamp: new Date().toISOString(),
+                    action: "Member Removed",
+                    actor: "Workspace Admin",
+                    details: `Revoked access for ${targetEmail}`,
+                    status: "Success"
+                });
                 renderMembers();
+                renderAuditLogs();
                 window.showToast?.(`Removed member ${targetEmail}.`);
             });
         });
@@ -215,7 +279,15 @@
             }
 
             state.members.push(data.member);
+            state.auditLogs.unshift({
+                timestamp: new Date().toISOString(),
+                action: "Member Invited",
+                actor: "Workspace Admin",
+                details: `Dispatched invite to ${email} as ${role}`,
+                status: "Success"
+            });
             renderMembers();
+            renderAuditLogs();
             closeInviteModal();
             window.showToast?.(`Invitation sent to ${email} as ${role}!`);
         } catch (err) {

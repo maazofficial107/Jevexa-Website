@@ -293,6 +293,9 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                     }
                 }
             });
+            if (pasteInput && !pasteInput.value.trim() && presetSelect.value && SAMPLE_DATASETS[presetSelect.value]) {
+                pasteInput.value = SAMPLE_DATASETS[presetSelect.value];
+            }
         }
 
         // Tab switching

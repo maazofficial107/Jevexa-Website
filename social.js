@@ -360,6 +360,14 @@
                     }
                 }
             });
+            if (topicInput && !topicInput.value.trim() && presetSelect.value && PRESETS[presetSelect.value]) {
+                const initP = PRESETS[presetSelect.value];
+                topicInput.value = initP.topic;
+                if (platformSelect) platformSelect.value = initP.platform;
+                if (toneSelect) toneSelect.value = initP.tone;
+                if (goalSelect) goalSelect.value = initP.goal;
+                if (ctaInput) ctaInput.value = initP.cta;
+            }
         }
 
         // Copy Post

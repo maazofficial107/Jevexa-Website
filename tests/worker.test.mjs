@@ -6626,3 +6626,51 @@ test("Flagship Release & Viewport Overhaul: Screenshot fixes, keyboard ergonomic
   assert.match(workerJs, /secured\.headers\.set\("Accept-Ranges",\s*"bytes"\);/);
 });
 
+test("Ultra Max Layout, Workspace Stability, Scrollbars & Interactive Controls", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const ocrJs = await readFile(new URL("../ocr.js", import.meta.url), "utf8");
+  const socialJs = await readFile(new URL("../social.js", import.meta.url), "utf8");
+  const teamJs = await readFile(new URL("../team.js", import.meta.url), "utf8");
+  const workflowsJs = await readFile(new URL("../workflows.js", import.meta.url), "utf8");
+  const dataJs = await readFile(new URL("../data-mgmt.js", import.meta.url), "utf8");
+
+  // 1. Left-Aligned Vertical Services Stack (01-10 numbering, 1fr vertical layout, unclipped CTAs)
+  assert.match(styles, /\.tools-launcher-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr;/);
+  assert.match(styles, /\.tool-launcher-card\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*row;/);
+  assert.match(styles, /\.tool-card-num\s*\{/);
+  for (let i = 1; i <= 10; i++) {
+    const num = String(i).padStart(2, "0");
+    assert.match(html, new RegExp(`<span class="tool-card-num">${num}</span>`));
+  }
+
+  // 2. Workspace Scroll Container (flex: 1 1 0%, min-height: 0, overflow-y: auto)
+  assert.match(styles, /\.workspace-scroll-wrap,\s*\.workspace-content-scroll\s*\{[\s\S]*?flex:\s*1 1 0% !important;/);
+  assert.match(styles, /\.workspace-scroll-wrap,\s*\.workspace-content-scroll\s*\{[\s\S]*?min-height:\s*0 !important;/);
+  assert.match(styles, /\.workspace-scroll-wrap,\s*\.workspace-content-scroll\s*\{[\s\S]*?overflow-y:\s*auto !important;/);
+
+  // 3. 100% Zoom Workspace Scaling (no cramped headers, reset section padding, 2-column workspace grid)
+  assert.match(styles, /\.content-tool-section\.workspace-mode\s*\{[\s\S]*?padding:\s*0 !important;/);
+  assert.match(styles, /\.content-tool-section\.workspace-mode\s*\{[\s\S]*?margin:\s*0 !important;/);
+  assert.match(styles, /\.content-tool-section\.workspace-mode\s*\.section-title\s*\{[\s\S]*?font-size:\s*1\.45rem !important;/);
+  assert.match(styles, /\.tool-workspace-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(360px,\s*440px\)\s*minmax\(0,\s*1fr\)(?:\s*!important)?;/);
+
+  // 4. Team Management Interactive Controls (Role select, Status toggle, Audit logging)
+  assert.match(teamJs, /class="[^"]*team-role-select[^"]*"/);
+  assert.match(teamJs, /class="[^"]*team-status-toggle[^"]*"/);
+  assert.match(teamJs, /action:\s*['"]Role Changed['"]/);
+  assert.match(teamJs, /action:\s*['"]Status Changed['"]/);
+
+  // 5. Workflow Automation Step Controls (Reorder up/down, configure step, delete step)
+  assert.match(workflowsJs, /class="[^"]*workflow-move-up-btn[^"]*"/);
+  assert.match(workflowsJs, /class="[^"]*workflow-move-down-btn[^"]*"/);
+  assert.match(workflowsJs, /class="[^"]*workflow-configure-btn[^"]*"/);
+  assert.match(workflowsJs, /class="[^"]*workflow-del-step-btn[^"]*"/);
+
+  // 6. Real Functionality Preloads (OCR invoice preset, Social launch preset, Data management leads preset)
+  assert.match(ocrJs, /SAMPLE_DOCS[\s\S]*?saas_invoice/);
+  assert.match(socialJs, /PRESETS[\s\S]*?product_launch/);
+  assert.match(dataJs, /SAMPLE_DATASETS\.messy_leads/);
+});
+
+

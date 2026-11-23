@@ -120,12 +120,63 @@
                     <p>${escapeHtml(step.desc || 'Automated action step')}</p>
                 </div>
                 <div class="workflow-step-actions">
+                    <button type="button" class="btn btn-xs btn-outline workflow-move-up-btn" data-step-index="${index}" title="Move Up" ${index === 0 ? 'disabled' : ''}>
+                        <i class="fas fa-arrow-up"></i>
+                    </button>
+                    <button type="button" class="btn btn-xs btn-outline workflow-move-down-btn" data-step-index="${index}" title="Move Down" ${index === state.steps.length - 1 ? 'disabled' : ''}>
+                        <i class="fas fa-arrow-down"></i>
+                    </button>
+                    <button type="button" class="btn btn-xs btn-outline workflow-configure-btn" data-step-index="${index}" title="Configure Step">
+                        <i class="fas fa-sliders"></i>
+                    </button>
                     <button type="button" class="btn btn-xs btn-outline workflow-del-step-btn" data-step-index="${index}" title="Remove Step">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
             `;
             stepListEl.appendChild(card);
+        });
+
+        stepListEl.querySelectorAll('.workflow-move-up-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = Number(e.currentTarget.dataset.stepIndex);
+                if (idx > 0) {
+                    const temp = state.steps[idx];
+                    state.steps[idx] = state.steps[idx - 1];
+                    state.steps[idx - 1] = temp;
+                    renderSteps();
+                    window.showToast?.('Step moved up.');
+                }
+            });
+        });
+
+        stepListEl.querySelectorAll('.workflow-move-down-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = Number(e.currentTarget.dataset.stepIndex);
+                if (idx < state.steps.length - 1) {
+                    const temp = state.steps[idx];
+                    state.steps[idx] = state.steps[idx + 1];
+                    state.steps[idx + 1] = temp;
+                    renderSteps();
+                    window.showToast?.('Step moved down.');
+                }
+            });
+        });
+
+        stepListEl.querySelectorAll('.workflow-configure-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = Number(e.currentTarget.dataset.stepIndex);
+                const step = state.steps[idx];
+                if (!step) return;
+                const newName = prompt("Configure step action name:", step.name);
+                if (newName && newName.trim()) {
+                    step.name = newName.trim();
+                    const newDesc = prompt("Configure step description:", step.desc || "");
+                    if (newDesc !== null) step.desc = newDesc.trim();
+                    renderSteps();
+                    window.showToast?.('Step configuration updated.');
+                }
+            });
         });
 
         stepListEl.querySelectorAll('.workflow-del-step-btn').forEach(btn => {

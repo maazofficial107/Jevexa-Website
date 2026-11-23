@@ -1543,6 +1543,15 @@
         bindSafe(openBtn, 'click', openModal);
         if (headerSettingsBtn) bindSafe(headerSettingsBtn, 'click', openModal);
         bindSafe(closeBtn, 'click', closeModal);
+        bindSafe(modal, 'click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.hidden && modal.classList.contains('open')) {
+                e.preventDefault();
+                closeModal();
+            }
+        });
 
         const modalTheme = document.getElementById('chatModalThemeSelect');
         if (modalTheme) {
@@ -1659,7 +1668,8 @@
                 } else if (typeof window.showToast === 'function') {
                     window.showToast(`Memory limit reached (${limits.maxMemories}). Upgrade plan for more slots.`);
                 } else {
-                    alert(`Your ${limits.label} is capped at ${limits.maxMemories} memory slots. Upgrade to store more.`);
+                    const statusText = document.getElementById('chatCustomSaveStatus');
+                    if (statusText) statusText.textContent = `Memory limit reached (${limits.maxMemories}). Upgrade to store more.`;
                 }
                 return;
             }

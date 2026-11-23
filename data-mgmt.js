@@ -281,6 +281,34 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(processBtn, 'click', processData);
 
+        // File upload handler
+        if (fileInput) {
+            bindSafe(fileInput, 'change', (event) => {
+                const file = event.target?.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (loadEvent) => {
+                    const text = loadEvent.target?.result;
+                    if (pasteInput && typeof text === 'string') {
+                        pasteInput.value = text;
+                        if (statusEl) {
+                            const sizeKb = (file.size / 1024).toFixed(1);
+                            statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Click "Clean & Normalize Dataset" to process.`;
+                            statusEl.className = 'data-status-msg info';
+                        }
+                        window.showToast?.(`File "${file.name}" loaded successfully.`);
+                    }
+                };
+                reader.onerror = () => {
+                    if (statusEl) {
+                        statusEl.textContent = 'Could not read file. Please ensure it is a valid text or CSV file.';
+                        statusEl.className = 'data-status-msg error';
+                    }
+                };
+                reader.readAsText(file);
+            });
+        }
+
         // Preset selector
         if (presetSelect) {
             bindSafe(presetSelect, 'change', () => {

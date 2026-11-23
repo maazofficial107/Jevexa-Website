@@ -6789,7 +6789,8 @@ export default {
         "/login": "/",
         "/signup": "/",
         "/admin": "/admin.html",
-        "/admin/": "/admin.html"
+        "/admin/": "/admin.html",
+        "/admin.html": "/admin.html"
       };
 
       if (publicRoutes[normalizedPath]) {

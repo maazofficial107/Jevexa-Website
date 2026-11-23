@@ -194,10 +194,11 @@
         document.getElementById('supportConnecting').hidden = false;
         connectingTimer = window.setTimeout(async () => {
             connectingTimer = null;
-            document.getElementById('supportConnecting').hidden = true;
+            const connectingEl = document.getElementById('supportConnecting');
+            if (connectingEl) connectingEl.hidden = true;
             await prefillTicketForm();
             form.hidden = false;
-            document.getElementById('supportName').focus();
+            document.getElementById('supportName')?.focus();
         }, 2000);
     });
 
@@ -229,9 +230,9 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            name: document.getElementById('supportName').value,
-                            email: document.getElementById('supportEmail').value,
-                            message: document.getElementById('supportMessage').value
+                            name: document.getElementById('supportName')?.value || '',
+                            email: document.getElementById('supportEmail')?.value || '',
+                            message: document.getElementById('supportMessage')?.value || ''
                         }),
                         signal: controller.signal
                     });

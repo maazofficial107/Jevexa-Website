@@ -1780,6 +1780,26 @@ async function logoutUser() {
     if (accountBackdrop) accountBackdrop.style.display = 'none';
     const settingsPanel = document.getElementById('settingsPanel');
     if (settingsPanel) settingsPanel.remove();
+    const chatCustomModal = document.getElementById('chatCustomizationModal');
+    if (chatCustomModal) {
+        chatCustomModal.hidden = true;
+        chatCustomModal.style.display = 'none';
+        chatCustomModal.classList.remove('open');
+    }
+    const crmModal = document.getElementById('crmLeadModal');
+    if (crmModal) { crmModal.hidden = true; crmModal.classList.remove('open'); }
+    const crmDrawer = document.getElementById('crmLeadDrawer');
+    if (crmDrawer) { crmDrawer.hidden = true; crmDrawer.classList.remove('open'); }
+    const crmBackdrop = document.getElementById('crmDrawerBackdrop');
+    if (crmBackdrop) { crmBackdrop.hidden = true; crmBackdrop.classList.remove('open'); }
+    const outreachDrawer = document.getElementById('outreachHistoryDrawer');
+    if (outreachDrawer) { outreachDrawer.hidden = true; outreachDrawer.classList.remove('open'); }
+    const outreachBackdrop = document.getElementById('outreachHistoryBackdrop');
+    if (outreachBackdrop) { outreachBackdrop.hidden = true; outreachBackdrop.classList.remove('open'); }
+    const teamModal = document.getElementById('teamInviteModal');
+    if (teamModal) { teamModal.hidden = true; teamModal.classList.remove('open'); }
+    const wfModal = document.getElementById('workflowExecModal');
+    if (wfModal) { wfModal.hidden = true; wfModal.classList.remove('open'); }
     const comingSoonModal = document.getElementById('comingSoonModal');
     if (comingSoonModal) {
         comingSoonModal.classList.remove('open');
@@ -4713,6 +4733,7 @@ const JEVEXA_PLANS = {
             const targetId = hash.replace(/^#/, '');
             const targetEl = document.getElementById(targetId);
             if (targetEl) {
+                closeAllWorkspaces();
                 closeChatWorkspace(false);
                 closeContentWorkspace(false);
                 closeCrmWorkspace(false);
@@ -4733,6 +4754,7 @@ const JEVEXA_PLANS = {
         if (cleanPath === '/pricing' || cleanHash === '#pricing') {
             const pricingEl = document.getElementById('pricing');
             if (pricingEl) {
+                closeAllWorkspaces();
                 closeChatWorkspace(false);
                 closeContentWorkspace(false);
                 closeCrmWorkspace(false);
@@ -5045,7 +5067,7 @@ const JEVEXA_PLANS = {
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' || event.key === 'Esc') {
             const hasActiveInnerModal = document.querySelector(
-                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, .crm-lead-drawer.open, .upgrade-modal.open, .auth-modal.open'
+                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, .crm-lead-drawer.open, .upgrade-modal.open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #supportModal:not([hidden])'
             );
             const activeModalOrDrawer = hasActiveInnerModal;
             if (activeModalOrDrawer) {

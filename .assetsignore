@@ -14,5 +14,3 @@ wrangler.jsonc
 .assetsignore
 supabase/**
 tests/**
-
-**/admin.html

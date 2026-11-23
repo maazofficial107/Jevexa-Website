@@ -6962,4 +6962,57 @@ test("Global Suite Dedicated: Auth, clean logout, language persistence, billing 
   }
 });
 
+test("Audit & Hardening: Calendar toggles, Data Management upload/metrics, responsive table wrappers, modal isolation, and admin assets", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const dataJs = await readFile(new URL("../data-mgmt.js", import.meta.url), "utf8");
+  const supportJs = await readFile(new URL("../support.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const assetsIgnore = await readFile(new URL("../.assetsignore", import.meta.url), "utf8");
+
+  // 1. Social calendar toggles
+  assert.match(html, /id="socialViewWeekBtn"/);
+  assert.match(html, /id="socialViewMonthBtn"/);
+
+  // 2. Data management file upload & emails normalized metric
+  assert.match(html, /id="dataFileInput"/);
+  assert.match(html, /id="dataCountEmails"/);
+  assert.match(dataJs, /bindSafe\(fileInput,\s*'change'/);
+  assert.match(dataJs, /reader\.readAsText\(file\)/);
+
+  // 3. Responsive table wrapper styles
+  assert.match(styles, /\.table-responsive[\s\S]*?overflow-x:\s*auto/);
+  assert.match(styles, /\.table-responsive[\s\S]*?-webkit-overflow-scrolling:\s*touch/);
+  assert.match(styles, /\.data-table-wrap/);
+
+  // 4. Modal isolation on ESC in script.js
+  assert.match(scriptJs, /#teamInviteModal:not\(\[hidden\]\)/);
+  assert.match(scriptJs, /#workflowExecModal:not\(\[hidden\]\)/);
+  assert.match(scriptJs, /#chatCustomizationModal:not\(\[hidden\]\)/);
+  assert.match(scriptJs, /#supportModal:not\(\[hidden\]\)/);
+
+  // 5. Complete modal and drawer cleanup on logoutUser
+  assert.match(scriptJs, /chatCustomModal\.classList\.remove\('open'\)/);
+  assert.match(scriptJs, /crmModal\.classList\.remove\('open'\)/);
+  assert.match(scriptJs, /crmDrawer\.classList\.remove\('open'\)/);
+  assert.match(scriptJs, /outreachDrawer\.classList\.remove\('open'\)/);
+  assert.match(scriptJs, /teamModal\.classList\.remove\('open'\)/);
+  assert.match(scriptJs, /wfModal\.classList\.remove\('open'\)/);
+
+  // 6. Settings modal ESC/backdrop dismissal & 0 native alerts in credits.js
+  assert.match(creditsJs, /bindSafe\(modal,\s*'click'/);
+  assert.doesNotMatch(creditsJs, /alert\(`Your/);
+
+  // 7. Support.js safe optional chaining
+  assert.match(supportJs, /document\.getElementById\('supportName'\)\?\.focus\(\)/);
+  assert.match(supportJs, /document\.getElementById\('supportName'\)\?\.value \|\| ''/);
+
+  // 8. Admin asset deployment & route normalization
+  assert.doesNotMatch(assetsIgnore, /admin\.html/);
+  assert.match(workerJs, /"\/admin\.html":\s*"\/admin\.html"/);
+});
+
+
 

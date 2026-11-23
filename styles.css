@@ -12585,6 +12585,18 @@ body.is-offline .offline-indicator {
     box-sizing: border-box;
 }
 
+.table-responsive,
+.data-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+    display: block;
+    margin-bottom: 16px;
+    border-radius: 12px;
+}
+
 .crm-table {
     width: 100%;
     min-width: 720px;

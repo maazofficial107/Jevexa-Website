@@ -1671,6 +1671,10 @@
                                 <span class="calendar-sub">Upcoming scheduled post drafts</span>
                             </div>
                             <div class="calendar-actions">
+                                <div class="social-view-toggles" role="tablist" style="display:inline-flex; gap:6px; margin-right:8px;">
+                                    <button type="button" class="btn btn-xs btn-outline active" id="socialViewWeekBtn" role="tab" aria-selected="true"><i class="fas fa-calendar-week"></i> 7 Days</button>
+                                    <button type="button" class="btn btn-xs btn-outline" id="socialViewMonthBtn" role="tab" aria-selected="false"><i class="fas fa-calendar-alt"></i> 30 Days</button>
+                                </div>
                                 <button type="button" class="btn btn-xs btn-outline" id="socialExportCalendarCsvBtn"><i class="fas fa-file-csv"></i> Export CSV</button>
                                 <button type="button" class="btn btn-xs btn-outline" id="socialExportCalendarJsonBtn"><i class="fas fa-file-code"></i> Export JSON</button>
                             </div>
@@ -2153,7 +2157,13 @@
                         <div class="tool-pane-setup glass">
                             <div class="pane-head">
                                 <span class="crm-ai-tag"><i class="fas fa-file-import"></i> RAW DATA INPUT</span>
-                                <h3>Data Source</h3>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <h3>Data Source</h3>
+                                    <label for="dataFileInput" class="btn btn-xs btn-outline" style="cursor:pointer; margin:0;" title="Upload CSV or TSV file">
+                                        <i class="fas fa-upload"></i> Upload CSV
+                                    </label>
+                                    <input type="file" id="dataFileInput" accept=".csv,.tsv,.txt" style="display:none;">
+                                </div>
                             </div>
                             <div class="ocr-form-group">
                                 <label for="dataPresetSelect">Quick Sample Dataset</label>
@@ -2209,6 +2219,10 @@
                                 <div class="data-stat-card glass">
                                     <span class="stat-label">Dates Standardized</span>
                                     <strong class="stat-val" id="dataCountDates">0</strong>
+                                </div>
+                                <div class="data-stat-card glass">
+                                    <span class="stat-label">Emails Normalized</span>
+                                    <strong class="stat-val text-purple" id="dataCountEmails">0</strong>
                                 </div>
                                 <div class="data-stat-card glass">
                                     <span class="stat-label">Anomalies Detected</span>

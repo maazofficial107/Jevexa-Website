@@ -4160,30 +4160,6 @@ const JEVEXA_PLANS = {
             actionText: 'Open Workspace'
         },
         {
-            id: 'email-outreach',
-            name: 'Email & Outreach AI',
-            shortName: 'Outreach AI',
-            tagline: 'Personalized cold outreach sequences, follow-ups, and inbox automation.',
-            icon: 'fas fa-envelope-open-text',
-            status: 'live',
-            route: '/tools/outreach',
-            badge: 'LIVE NOW',
-            badgeType: 'live',
-            actionText: 'Open Workspace'
-        },
-        {
-            id: 'crm',
-            name: 'Mini CRM',
-            shortName: 'Mini CRM',
-            tagline: 'Pipeline deal tracking, contact timeline history, and lead scoring.',
-            icon: 'fas fa-address-book',
-            status: 'live',
-            route: '/tools/crm',
-            badge: 'LIVE NOW',
-            badgeType: 'live',
-            actionText: 'Open Workspace'
-        },
-        {
             id: 'ocr',
             name: 'Document AI & OCR',
             shortName: 'Doc OCR',
@@ -4251,6 +4227,30 @@ const JEVEXA_PLANS = {
             icon: 'fas fa-database',
             status: 'live',
             route: '/tools/data',
+            badge: 'LIVE NOW',
+            badgeType: 'live',
+            actionText: 'Open Workspace'
+        },
+        {
+            id: 'crm',
+            name: 'Mini CRM',
+            shortName: 'Mini CRM',
+            tagline: 'Pipeline deal tracking, contact timeline history, and lead scoring.',
+            icon: 'fas fa-address-book',
+            status: 'live',
+            route: '/tools/crm',
+            badge: 'LIVE NOW',
+            badgeType: 'live',
+            actionText: 'Open Workspace'
+        },
+        {
+            id: 'email-outreach',
+            name: 'Email & Outreach AI',
+            shortName: 'Outreach AI',
+            tagline: 'Personalized cold outreach sequences, follow-ups, and inbox automation.',
+            icon: 'fas fa-envelope-open-text',
+            status: 'live',
+            route: '/tools/outreach',
             badge: 'LIVE NOW',
             badgeType: 'live',
             actionText: 'Open Workspace'

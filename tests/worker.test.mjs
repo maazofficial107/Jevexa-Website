@@ -6596,8 +6596,8 @@ test("Flagship Release & Viewport Overhaul: Screenshot fixes, keyboard ergonomic
   assert.doesNotMatch(aboutHtml, /Release [123]/);
   assert.doesNotMatch(readme, /Release [123]/);
 
-  // 4. AI Tools Hub Card / Preview layout & spacious styling
-  assert.match(styles, /\.tools-launcher-grid\s*\{[\s\S]*?max-height:\s*480px;/);
+  // 4. AI Tools Hub Card / Preview layout & spacious styling (no inner scrollbox trap)
+  assert.match(styles, /\.tools-launcher-grid\s*\{[\s\S]*?max-height:\s*none/);
   assert.match(styles, /\.tool-card-footer\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
   assert.match(styles, /\.tool-card-cta\.live-cta\s*\{[\s\S]*?white-space:\s*nowrap;/);
   assert.match(styles, /\.tool-card-badge-pill\s*\{[\s\S]*?white-space:\s*nowrap;/);
@@ -6671,6 +6671,295 @@ test("Ultra Max Layout, Workspace Stability, Scrollbars & Interactive Controls",
   assert.match(ocrJs, /SAMPLE_DOCS[\s\S]*?saas_invoice/);
   assert.match(socialJs, /PRESETS[\s\S]*?product_launch/);
   assert.match(dataJs, /SAMPLE_DATASETS\.messy_leads/);
+});
+
+// ============================================================================
+// PHASE 2 DEDICATED TESTS: ONE-BY-ONE END-TO-END SUITE (SERVICES 01 THROUGH 10)
+// ============================================================================
+
+test("Service 01 Dedicated: AI Chatbot messaging, streaming, controls, mobile viewport, and provider cascade", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Chatbot core elements & workspace
+  assert.match(html, /id="chatbotWindow"/);
+  assert.match(html, /id="chatInput"/);
+  assert.match(html, /id="chatSend"/);
+  assert.match(html, /id="chatMessages"/);
+
+  // Thinking level gating
+  assert.match(creditsJs, /maximumThinkingLevel/);
+  assert.match(creditsJs, /currentThinkingLevel/);
+  assert.match(workerJs, /function thinkingLevelIsAllowed/);
+  assert.match(workerJs, /function thinkingTierError/);
+
+  // Mobile virtual keyboard & viewport tracking
+  assert.match(creditsJs, /window\.visualViewport/);
+  assert.match(creditsJs, /window\.JEVEXA_SCROLL_TO_BOTTOM/);
+
+  // Language preferences
+  assert.match(html, /id="chatLanguageSelect"/);
+  assert.match(creditsJs, /chatCustomSettings\.language/);
+
+  // Multi-provider cascade: Groq -> Gemini -> OpenRouter
+  assert.match(workerJs, /executeGroqChat/);
+  assert.match(workerJs, /executeGeminiChat/);
+  assert.match(workerJs, /executeOpenRouterChat/);
+});
+
+test("Service 02 Dedicated: Content Generation prompts, presets, exports, and multi-provider cascade", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const contentJs = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Core content generation interface
+  assert.match(html, /id="contentTool"/);
+  assert.match(html, /id="contentTopic"/);
+  assert.match(html, /id="contentGenerate"/);
+  assert.match(html, /id="contentOutput"/);
+
+  // Presets and controls
+  assert.match(html, /id="contentTone"/);
+  assert.match(html, /id="contentLength"/);
+
+  // Multi-provider cascade in worker: Groq -> Gemini -> OpenRouter
+  assert.match(workerJs, /executeGroqContent/);
+  assert.match(workerJs, /executeGeminiContent/);
+  assert.match(workerJs, /executeOpenRouterContent/);
+
+  // Copy and download export functions
+  assert.match(html, /id="contentCopy"/);
+  assert.match(html, /id="contentDownload"/);
+  assert.match(contentJs, /copyButton/);
+  assert.match(contentJs, /downloadButton/);
+});
+
+test("Service 03 Dedicated: Document AI & OCR file upload, extraction formats, copy/CSV export, and provider cascade", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const ocrJs = await readFile(new URL("../ocr.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // OCR workspace & elements
+  assert.match(html, /id="ocrWorkspace"/);
+  assert.match(html, /id="ocrFileInput"/);
+  assert.match(html, /id="ocrExtractBtn"/);
+  assert.match(html, /id="ocrResultCard"/);
+
+  // Preloaded preset & extraction tabs
+  assert.match(ocrJs, /saas_invoice/);
+  assert.match(html, /id="ocrTabStructured"/);
+  assert.match(html, /id="ocrTabJson"/);
+  assert.match(html, /id="ocrTabText"/);
+
+  // Copy & CSV export
+  assert.match(ocrJs, /copyJsonBtn/);
+  assert.match(ocrJs, /exportCsvBtn/);
+
+  // Multi-provider cascade + deterministic fallback
+  assert.match(workerJs, /handleOcrExtract/);
+  assert.match(workerJs, /deterministicOcrExtract/);
+  assert.match(workerJs, /ocrMaxFileMb/);
+});
+
+test("Service 04 Dedicated: Social Media Assistant viral hooks, calendar, hashtag generator, and cascade", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const socialJs = await readFile(new URL("../social.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Social assistant workspace & controls
+  assert.match(html, /id="socialWorkspace"/);
+  assert.match(html, /id="socialTopic"/);
+  assert.match(html, /id="socialGenerateBtn"/);
+  assert.match(html, /id="socialPreviewContainer"/);
+
+  // Campaign presets & options
+  assert.match(socialJs, /PRESETS/);
+  assert.match(html, /id="socialPlatform"/);
+  assert.match(html, /id="socialTone"/);
+  assert.match(html, /id="socialGoal"/);
+
+  // Viral hooks, copy post, and calendar buttons
+  assert.match(html, /id="socialCopyPostBtn"/);
+  assert.match(html, /id="socialAddToCalendarBtn"/);
+  assert.match(socialJs, /copyPostBtn/);
+  assert.match(socialJs, /addToCalendar/);
+
+  // Worker cascade + deterministic fallback
+  assert.match(workerJs, /handleSocialGenerate/);
+  assert.match(workerJs, /deterministicSocialGenerate/);
+});
+
+test("Service 05 Dedicated: Business Analytics KPIs, models, horizon forecasting, and credit settlement", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const analyticsJs = await readFile(new URL("../analytics.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Analytics workspace & controls
+  assert.match(html, /id="analyticsWorkspace"/);
+  assert.match(html, /id="analyticsGenerateBtn"/);
+  assert.match(html, /id="analyticsReportCard"/);
+  assert.match(html, /id="analyticsExportCsvBtn"/);
+
+  // Horizon & forecast metrics/timeframe
+  assert.match(html, /id="analyticsTimeframe"/);
+  assert.match(html, /id="analyticsMetricMrr"/);
+  assert.match(analyticsJs, /PRESETS/);
+
+  // CSV/JSON export
+  assert.match(analyticsJs, /exportCsvBtn/);
+
+  // Worker calculation and credit settlement
+  assert.match(workerJs, /handleAnalyticsReport/);
+  assert.match(workerJs, /deterministicAnalyticsReport/);
+});
+
+test("Service 06 Dedicated: User & Admin Management member provisioning, role select, audit logs, and seat limits", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const teamJs = await readFile(new URL("../team.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Admin workspace & controls
+  assert.match(html, /id="teamAdminWorkspace"/);
+  assert.match(html, /id="teamMemberTableBody"/);
+  assert.match(html, /id="teamInviteModalBtn"/);
+  assert.match(html, /id="teamAuditTableBody"/);
+
+  // Role select & status toggle
+  assert.match(teamJs, /team-role-select/);
+  assert.match(teamJs, /team-status-toggle/);
+  assert.match(teamJs, /renderAuditLogs/);
+
+  // Permission matrix in HTML
+  assert.match(html, /Billing &amp; Credit Management/);
+  assert.match(html, /Team Invites &amp; Seat Provisioning/);
+
+  // Seat enforcement in worker
+  assert.match(workerJs, /teamMaxSeats/);
+  assert.match(workerJs, /handleTeamInvite/);
+});
+
+test("Service 07 Dedicated: Workflow Automation step ordering, execution engine, run logs, and quota limits", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const workflowsJs = await readFile(new URL("../workflows.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Workflows workspace & controls
+  assert.match(html, /id="workflowsWorkspace"/);
+  assert.match(html, /id="workflowStepList"/);
+  assert.match(html, /id="workflowRunBtn"/);
+  assert.match(html, /id="workflowExecLogs"/);
+
+  // Step manipulation controls
+  assert.match(workflowsJs, /workflow-move-up-btn/);
+  assert.match(workflowsJs, /workflow-move-down-btn/);
+  assert.match(workflowsJs, /workflow-configure-btn/);
+  assert.match(workflowsJs, /workflow-del-step-btn/);
+
+  // Templates
+  assert.match(workflowsJs, /TEMPLATES/);
+
+  // Worker execution & step limits
+  assert.match(workerJs, /handleWorkflowsRun/);
+  assert.match(workerJs, /deterministicWorkflowRun/);
+  assert.match(workerJs, /workflowMaxSteps/);
+});
+
+test("Service 08 Dedicated: Data Management cleaning rules, diffing, row limits, and export", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const dataJs = await readFile(new URL("../data-mgmt.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Data management workspace & elements
+  assert.match(html, /id="dataWorkspace"/);
+  assert.match(html, /id="dataProcessBtn"/);
+  assert.match(html, /id="dataCountCleaned"/);
+  assert.match(html, /id="dataDownloadCsvBtn"/);
+
+  // Cleaning operations
+  assert.match(html, /id="dataOpDedup"/);
+  assert.match(html, /id="dataOpWhitespace"/);
+  assert.match(html, /id="dataOpEmails"/);
+  assert.match(html, /id="dataOpPhones"/);
+
+  // Export & diffing
+  assert.match(dataJs, /downloadCsvBtn/);
+  assert.match(dataJs, /downloadJsonBtn/);
+
+  // Worker clean handler & row limit gating
+  assert.match(workerJs, /handleDataClean/);
+  assert.match(workerJs, /deterministicDataClean/);
+  assert.match(workerJs, /dataMaxRows/);
+});
+
+test("Services 09 & 10 Dedicated: Mini CRM pipelines, AI scoring, outreach handoff, and multi-step sequence builder", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const crmJs = await readFile(new URL("../crm.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Mini CRM core interface & 50-lead cap
+  assert.match(html, /id="crmWorkspace"/);
+  assert.match(crmJs, /maxFreeLeads:\s*50/);
+  assert.match(crmJs, /handleAiScore/);
+  assert.match(crmJs, /handleDraftOutreachShortcut/);
+
+  // Email & Outreach AI sequence generator & Gmail integration
+  assert.match(html, /id="outreachWorkspace"/);
+  assert.match(outreachJs, /handleGenerate/);
+  assert.match(outreachJs, /handleOpenInGmail/);
+  assert.match(outreachJs, /handleSyncCrm/);
+
+  // Multi-provider cascade in worker
+  assert.match(workerJs, /handleCrmScore/);
+  assert.match(workerJs, /handleOutreachGenerate/);
+});
+
+test("Global Suite Dedicated: Auth, clean logout, language persistence, billing toggle, and /tools/* routing", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+
+  // Clean logout flow
+  assert.match(scriptJs, /async function logoutUser\(\)/);
+  assert.match(scriptJs, /applyAuthState\(null\)/);
+  assert.match(scriptJs, /closeAllWorkspaces\(\)/);
+  assert.match(scriptJs, /returnToStudio\(\)/);
+
+  // Billing toggle (Monthly / Annual)
+  assert.match(html, /id="billingToggle"/);
+  assert.match(scriptJs, /function setBillingCycle/);
+  assert.match(scriptJs, /toggleBillingCycle/);
+
+  // Full /tools/* SPA routing in script and worker
+  const expectedRoutes = [
+    "/tools/chatbot",
+    "/tools/content-generator",
+    "/tools/ocr",
+    "/tools/social",
+    "/tools/analytics",
+    "/tools/admin",
+    "/tools/workflows",
+    "/tools/data",
+    "/tools/crm",
+    "/tools/outreach"
+  ];
+  for (const route of expectedRoutes) {
+    assert.match(scriptJs, new RegExp(`'${route}'`));
+  }
+  assert.match(workerJs, /url\.pathname\.startsWith\("\/tools\/"\)/);
+
+  // Hub layout: Left-side line-wise stack with no inner scroll trap
+  assert.match(styles, /\.tools-launcher-grid\s*\{[\s\S]*?max-height:\s*none/);
+  assert.match(styles, /\.tools-launcher-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr;/);
+
+  // Exact 01 through 10 numbering in hub and feature cards
+  for (let i = 1; i <= 10; i++) {
+    const num = String(i).padStart(2, "0");
+    assert.match(html, new RegExp(`<span class="tool-card-num">${num}</span>`));
+    assert.match(html, new RegExp(`<span class="feature-number">${num}</span>`));
+  }
 });
 
 

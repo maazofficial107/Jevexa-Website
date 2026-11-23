@@ -4787,12 +4787,14 @@ async function handleOcrExtract(request, env) {
   if (reserveResult.errorResponse) return reserveResult.errorResponse;
   const reservation = reserveResult.reservation;
 
-  // LLM execution with deterministic fallback
+  // LLM execution with multi-provider cascade and deterministic fallback
   let extractedResult = null;
   let measuredPromptTokens = null;
   let measuredCompletionTokens = null;
   let measuredTotalTokens = null;
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   const promptText = `Document Type: ${parsed.documentType}\nCurrency: ${parsed.currency}\nDocument Text Content:\n${parsed.documentText || "(Image/binary OCR data provided)"}`;
 
   if (geminiApiKey) {
@@ -4812,6 +4814,49 @@ async function handleOcrExtract(request, env) {
         measuredPromptTokens = geminiRes.promptTokens;
         measuredCompletionTokens = geminiRes.completionTokens;
         measuredTotalTokens = geminiRes.totalTokens;
+      }
+    } catch (_) {}
+  }
+
+  if (!extractedResult && groqApiKey) {
+    try {
+      const groqRes = await executeGroqWithFallback({
+        apiKey: groqApiKey,
+        systemInstruction: OCR_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: promptText }],
+        maxTokens: parsed.maxTokens,
+        temperature: 0.2,
+        requestId: parsed.requestId,
+        serviceName: "DocumentOCR",
+        models: getGroqModels(env)
+      });
+      if (groqRes?.ok && groqRes?.reply) {
+        extractedResult = parseLlmJson(groqRes.reply);
+        measuredPromptTokens = groqRes.promptTokens;
+        measuredCompletionTokens = groqRes.completionTokens;
+        measuredTotalTokens = groqRes.totalTokens;
+      }
+    } catch (_) {}
+  }
+
+  if (!extractedResult && openRouterApiKey) {
+    try {
+      const orRes = await executeOpenRouterWithFallback({
+        apiKey: openRouterApiKey,
+        systemInstruction: OCR_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: promptText }],
+        maxTokens: parsed.maxTokens,
+        temperature: 0.2,
+        requestId: parsed.requestId,
+        serviceName: "DocumentOCR",
+        model: DEFAULT_OPENROUTER_MODELS.lite,
+        fallbackModel: DEFAULT_OPENROUTER_MODELS.max
+      });
+      if (orRes?.ok && orRes?.reply) {
+        extractedResult = parseLlmJson(orRes.reply);
+        measuredPromptTokens = orRes.promptTokens;
+        measuredCompletionTokens = orRes.completionTokens;
+        measuredTotalTokens = orRes.totalTokens;
       }
     } catch (_) {}
   }
@@ -4901,9 +4946,33 @@ async function handleSocialGenerate(request, env) {
   let measuredCompletionTokens = null;
   let measuredTotalTokens = null;
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   const promptText = `Platform: ${parsed.platform}\nTone: ${parsed.tone}\nGoal: ${parsed.goal}\nCTA: ${parsed.cta || "N/A"}\nTopic / Message:\n${parsed.topic}`;
 
-  if (geminiApiKey) {
+  // Cascade: Groq -> Gemini -> OpenRouter -> Deterministic
+  if (groqApiKey) {
+    try {
+      const groqRes = await executeGroqWithFallback({
+        apiKey: groqApiKey,
+        systemInstruction: SOCIAL_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: promptText }],
+        maxTokens: parsed.maxTokens,
+        temperature: 0.7,
+        requestId: parsed.requestId,
+        serviceName: "SocialMediaAI",
+        models: getGroqModels(env)
+      });
+      if (groqRes?.ok && groqRes?.reply) {
+        socialResult = parseLlmJson(groqRes.reply);
+        measuredPromptTokens = groqRes.promptTokens;
+        measuredCompletionTokens = groqRes.completionTokens;
+        measuredTotalTokens = groqRes.totalTokens;
+      }
+    } catch (_) {}
+  }
+
+  if (!socialResult && geminiApiKey) {
     try {
       const geminiRes = await executeGeminiWithFallback({
         apiKey: geminiApiKey,
@@ -4920,6 +4989,28 @@ async function handleSocialGenerate(request, env) {
         measuredPromptTokens = geminiRes.promptTokens;
         measuredCompletionTokens = geminiRes.completionTokens;
         measuredTotalTokens = geminiRes.totalTokens;
+      }
+    } catch (_) {}
+  }
+
+  if (!socialResult && openRouterApiKey) {
+    try {
+      const orRes = await executeOpenRouterWithFallback({
+        apiKey: openRouterApiKey,
+        systemInstruction: SOCIAL_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: promptText }],
+        maxTokens: parsed.maxTokens,
+        temperature: 0.7,
+        requestId: parsed.requestId,
+        serviceName: "SocialMediaAI",
+        model: DEFAULT_OPENROUTER_MODELS.lite,
+        fallbackModel: DEFAULT_OPENROUTER_MODELS.max
+      });
+      if (orRes?.ok && orRes?.reply) {
+        socialResult = parseLlmJson(orRes.reply);
+        measuredPromptTokens = orRes.promptTokens;
+        measuredCompletionTokens = orRes.completionTokens;
+        measuredTotalTokens = orRes.totalTokens;
       }
     } catch (_) {}
   }

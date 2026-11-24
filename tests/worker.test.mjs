@@ -5719,8 +5719,8 @@ test("Flagship upgrade: Unclipped sidebar three-dots menu with portal positionin
   // Stacking context and unclipped overflow styles in styles.css
   assert.match(styles, /\.chat-history-row\.menu-open[\s\S]*?z-index:\s*120;/);
   assert.match(styles, /\.chat-history-actions\.menu-open[\s\S]*?z-index:\s*130;/);
-  assert.match(styles, /\.chat-sidebar\s*\{[\s\S]*?overflow-x:\s*visible;/);
-  assert.match(styles, /\.chat-history-list\s*\{[\s\S]*?overflow-x:\s*visible;/);
+  assert.match(styles, /\.chat-sidebar\s*\{[\s\S]*?overflow-x:\s*hidden;/);
+  assert.match(styles, /\.chat-history-list\s*\{[\s\S]*?overflow-x:\s*hidden;/);
   assert.match(styles, /\.chat-history-dropdown-menu\s*\{[\s\S]*?position:\s*fixed;/);
   assert.match(styles, /\.chat-history-dropdown-menu\s*\{[\s\S]*?z-index:\s*99999;/);
 
@@ -7202,6 +7202,66 @@ test("Micro-Level Architecture & Stability: Memories HEAD handling, Support OPTI
   // 7. Universal select option contrast rule
   assert.match(styles, /select option,\s*select optgroup/);
 });
+
+test("Flagship Chatbot Sidebar & Deletion Modal: flex row truncation, zero horizontal overflow, inline 3-dot hit target, and custom in-app confirm modal", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. Elimination of horizontal scrollbar across recent chats list and sidebar items
+  assert.match(styles, /\.chat-sidebar\s*\{[\s\S]*?overflow-x:\s*hidden;/);
+  assert.match(styles, /\.chat-history-list\s*\{[\s\S]*?overflow-x:\s*hidden;/);
+  assert.match(styles, /\.chat-history-row\s*\{[\s\S]*?overflow-x:\s*hidden;/);
+
+  // 2. Chat history item flex row layout: display flex, space-between, gap 6px, min-width 0
+  assert.match(styles, /\.chat-history-row\s*\{[\s\S]*?display:\s*flex;/);
+  assert.match(styles, /\.chat-history-row\s*\{[\s\S]*?justify-content:\s*space-between;/);
+  assert.match(styles, /\.chat-history-row\s*\{[\s\S]*?gap:\s*6px;/);
+  assert.match(styles, /\.chat-history-row\s*\{[\s\S]*?min-width:\s*0;/);
+
+  // 3. Chat title single-line clean truncation: min-width 0, flex 1 1 auto, ellipsis, nowrap
+  assert.match(styles, /\.chat-history-select\s*\{[\s\S]*?min-width:\s*0;/);
+  assert.match(styles, /\.chat-history-select\s*\{[\s\S]*?white-space:\s*nowrap;/);
+  assert.match(styles, /\.chat-history-title,\s*\.chat-history-title-text\s*\{[\s\S]*?min-width:\s*0;/);
+  assert.match(styles, /\.chat-history-title,\s*\.chat-history-title-text\s*\{[\s\S]*?text-overflow:\s*ellipsis;/);
+  assert.match(styles, /\.chat-history-title,\s*\.chat-history-title-text\s*\{[\s\S]*?white-space:\s*nowrap;/);
+
+  // 4. Three-dot button inline placement & generous hit target (min 28x28px, flex-shrink 0)
+  assert.match(styles, /\.chat-history-action-btn,\s*\.chat-history-menu-btn\s*\{[\s\S]*?min-width:\s*28px;/);
+  assert.match(styles, /\.chat-history-action-btn,\s*\.chat-history-menu-btn\s*\{[\s\S]*?min-height:\s*28px;/);
+  assert.match(styles, /\.chat-history-action-btn,\s*\.chat-history-menu-btn\s*\{[\s\S]*?flex-shrink:\s*0;/);
+  assert.match(credits, /bindSafe\(menuBtn,\s*'click'/);
+  assert.match(credits, /e\.stopPropagation\(\)/);
+
+  // 5. In-App custom deletion modal elements declared in index.html
+  assert.match(html, /id="chatConfirmModal"/);
+  assert.match(html, /id="chatConfirmBackdrop"/);
+  assert.match(html, /id="chatConfirmDialog"/);
+  assert.match(html, /id="chatConfirmTitle"/);
+  assert.match(html, /id="chatConfirmMessage"/);
+  assert.match(html, /id="chatConfirmCancelBtn"/);
+  assert.match(html, /id="chatConfirmOkBtn"/);
+
+  // 6. Custom deletion modal styles declared in styles.css with high z-index and dark glassmorphism
+  assert.match(styles, /\.chat-confirm-modal\s*\{[\s\S]*?position:\s*fixed;/);
+  assert.match(styles, /\.chat-confirm-modal\s*\{[\s\S]*?z-index:\s*100000;/);
+  assert.match(styles, /\.chat-confirm-dialog\s*\{[\s\S]*?border-radius:\s*20px;/);
+  assert.match(styles, /\.chat-confirm-danger\s*\{[\s\S]*?linear-gradient/);
+
+  // 7. Native window.confirm completely removed from chat deletion in credits.js
+  assert.doesNotMatch(credits, /window\.confirm\(`Delete/, "Native window.confirm must not be used on chat delete");
+  assert.match(credits, /openChatConfirmModal\(\{/);
+  assert.match(credits, /title:\s*'Delete chat\?'/);
+
+  // 8. Active chat state cleanly cleared and restored upon deleting current session
+  assert.match(credits, /if \(session\.id === activeChatId\) \{/);
+  assert.match(credits, /activeChatId = null;/);
+  assert.match(credits, /conversation\.length = 0;/);
+  assert.match(credits, /if \(welcome\) welcome\.hidden = false;/);
+  assert.match(credits, /if \(emptyState\) emptyState\.hidden = false;/);
+  assert.match(credits, /updateChatWelcome\(\);/);
+});
+
 
 
 

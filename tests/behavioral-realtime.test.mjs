@@ -711,4 +711,51 @@ test('17. Full 10-Service Real Action Integrity, Fail-Safe Fallbacks, Modal Life
     assert.ok(outreachCode.includes('exportSequenceMarkdown') && outreachCode.includes('handleOpenInGmail') && outreachCode.includes('handleCopyEmail'));
 });
 
+test('18. Chatbot Behavioral: Sidebar Row Layout, Truncation, 3-Dot Menu Dropdown & In-App Custom Delete Modal Verification', () => {
+    const creditsCode = fs.readFileSync('credits.js', 'utf8');
+    const htmlCode = fs.readFileSync('index.html', 'utf8');
+    const stylesCode = fs.readFileSync('styles.css', 'utf8');
+
+    // 1. Sidebar list and item horizontal scrollbar elimination
+    assert.ok(/\.chat-sidebar\s*\{[\s\S]*?overflow-x:\s*hidden;/.test(stylesCode), 'chat-sidebar has overflow-x: hidden');
+    assert.ok(/\.chat-history-list\s*\{[\s\S]*?overflow-x:\s*hidden;/.test(stylesCode), 'chat-history-list has overflow-x: hidden');
+    assert.ok(/\.chat-history-row\s*\{[\s\S]*?overflow-x:\s*hidden;/.test(stylesCode), 'chat-history-row has overflow-x: hidden');
+
+    // 2. Chat row flex row layout with min-width 0 and gap 6px
+    assert.ok(/\.chat-history-row\s*\{[\s\S]*?display:\s*flex;/.test(stylesCode), 'chat-history-row display is flex');
+    assert.ok(/\.chat-history-row\s*\{[\s\S]*?justify-content:\s*space-between;/.test(stylesCode), 'chat-history-row space-between');
+    assert.ok(/\.chat-history-row\s*\{[\s\S]*?gap:\s*6px;/.test(stylesCode), 'chat-history-row gap is 6px');
+    assert.ok(/\.chat-history-row\s*\{[\s\S]*?min-width:\s*0;/.test(stylesCode), 'chat-history-row min-width is 0');
+
+    // 3. Chat title truncation rules
+    assert.ok(/\.chat-history-select\s*\{[\s\S]*?min-width:\s*0;/.test(stylesCode), 'chat-history-select min-width 0');
+    assert.ok(/\.chat-history-select\s*\{[\s\S]*?white-space:\s*nowrap;/.test(stylesCode), 'chat-history-select white-space nowrap');
+    assert.ok(/\.chat-history-title,\s*\.chat-history-title-text\s*\{[\s\S]*?text-overflow:\s*ellipsis;/.test(stylesCode), 'chat title ellipsis');
+
+    // 4. Three-dot button generous hit target (min 28x28px, flex-shrink 0)
+    assert.ok(/\.chat-history-action-btn,\s*\.chat-history-menu-btn\s*\{[\s\S]*?min-width:\s*28px;/.test(stylesCode), '3-dot button min-width >= 28px');
+    assert.ok(/\.chat-history-action-btn,\s*\.chat-history-menu-btn\s*\{[\s\S]*?min-height:\s*28px;/.test(stylesCode), '3-dot button min-height >= 28px');
+    assert.ok(/\.chat-history-action-btn,\s*\.chat-history-menu-btn\s*\{[\s\S]*?flex-shrink:\s*0;/.test(stylesCode), '3-dot button flex-shrink 0');
+
+    // 5. In-app confirmation modal elements
+    assert.ok(htmlCode.includes('id="chatConfirmModal"'), 'index.html has chatConfirmModal');
+    assert.ok(htmlCode.includes('id="chatConfirmBackdrop"'), 'index.html has chatConfirmBackdrop');
+    assert.ok(htmlCode.includes('id="chatConfirmDialog"'), 'index.html has chatConfirmDialog');
+    assert.ok(htmlCode.includes('id="chatConfirmTitle"'), 'index.html has chatConfirmTitle');
+    assert.ok(htmlCode.includes('id="chatConfirmMessage"'), 'index.html has chatConfirmMessage');
+    assert.ok(htmlCode.includes('id="chatConfirmCancelBtn"'), 'index.html has chatConfirmCancelBtn');
+    assert.ok(htmlCode.includes('id="chatConfirmOkBtn"'), 'index.html has chatConfirmOkBtn');
+
+    // 6. Zero native confirm in chat deletion & presence of openChatConfirmModal
+    assert.ok(!creditsCode.includes('window.confirm(`Delete'), 'credits.js must not invoke window.confirm on chat delete');
+    assert.ok(creditsCode.includes('openChatConfirmModal'), 'credits.js includes openChatConfirmModal');
+    assert.ok(creditsCode.includes("title: 'Delete chat?'"), 'credits.js sets title to Delete chat?');
+
+    // 7. Active session state reset integrity on delete
+    assert.ok(creditsCode.includes('activeChatId = null;'), 'credits.js resets activeChatId to null on delete');
+    assert.ok(creditsCode.includes('conversation.length = 0;'), 'credits.js clears conversation array on delete');
+    assert.ok(creditsCode.includes('updateChatWelcome();'), 'credits.js calls updateChatWelcome on delete');
+});
+
+
 

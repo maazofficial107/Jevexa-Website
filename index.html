@@ -3776,6 +3776,24 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Chat Delete / Action Confirmation Modal -->
+            <div class="chat-confirm-modal" id="chatConfirmModal" role="dialog" aria-modal="true" aria-labelledby="chatConfirmTitle" aria-describedby="chatConfirmMessage" hidden>
+                <div class="chat-confirm-backdrop" id="chatConfirmBackdrop" aria-label="Close dialog backdrop"></div>
+                <div class="chat-confirm-dialog" id="chatConfirmDialog" tabindex="-1">
+                    <div class="chat-confirm-icon-wrap" id="chatConfirmIconWrap">
+                        <i class="fas fa-trash-can" id="chatConfirmIcon" aria-hidden="true"></i>
+                    </div>
+                    <div class="chat-confirm-content">
+                        <h3 class="chat-confirm-title" id="chatConfirmTitle">Delete chat?</h3>
+                        <p class="chat-confirm-message" id="chatConfirmMessage">This will permanently delete this conversation and its history.</p>
+                    </div>
+                    <div class="chat-confirm-actions">
+                        <button type="button" class="chat-confirm-btn chat-confirm-cancel" id="chatConfirmCancelBtn">Cancel</button>
+                        <button type="button" class="chat-confirm-btn chat-confirm-danger" id="chatConfirmOkBtn">Delete</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>

@@ -3328,6 +3328,8 @@ function closeChatbot() {
     window.abortChatRequest?.();
     window.removeChatTyping?.();
     window.JEVEXA_CLOSE_SELECTORS?.();
+    window.closeChatMenu?.();
+    window.closeChatConfirmModal?.();
     try {
         localStorage.removeItem('jevexa_last_workspace');
         sessionStorage.removeItem('jevexa_last_workspace');
@@ -3377,6 +3379,13 @@ window.JEVEXA_SAFE_INTERACTION.bind(chatbotClose, 'click', () => {
 document.addEventListener('keydown', event => {
     if (!chatbotWindow?.classList.contains('open')) return;
     if (event.key === 'Escape') {
+        const confirmModal = document.getElementById('chatConfirmModal');
+        if (confirmModal && !confirmModal.hidden && confirmModal.classList.contains('open')) return;
+        const customModal = document.getElementById('chatCustomizationModal');
+        if (customModal && !customModal.hidden && customModal.classList.contains('open')) return;
+        if (document.querySelector('.chat-history-dropdown-menu')) return;
+        if (document.querySelector('.selector-menu:not([hidden])')) return;
+        if (chatbotWindow.classList.contains('chat-history-open')) return;
         event.preventDefault();
         closeChatbot();
         return;
@@ -4559,6 +4568,8 @@ const JEVEXA_PLANS = {
         window.removeChatTyping?.();
         window.JEVEXA_CLOSE_SELECTORS?.();
         window.closeChatCustomizationModal?.();
+        window.closeChatMenu?.();
+        window.closeChatConfirmModal?.();
         try {
             localStorage.removeItem('jevexa_last_workspace');
             sessionStorage.removeItem('jevexa_last_workspace');

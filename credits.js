@@ -474,13 +474,282 @@
         menu.style.zIndex = '99999';
     }
 
+    function openChatConfirmModal(options = {}) {
+        const {
+            title = 'Delete chat?',
+            message = 'This will permanently delete this conversation and its history.',
+            confirmText = 'Delete',
+            cancelText = 'Cancel',
+            danger = true,
+            iconClass = 'fa-trash-can',
+            onConfirm,
+            onCancel
+        } = options;
+
+        const modal = document.getElementById('chatConfirmModal');
+        if (!modal) {
+            if (typeof onConfirm === 'function') onConfirm();
+            return;
+        }
+
+        const titleEl = document.getElementById('chatConfirmTitle');
+        const msgEl = document.getElementById('chatConfirmMessage');
+        const okBtn = document.getElementById('chatConfirmOkBtn');
+        const cancelBtn = document.getElementById('chatConfirmCancelBtn');
+        const iconEl = document.getElementById('chatConfirmIcon');
+        const iconWrap = document.getElementById('chatConfirmIconWrap');
+        const dialog = modal.querySelector('.chat-confirm-dialog');
+
+        if (titleEl) titleEl.textContent = title;
+        if (msgEl) msgEl.textContent = message;
+        if (okBtn) {
+            okBtn.textContent = confirmText;
+            okBtn.className = danger ? 'chat-confirm-btn chat-confirm-danger' : 'chat-confirm-btn chat-confirm-primary';
+        }
+        if (cancelBtn) cancelBtn.textContent = cancelText;
+        if (iconEl && iconClass) iconEl.className = `fas ${iconClass}`;
+        if (iconWrap) {
+            iconWrap.className = danger ? 'chat-confirm-icon-wrap' : 'chat-confirm-icon-wrap is-primary';
+        }
+
+        const prevFocus = document.activeElement;
+
+        const closeModal = () => {
+            modal.classList.remove('open');
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            document.removeEventListener('keydown', handleKey);
+            if (prevFocus && typeof prevFocus.focus === 'function') {
+                try { prevFocus.focus(); } catch (_) {}
+            }
+        };
+
+        const handleConfirm = () => {
+            closeModal();
+            if (typeof onConfirm === 'function') onConfirm();
+        };
+
+        const handleCancel = () => {
+            closeModal();
+            if (typeof onCancel === 'function') onCancel();
+        };
+
+        const handleKey = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCancel();
+            } else if (e.key === 'Enter') {
+                if (document.activeElement === cancelBtn) {
+                    e.preventDefault();
+                    handleCancel();
+                } else {
+                    e.preventDefault();
+                    handleConfirm();
+                }
+            } else if (e.key === 'Tab') {
+                const focusables = [cancelBtn, okBtn].filter(Boolean);
+                if (!focusables.length) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+
+        if (okBtn) {
+            okBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleConfirm();
+            };
+        }
+        if (cancelBtn) {
+            cancelBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCancel();
+            };
+        }
+        const backdrop = document.getElementById('chatConfirmBackdrop');
+        if (backdrop) {
+            backdrop.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCancel();
+            };
+        }
+
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        void modal.offsetWidth;
+        modal.classList.add('open');
+        document.addEventListener('keydown', handleKey);
+
+        setTimeout(() => {
+            (cancelBtn || okBtn || dialog)?.focus();
+        }, 20);
+    }
+    window.openChatConfirmModal = openChatConfirmModal;
+    window.closeChatConfirmModal = () => {
+        const modal = document.getElementById('chatConfirmModal');
+        if (modal) {
+            modal.classList.remove('open');
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+        }
+    };
+    window.closeChatMenu = closeChatMenu;
+
     function closeChatMenu() {
         if (openMenuSessionId) {
             openMenuSessionId = null;
             document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
             document.querySelectorAll('.chat-history-row.menu-open, .chat-history-actions.menu-open').forEach(el => el.classList.remove('menu-open'));
-            renderChatHistory();
+            document.querySelectorAll('.chat-history-menu-btn[aria-expanded="true"]').forEach(el => el.setAttribute('aria-expanded', 'false'));
         }
+    }
+
+    function renderDropdownMenu(session, triggerBtn) {
+        document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
+        const menu = document.createElement('div');
+        menu.className = 'chat-history-dropdown-menu';
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', 'Chat actions');
+
+        // 1. Pin / Unpin
+        const pinBtn = document.createElement('button');
+        pinBtn.type = 'button';
+        pinBtn.className = 'chat-menu-item chat-menu-pin';
+        pinBtn.setAttribute('role', 'menuitem');
+        pinBtn.innerHTML = `<i class="fas ${session.pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack'}"></i><span>${session.pinned ? 'Unpin' : 'Pin'}</span>`;
+        bindSafe(pinBtn, 'click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            session.pinned = !session.pinned;
+            session.updatedAt = Date.now();
+            closeChatMenu();
+            saveChatSessions();
+            if (typeof window.showToast === 'function') {
+                window.showToast(session.pinned ? 'Chat pinned to top' : 'Chat unpinned');
+            }
+        }, { debounceMs: 0 });
+
+        // 2. Rename
+        const renameBtn = document.createElement('button');
+        renameBtn.type = 'button';
+        renameBtn.className = 'chat-menu-item chat-menu-rename chat-history-rename';
+        renameBtn.setAttribute('role', 'menuitem');
+        renameBtn.innerHTML = '<i class="fas fa-pencil"></i><span>Rename</span>';
+        bindSafe(renameBtn, 'click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeChatMenu();
+            renamingSessionId = session.id;
+            renderChatHistory();
+        }, { debounceMs: 0 });
+
+        // 3. Share
+        const shareBtn = document.createElement('button');
+        shareBtn.type = 'button';
+        shareBtn.className = 'chat-menu-item chat-menu-share';
+        shareBtn.setAttribute('role', 'menuitem');
+        shareBtn.innerHTML = '<i class="fas fa-arrow-up-from-bracket"></i><span>Share</span>';
+        bindSafe(shareBtn, 'click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeChatMenu();
+            const shareUrl = `${window.location.origin}/tools/chatbot`;
+            const shareTitle = session.title || 'Jevexa AI Chat';
+            const userPrompt = session.messages?.find(m => m.role === 'user')?.text || '';
+            const shareText = userPrompt
+                ? `Jevexa AI Chat: "${shareTitle}"\n"${userPrompt.slice(0, 150)}..."\n${shareUrl}`
+                : `${shareTitle} — Jevexa AI Studio\n${shareUrl}`;
+
+            if (navigator.share && typeof navigator.share === 'function') {
+                try {
+                    await navigator.share({
+                        title: shareTitle,
+                        text: shareText,
+                        url: shareUrl
+                    });
+                    if (typeof window.showToast === 'function') window.showToast('✓ Chat shared successfully');
+                    return;
+                } catch (shareErr) {
+                    if (shareErr?.name === 'AbortError') return;
+                }
+            }
+
+            try {
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    await navigator.clipboard.writeText(shareText);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = shareText;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    ta.remove();
+                }
+                if (typeof window.showToast === 'function') window.showToast('✓ Chat link copied to clipboard!');
+                else setStatus('Chat link copied to clipboard!');
+            } catch (_) {
+                if (typeof window.showToast === 'function') window.showToast('Could not copy link to clipboard');
+            }
+        }, { debounceMs: 0 });
+
+        // 4. Delete (Custom themed In-App confirmation modal, zero native window.confirm)
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'chat-menu-item chat-menu-delete chat-history-delete-btn chat-history-delete';
+        deleteBtn.setAttribute('role', 'menuitem');
+        deleteBtn.innerHTML = '<i class="fas fa-trash-can"></i><span>Delete</span>';
+        bindSafe(deleteBtn, 'click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeChatMenu();
+            const chatTitle = session.title || 'New chat';
+            openChatConfirmModal({
+                title: 'Delete chat?',
+                message: `Are you sure you want to delete "${chatTitle}"? This action cannot be undone.`,
+                confirmText: 'Delete',
+                danger: true,
+                onConfirm: () => {
+                    chatSessions = chatSessions.filter(item => item.id !== session.id);
+                    if (session.id === activeChatId) {
+                        activeChatId = null;
+                        conversation.length = 0;
+                        messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
+                        const welcome = messages?.querySelector('[data-chat-welcome]');
+                        if (welcome) welcome.hidden = false;
+                        const emptyState = document.getElementById('chatEmptyState');
+                        if (emptyState) emptyState.hidden = false;
+                        updateChatWelcome();
+                    }
+                    saveChatSessions();
+                    if (typeof window.showToast === 'function') window.showToast('Chat deleted');
+                }
+            });
+        }, { debounceMs: 0 });
+
+        menu.append(pinBtn, renameBtn, shareBtn, deleteBtn);
+
+        // Mount as floating portal to body to guarantee zero parent clipping/overflow cutoffs
+        const portalTarget = document.body || actions;
+        portalTarget.appendChild(menu);
+
+        // Viewport-aware collision positioning with auto flip above / below
+        positionChatDropdownMenu(menu, triggerBtn);
+        requestAnimationFrame(() => {
+            positionChatDropdownMenu(menu, triggerBtn);
+        });
     }
 
     function renderChatHistory() {
@@ -505,6 +774,7 @@
         const clearBtn = document.getElementById('chatHistorySearchClear');
         if (clearBtn) clearBtn.hidden = !query;
 
+        const savedScrollTop = list.scrollTop;
         list.replaceChildren();
         const matchingSessions = chatSessions
             .map(session => ({
@@ -631,138 +901,22 @@
             menuBtn.innerHTML = '<i class="fas fa-ellipsis"></i>';
 
             bindSafe(menuBtn, 'click', (e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                openMenuSessionId = openMenuSessionId === session.id ? null : session.id;
-                renderChatHistory();
-            });
+                if (openMenuSessionId === session.id) {
+                    closeChatMenu();
+                } else {
+                    closeChatMenu();
+                    openMenuSessionId = session.id;
+                    row.classList.add('menu-open');
+                    actions.classList.add('menu-open');
+                    menuBtn.setAttribute('aria-expanded', 'true');
+                    renderDropdownMenu(session, menuBtn);
+                }
+            }, { debounceMs: 0 });
 
             if (openMenuSessionId === session.id) {
-                const menu = document.createElement('div');
-                menu.className = 'chat-history-dropdown-menu';
-                menu.setAttribute('role', 'menu');
-                menu.setAttribute('aria-label', 'Chat actions');
-
-                // 1. Pin / Unpin
-                const pinBtn = document.createElement('button');
-                pinBtn.type = 'button';
-                pinBtn.className = 'chat-menu-item chat-menu-pin';
-                pinBtn.setAttribute('role', 'menuitem');
-                pinBtn.innerHTML = `<i class="fas ${session.pinned ? 'fa-thumbtack-slash' : 'fa-thumbtack'}"></i><span>${session.pinned ? 'Unpin' : 'Pin'}</span>`;
-                bindSafe(pinBtn, 'click', (e) => {
-                    e.stopPropagation();
-                    session.pinned = !session.pinned;
-                    session.updatedAt = Date.now();
-                    openMenuSessionId = null;
-                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
-                    saveChatSessions();
-                    if (typeof window.showToast === 'function') {
-                        window.showToast(session.pinned ? 'Chat pinned to top' : 'Chat unpinned');
-                    }
-                });
-
-                // 2. Rename
-                const renameBtn = document.createElement('button');
-                renameBtn.type = 'button';
-                renameBtn.className = 'chat-menu-item chat-menu-rename chat-history-rename';
-                renameBtn.setAttribute('role', 'menuitem');
-                renameBtn.innerHTML = '<i class="fas fa-pencil"></i><span>Rename</span>';
-                bindSafe(renameBtn, 'click', (e) => {
-                    e.stopPropagation();
-                    openMenuSessionId = null;
-                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
-                    renamingSessionId = session.id;
-                    renderChatHistory();
-                });
-
-                // 3. Share
-                const shareBtn = document.createElement('button');
-                shareBtn.type = 'button';
-                shareBtn.className = 'chat-menu-item chat-menu-share';
-                shareBtn.setAttribute('role', 'menuitem');
-                shareBtn.innerHTML = '<i class="fas fa-arrow-up-from-bracket"></i><span>Share</span>';
-                bindSafe(shareBtn, 'click', async (e) => {
-                    e.stopPropagation();
-                    openMenuSessionId = null;
-                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
-                    renderChatHistory();
-                    const shareUrl = `${window.location.origin}/tools/chatbot`;
-                    const shareTitle = session.title || 'Jevexa AI Chat';
-                    const userPrompt = session.messages?.find(m => m.role === 'user')?.text || '';
-                    const shareText = userPrompt
-                        ? `Jevexa AI Chat: "${shareTitle}"\n"${userPrompt.slice(0, 150)}..."\n${shareUrl}`
-                        : `${shareTitle} — Jevexa AI Studio\n${shareUrl}`;
-
-                    if (navigator.share && typeof navigator.share === 'function') {
-                        try {
-                            await navigator.share({
-                                title: shareTitle,
-                                text: shareText,
-                                url: shareUrl
-                            });
-                            if (typeof window.showToast === 'function') window.showToast('✓ Chat shared successfully');
-                            return;
-                        } catch (shareErr) {
-                            if (shareErr?.name === 'AbortError') return;
-                        }
-                    }
-
-                    try {
-                        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-                            await navigator.clipboard.writeText(shareText);
-                        } else {
-                            const ta = document.createElement('textarea');
-                            ta.value = shareText;
-                            ta.style.position = 'fixed';
-                            ta.style.opacity = '0';
-                            document.body.appendChild(ta);
-                            ta.select();
-                            document.execCommand('copy');
-                            ta.remove();
-                        }
-                        if (typeof window.showToast === 'function') window.showToast('✓ Chat link copied to clipboard!');
-                        else setStatus('Chat link copied to clipboard!');
-                    } catch (_) {
-                        if (typeof window.showToast === 'function') window.showToast('Could not copy link to clipboard');
-                    }
-                });
-
-                // 4. Delete
-                const deleteBtn = document.createElement('button');
-                deleteBtn.type = 'button';
-                deleteBtn.className = 'chat-menu-item chat-menu-delete chat-history-delete-btn chat-history-delete';
-                deleteBtn.setAttribute('role', 'menuitem');
-                deleteBtn.innerHTML = '<i class="fas fa-trash-can"></i><span>Delete</span>';
-                bindSafe(deleteBtn, 'click', (e) => {
-                    e.stopPropagation();
-                    openMenuSessionId = null;
-                    document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
-                    if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
-                    chatSessions = chatSessions.filter(item => item.id !== session.id);
-                    if (session.id === activeChatId) {
-                        activeChatId = null;
-                        conversation.length = 0;
-                        messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
-                        const welcome = messages?.querySelector('[data-chat-welcome]');
-                        if (welcome) welcome.hidden = false;
-                        const emptyState = document.getElementById('chatEmptyState');
-                        if (emptyState) emptyState.hidden = false;
-                        updateChatWelcome();
-                    }
-                    saveChatSessions();
-                    if (typeof window.showToast === 'function') window.showToast('Chat deleted');
-                });
-
-                menu.append(pinBtn, renameBtn, shareBtn, deleteBtn);
-
-                // Mount as floating portal to body to guarantee zero parent clipping/overflow cutoffs
-                const portalTarget = document.body || actions;
-                portalTarget.appendChild(menu);
-
-                // Viewport-aware collision positioning with auto flip above / below
-                positionChatDropdownMenu(menu, menuBtn);
-                requestAnimationFrame(() => {
-                    positionChatDropdownMenu(menu, menuBtn);
-                });
+                renderDropdownMenu(session, menuBtn);
             }
 
             actions.appendChild(menuBtn);
@@ -774,20 +928,19 @@
             emptyState.hidden = matchingSessions.length > 0;
             emptyState.textContent = query ? `No chats match “${query}”.` : 'No saved chats yet.';
         }
+        list.scrollTop = savedScrollTop;
     }
 
     bindSafe(document, 'click', (e) => {
         if (openMenuSessionId && !e.target.closest('.chat-history-menu-wrap') && !e.target.closest('.chat-history-dropdown-menu')) {
-            openMenuSessionId = null;
-            document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
-            renderChatHistory();
+            closeChatMenu();
         }
-    }, { getKey: () => document, preventDefaultOnDebounce: false });
+    }, { getKey: () => document, debounceMs: 0, preventDefaultOnDebounce: false });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && openMenuSessionId) {
-            openMenuSessionId = null;
-            document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
-            renderChatHistory();
+            e.preventDefault();
+            e.stopPropagation();
+            closeChatMenu();
         }
     });
     window.addEventListener('resize', closeChatMenu, { passive: true });
@@ -1491,31 +1644,37 @@
             setStatus('Chat history is already empty.');
             return;
         }
-        if (!window.confirm('Clear all saved conversations from this browser? This cannot be undone.')) return;
-        conversation.splice(0, conversation.length);
-        chatSessions = [];
-        activeChatId = null;
-        if (historyUserId) {
-            try {
-                localStorage.removeItem(conversationKey(historyUserId));
-                localStorage.removeItem(historyKey(historyUserId));
-                localStorage.removeItem(sessionsKey(historyUserId));
-                localStorage.removeItem(activeChatKey(historyUserId));
-            } catch (error) {
-                console.warn('Could not clear chat sessions from storage:', error);
+        openChatConfirmModal({
+            title: 'Clear all conversations?',
+            message: 'Clear all saved conversations from this browser? This cannot be undone.',
+            confirmText: 'Clear All',
+            danger: true,
+            onConfirm: () => {
+                conversation.splice(0, conversation.length);
+                chatSessions = [];
+                activeChatId = null;
+                if (historyUserId) {
+                    try {
+                        localStorage.removeItem(conversationKey(historyUserId));
+                        localStorage.removeItem(historyKey(historyUserId));
+                        localStorage.removeItem(sessionsKey(historyUserId));
+                        localStorage.removeItem(activeChatKey(historyUserId));
+                    } catch (error) {
+                        console.warn('Could not clear chat sessions from storage:', error);
+                    }
+                } else {
+                    try {
+                        localStorage.removeItem('jevexa_chat_history');
+                        localStorage.removeItem('jevexa_chat_sessions');
+                    } catch (error) {
+                        console.warn('Could not clear chat sessions from storage:', error);
+                    }
+                }
+                createChatSession();
+                renderChatHistory();
+                if (typeof window.showToast === 'function') window.showToast('All conversations cleared');
             }
-        } else {
-            try {
-                localStorage.removeItem('jevexa_chat_history');
-                localStorage.removeItem('jevexa_chat_sessions');
-            } catch (error) {
-                console.warn('Could not clear chat sessions from storage:', error);
-            }
-        }
-        createChatSession();
-        renderHistory();
-        renderActiveConversation();
-        setStatus('All chats cleared.');
+        });
     }
 
     function initChatCustomizationSuite() {

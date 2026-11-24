@@ -538,6 +538,7 @@ function closeLogin() {
     if (name) name.value = '';
     const err = document.getElementById('loginError');
     if (err) { err.textContent = ''; err.style.display = 'none'; }
+    clearAuthMessage();
     const submitBtn = modal.querySelector('.login-submit');
     if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('loading'); }
     if (previousLoginFocus instanceof HTMLElement) previousLoginFocus.focus({ preventScroll: true });

@@ -8931,11 +8931,6 @@ body.chat-is-resizing {
     border-color: rgba(167, 139, 250, 0.5);
     transform: rotate(30deg);
 }
-    background: rgba(139, 92, 246, 0.3);
-    color: #ddd6fe;
-    font-size: 10px;
-    font-weight: 800;
-}
 .chat-settings { display: grid; gap: 8px; color: #e5e7eb; }
 .chat-settings summary { min-height: 38px; display: flex; align-items: center; cursor: pointer; font-weight: 700; font-size: 12.5px; }
 .chat-settings select, .chat-settings button { min-height: 40px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.04); color: inherit; font: inherit; padding: 7px 10px; font-size: 12px; }

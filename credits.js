@@ -3144,7 +3144,7 @@
             }
         }
     });
-    bindSafe(document.getElementById('chatClearAll'), 'click', () => {
+    bindSafe(document.getElementById('chatClearAll') || document.getElementById('chatSettingsClearAllBtn'), 'click', () => {
         clearAllConversations();
     });
 

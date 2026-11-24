@@ -826,6 +826,10 @@ section { padding: 100px 0; position: relative; }
 .feature-card {
     padding: 32px 28px; position: relative; overflow: hidden;
     transition: transform 0.4s, box-shadow 0.4s, border-color 0.4s;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 .feature-card:hover {
     transform: translateY(-10px);
@@ -8273,6 +8277,25 @@ body.login-open { position: fixed; left: 0; right: 0; width: 100%; }
     animation: tryLinkColorCycle 4s linear infinite;
     transition: transform 0.22s ease, text-shadow 0.22s ease, gap 0.22s ease;
     cursor: pointer;
+    position: relative;
+    z-index: 2;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.feature-try-link:active,
+.chat-tool-link:active,
+.content-tool-link:active,
+.outreach-tool-link:active,
+.crm-tool-link:active,
+.ocr-tool-link:active,
+.social-tool-link:active,
+.analytics-tool-link:active,
+.team-tool-link:active,
+.workflows-tool-link:active,
+.data-tool-link:active,
+.feature-card a[class*="-tool-link"]:active {
+    transform: scale(0.98);
 }
 
 .feature-try-link:hover,

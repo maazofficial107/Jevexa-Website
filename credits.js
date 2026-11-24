@@ -2483,6 +2483,9 @@
         }
 
         if (!session) {
+            if (typeof window.storePendingServiceIntent === 'function') {
+                window.storePendingServiceIntent('chatbot');
+            }
             if (typeof window.showToast === 'function') {
                 window.showToast('Please create an account or sign in to use Jevexa AI Chatbot.');
             }

@@ -834,6 +834,7 @@ async function loginWithEmail() {
         closeLogin();
         clearAuthFields();
         showToast(`✓ Welcome back${getUserFirstName(data?.user) ? `, ${getUserFirstName(data.user)}` : ''}!`);
+        checkAndOpenPendingService();
     } catch (error) {
         console.error('Email login request failed:', error);
         showAuthMessage(getFriendlyAuthError(error, 'login'));
@@ -909,6 +910,7 @@ async function createAccountWithEmail() {
             closeLogin();
             clearAuthFields();
             showToast(`✓ Welcome to JEVEXA, ${name.split(' ')[0]}!`);
+            checkAndOpenPendingService();
         } else {
             showAuthMessage(
                 '✓ Account created! Please check your email and click the verification link.',
@@ -957,6 +959,47 @@ function toggleAuthMode() {
     clearAuthMessage();
     syncAuthModeUI();
 }
+
+let pendingServiceIntent = null;
+
+function storePendingServiceIntent(serviceKey) {
+    if (!serviceKey) return;
+    pendingServiceIntent = String(serviceKey).toLowerCase().trim();
+    try {
+        sessionStorage.setItem('jevexa_pending_service_intent', pendingServiceIntent);
+        localStorage.setItem('jevexa_pending_service_intent', pendingServiceIntent);
+    } catch (_) {}
+    window.jevexaPendingServiceIntent = pendingServiceIntent;
+}
+window.storePendingServiceIntent = storePendingServiceIntent;
+
+function getAndClearPendingServiceIntent() {
+    let intent = pendingServiceIntent || window.jevexaPendingServiceIntent || null;
+    try {
+        if (!intent) intent = sessionStorage.getItem('jevexa_pending_service_intent');
+        if (!intent) intent = localStorage.getItem('jevexa_pending_service_intent');
+        sessionStorage.removeItem('jevexa_pending_service_intent');
+        localStorage.removeItem('jevexa_pending_service_intent');
+    } catch (_) {}
+    pendingServiceIntent = null;
+    window.jevexaPendingServiceIntent = null;
+    return intent;
+}
+window.getAndClearPendingServiceIntent = getAndClearPendingServiceIntent;
+
+function checkAndOpenPendingService() {
+    const pendingIntent = getAndClearPendingServiceIntent();
+    if (pendingIntent) {
+        window.setTimeout(() => {
+            if (typeof window.openExactServiceWorkspace === 'function') {
+                window.openExactServiceWorkspace(pendingIntent, true);
+            }
+        }, 80);
+        return true;
+    }
+    return false;
+}
+window.checkAndOpenPendingService = checkAndOpenPendingService;
 
 function openAuthModal(mode = 'login') {
     if (currentUser) {
@@ -1938,6 +1981,10 @@ function applyAuthState(user) {
     if (currentUser) renderUserAccount(currentUser);
     else removeUserAccountUI();
 
+    if (currentUser) {
+        checkAndOpenPendingService();
+    }
+
     window.setTimeout(() => {
         if (revision === authStateRevision) {
             void updateCreditsHeader(currentUser, revision);
@@ -1971,7 +2018,10 @@ if (supabaseClient) {
     }
     supabaseClient.auth.onAuthStateChange((event, session) => {
         applyAuthState(session?.user || null);
-        if (event === 'SIGNED_IN') closeLogin();
+        if (event === 'SIGNED_IN') {
+            closeLogin();
+            checkAndOpenPendingService();
+        }
     });
 }
 
@@ -4440,6 +4490,16 @@ const JEVEXA_PLANS = {
         if (except !== 'workflows') closeWorkflowsWorkspace(false);
         if (except !== 'data') closeDataWorkspace(false);
         closeComingSoonModal();
+        if (!except) {
+            document.body.classList.remove('workspace-open', 'chat-modal-open', 'modal-open', 'drawer-open');
+        }
+        [contentWorkspace, crmWorkspace, outreachWorkspace, ocrWorkspace, socialWorkspace, analyticsWorkspace, teamAdminWorkspace, workflowsWorkspace, dataWorkspace].forEach(ws => {
+            if (ws && (!except || ws.id !== `${except}Workspace`)) {
+                ws.scrollTop = 0;
+                const wrap = ws.querySelector('.workspace-scroll-wrap');
+                if (wrap) wrap.scrollTop = 0;
+            }
+        });
     }
     window.closeAllWorkspaces = closeAllWorkspaces;
 
@@ -4452,6 +4512,7 @@ const JEVEXA_PLANS = {
         if (chatbotWindow) {
             chatbotWindow.classList.add('open');
             chatbotWindow.setAttribute('aria-hidden', 'false');
+            chatbotWindow.scrollTop = 0;
             document.body.classList.add('chat-modal-open');
             if (typeof setChatbotToggleHidden === 'function') setChatbotToggleHidden(true);
             syncWorkspaceCredits();
@@ -4485,17 +4546,21 @@ const JEVEXA_PLANS = {
     }
 
     function openContentWorkspace(pushState = true) {
+        finishLoading();
         closeAllWorkspaces('content');
         if (contentWorkspace) {
             contentWorkspace.hidden = false;
             contentWorkspace.classList.add('open');
             contentWorkspace.setAttribute('aria-hidden', 'false');
+            contentWorkspace.scrollTop = 0;
+            const scrollWrap = contentWorkspace.querySelector('.workspace-scroll-wrap');
+            if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
             topicTextarea?.focus();
         }
         if (pushState) {
-            navigateToRoute('/tools/content-generator');
+            navigateToRoute('/tools/content');
         }
     }
 
@@ -4770,15 +4835,28 @@ const JEVEXA_PLANS = {
         }
     }
 
-    function returnToStudio() {
+    function returnToStudio(scrollToFeatures = false) {
         closeAllWorkspaces();
+        try {
+            localStorage.removeItem('jevexa_last_workspace');
+            sessionStorage.removeItem('jevexa_last_workspace');
+        } catch (_) {}
         const currentPath = window.location.pathname;
         const currentHash = window.location.hash;
-        if (currentPath.startsWith('/tools') || currentHash.startsWith('#/tools')) {
+        if (currentPath.startsWith('/tools') || currentHash.startsWith('#/tools') || currentHash === '#chatbot' || currentHash === '#chatTool' || currentHash.endsWith('Tool')) {
             try {
                 window.history.pushState(null, '', '/');
             } catch (_) {
                 window.location.hash = '';
+            }
+        }
+        document.body.classList.remove('workspace-open', 'chat-modal-open', 'modal-open', 'drawer-open');
+        if (scrollToFeatures) {
+            const featuresSec = document.getElementById('features') || document.querySelector('.hero-tools-launcher');
+            if (featuresSec) {
+                try {
+                    featuresSec.scrollIntoView({ behavior: 'smooth' });
+                } catch (_) {}
             }
         }
     }
@@ -4803,28 +4881,7 @@ const JEVEXA_PLANS = {
         const cleanPath = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
         const cleanHash = hash.length > 1 && hash.endsWith('/') ? hash.slice(0, -1) : hash;
 
-        // If a section anchor is present (e.g. #how, #contact, #pricing, #features, #faq, #reviews, #home)
-        if (hash && hash !== '#' && !hash.startsWith('#/tools')) {
-            const targetId = hash.replace(/^#/, '');
-            const targetEl = document.getElementById(targetId);
-            if (targetEl) {
-                closeAllWorkspaces();
-                closeChatWorkspace(false);
-                closeContentWorkspace(false);
-                closeCrmWorkspace(false);
-                closeOutreachWorkspace(false);
-                closeComingSoonModal();
-                if (path.startsWith('/tools')) {
-                    try {
-                        window.history.replaceState(null, '', '/' + hash);
-                    } catch (_) {}
-                }
-                setTimeout(() => {
-                    targetEl.scrollIntoView({ behavior: 'smooth' });
-                }, 50);
-                return;
-            }
-        }
+
 
         if (cleanPath === '/pricing' || cleanHash === '#pricing') {
             const pricingEl = document.getElementById('pricing');
@@ -4885,6 +4942,25 @@ const JEVEXA_PLANS = {
             } else {
                 returnToStudio();
             }
+            return;
+        }
+
+        // Section anchor (e.g. #how, #contact, #pricing, #features, #faq, #reviews, #home)
+        if (hash && hash !== '#' && !hash.startsWith('#/tools')) {
+            const targetId = hash.replace(/^#/, '');
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                closeAllWorkspaces();
+                if (path.startsWith('/tools')) {
+                    try {
+                        window.history.replaceState(null, '', '/' + hash);
+                    } catch (_) {}
+                }
+                setTimeout(() => {
+                    targetEl.scrollIntoView({ behavior: 'smooth' });
+                }, 50);
+                return;
+            }
         }
     }
 
@@ -4906,6 +4982,116 @@ const JEVEXA_PLANS = {
         tools: toolsConfig
     };
 
+    // Define unified openExactServiceWorkspace in Studio scope and expose on window
+    function openExactServiceWorkspace(serviceKey, pushState = true) {
+        const key = String(serviceKey || '').toLowerCase().trim();
+        switch (key) {
+            case '01':
+            case 'chatbot':
+            case 'chat':
+                openChatWorkspace(pushState);
+                break;
+            case '02':
+            case 'content':
+            case 'content-generator':
+                openContentWorkspace(pushState);
+                break;
+            case '03':
+            case 'ocr':
+            case 'document-ocr':
+                openOcrWorkspace(pushState);
+                break;
+            case '04':
+            case 'social':
+            case 'social-assistant':
+                openSocialWorkspace(pushState);
+                break;
+            case '05':
+            case 'analytics':
+            case 'business-analytics':
+                openAnalyticsWorkspace(pushState);
+                break;
+            case '06':
+            case 'admin':
+            case 'team':
+            case 'team-admin':
+                if (!currentUser) {
+                    storePendingServiceIntent('admin');
+                    showToast?.('Please sign in or create an account to open User & Admin Management.');
+                    openAuthModal?.('signup');
+                    return false;
+                }
+                openTeamAdminWorkspace(pushState);
+                break;
+            case '07':
+            case 'workflows':
+            case 'workflow-automation':
+                if (!currentUser) {
+                    storePendingServiceIntent('workflows');
+                    showToast?.('Please sign in or create an account to open Workflow Automation.');
+                    openAuthModal?.('signup');
+                    return false;
+                }
+                openWorkflowsWorkspace(pushState);
+                break;
+            case '08':
+            case 'data':
+            case 'data-management':
+                openDataWorkspace(pushState);
+                break;
+            case '09':
+            case 'crm':
+            case 'mini-crm':
+                if (!currentUser) {
+                    storePendingServiceIntent('crm');
+                    showToast?.('Please sign in or create an account to open Mini CRM.');
+                    openAuthModal?.('signup');
+                    return false;
+                }
+                openCrmWorkspace(pushState);
+                break;
+            case '10':
+            case 'outreach':
+            case 'email-outreach':
+                if (!currentUser) {
+                    storePendingServiceIntent('outreach');
+                    showToast?.('Please sign in or create an account to open Email & Outreach AI.');
+                    openAuthModal?.('signup');
+                    return false;
+                }
+                openOutreachWorkspace(pushState);
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
+    window.openExactServiceWorkspace = openExactServiceWorkspace;
+
+    // Helper to determine service identifier from a card or link element
+    function getServiceIdFromElement(el) {
+        if (!el) return null;
+        if (el.dataset?.serviceId) return el.dataset.serviceId;
+        if (el.dataset?.serviceNumber) return el.dataset.serviceNumber;
+        if (el.dataset?.toolId) return el.dataset.toolId;
+        const num = el.querySelector?.('.feature-number')?.textContent?.trim();
+        if (num) return num;
+        const link = el.matches?.('a') ? el : el.querySelector?.('.feature-try-link, a[class*="-tool-link"]');
+        if (link?.dataset?.serviceId) return link.dataset.serviceId;
+        if (link?.dataset?.serviceNumber) return link.dataset.serviceNumber;
+        if (link?.classList?.contains('chat-tool-link')) return 'chatbot';
+        if (link?.classList?.contains('content-tool-link')) return 'content';
+        if (link?.classList?.contains('ocr-tool-link')) return 'ocr';
+        if (link?.classList?.contains('social-tool-link')) return 'social';
+        if (link?.classList?.contains('analytics-tool-link')) return 'analytics';
+        if (link?.classList?.contains('team-tool-link')) return 'admin';
+        if (link?.classList?.contains('workflows-tool-link')) return 'workflows';
+        if (link?.classList?.contains('data-tool-link')) return 'data';
+        if (link?.classList?.contains('crm-tool-link')) return 'crm';
+        if (link?.classList?.contains('outreach-tool-link')) return 'outreach';
+        return null;
+    }
+
     // Card Interactivity in AI Tools Launcher
     document.querySelectorAll('.tool-launcher-card').forEach(card => {
         const toolId = card.dataset.toolId;
@@ -4914,27 +5100,7 @@ const JEVEXA_PLANS = {
 
         const handleCardAction = () => {
             if (status === 'live' || tool?.status === 'live') {
-                if (toolId === 'chatbot') {
-                    openChatWorkspace(true);
-                } else if (toolId === 'content-generator') {
-                    openContentWorkspace(true);
-                } else if (toolId === 'crm') {
-                    openCrmWorkspace(true);
-                } else if (toolId === 'email-outreach') {
-                    openOutreachWorkspace(true);
-                } else if (toolId === 'ocr') {
-                    openOcrWorkspace(true);
-                } else if (toolId === 'social') {
-                    openSocialWorkspace(true);
-                } else if (toolId === 'analytics') {
-                    openAnalyticsWorkspace(true);
-                } else if (toolId === 'admin') {
-                    openTeamAdminWorkspace(true);
-                } else if (toolId === 'workflows') {
-                    openWorkflowsWorkspace(true);
-                } else if (toolId === 'data') {
-                    openDataWorkspace(true);
-                }
+                openExactServiceWorkspace(toolId, true);
             } else {
                 showComingSoonPopup(tool?.name || card.querySelector('.tool-card-title')?.textContent?.trim());
             }
@@ -4974,27 +5140,52 @@ const JEVEXA_PLANS = {
         });
     }
 
-    // "← Back to Studio" and Close buttons
-    bindAction(document.getElementById('chatBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('contentBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('contentWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('crmBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('crmWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('outreachBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('outreachWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('ocrBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('ocrWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('socialBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('socialWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('analyticsBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('analyticsWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('teamAdminBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('teamAdminWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('workflowsBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('workflowsWorkspaceClose'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('dataBackToStudio'), 'click', () => returnToStudio());
-    bindAction(document.getElementById('dataWorkspaceClose'), 'click', () => returnToStudio());
+    // "← Back to Studio" and Close buttons across all 10 workspaces
+    bindAction(document.getElementById('chatBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('chatbotClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('contentBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('contentWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('crmBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('crmWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('outreachBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('outreachWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('ocrBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('ocrWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('socialBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('socialWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('analyticsBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('analyticsWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('teamAdminBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('teamAdminWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('workflowsBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('workflowsWorkspaceClose'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('dataBackToStudio'), 'click', () => returnToStudio(true));
+    bindAction(document.getElementById('dataWorkspaceClose'), 'click', () => returnToStudio(true));
 
+    // Wire all 10 service cards: clicking anywhere on the card opens that exact service workspace
+    document.querySelectorAll('.feature-card').forEach(card => {
+        const serviceId = getServiceIdFromElement(card);
+        if (!serviceId) return;
+
+        bindAction(card, 'click', (event) => {
+            if (event.target.closest('a, button')) return;
+            event.preventDefault();
+            openExactServiceWorkspace(serviceId, true);
+        });
+    });
+
+    // Wire all .feature-try-link elements across 01 to 10
+    document.querySelectorAll('.feature-try-link').forEach(link => {
+        bindAction(link, 'click', (event) => {
+            event.preventDefault();
+            const serviceId = getServiceIdFromElement(link) || getServiceIdFromElement(link.closest('.feature-card'));
+            if (serviceId) {
+                openExactServiceWorkspace(serviceId, true);
+            }
+        });
+    });
+
+    // Individual class bindings for testing and legacy compatibility
     document.querySelectorAll('.chat-tool-link').forEach(link => {
         bindAction(link, 'click', (event) => {
             event.preventDefault();
@@ -5011,6 +5202,7 @@ const JEVEXA_PLANS = {
         bindAction(link, 'click', (event) => {
             event.preventDefault();
             if (!currentUser) {
+                storePendingServiceIntent('crm');
                 showToast?.('Please sign in or create an account to open Mini CRM.');
                 openAuthModal?.('signup');
                 return;
@@ -5022,6 +5214,7 @@ const JEVEXA_PLANS = {
         bindAction(link, 'click', (event) => {
             event.preventDefault();
             if (!currentUser) {
+                storePendingServiceIntent('outreach');
                 showToast?.('Please sign in or create an account to open Email & Outreach AI.');
                 openAuthModal?.('signup');
                 return;
@@ -5051,7 +5244,8 @@ const JEVEXA_PLANS = {
         bindAction(link, 'click', (event) => {
             event.preventDefault();
             if (!currentUser) {
-                showToast?.('Please sign in or create an account to open Team Admin.');
+                storePendingServiceIntent('admin');
+                showToast?.('Please sign in or create an account to open User & Admin Management.');
                 openAuthModal?.('signup');
                 return;
             }
@@ -5062,6 +5256,7 @@ const JEVEXA_PLANS = {
         bindAction(link, 'click', (event) => {
             event.preventDefault();
             if (!currentUser) {
+                storePendingServiceIntent('workflows');
                 showToast?.('Please sign in or create an account to open Workflow Automation.');
                 openAuthModal?.('signup');
                 return;

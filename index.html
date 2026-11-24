@@ -846,6 +846,13 @@
                                 </div>
                                 <textarea id="contentTopic" name="topic" rows="5" maxlength="1000" required aria-describedby="contentTopicHelp" placeholder="Describe the product, audience, key points, or idea."></textarea>
                                 <small id="contentTopicHelp">Enter a topic or brief of up to 1,000 characters. Do not include sensitive information.</small>
+                                <div class="content-presets-row" id="contentPresetsRow" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                                    <span class="preset-label" style="font-size:12px; color:var(--text-muted); align-self:center;">Presets:</span>
+                                    <button type="button" class="btn btn-xs btn-outline content-preset-chip" data-topic="Announcing our next-generation AI automation platform with zero-latency streaming, 10 business tools, and enterprise workflows." data-type="blog" data-tone="professional" data-length="medium">SaaS Launch</button>
+                                    <button type="button" class="btn btn-xs btn-outline content-preset-chip" data-topic="Automate your outbound sales outreach and lead scoring with customized AI follow-up sequences, saving 15+ hours weekly." data-type="email" data-tone="persuasive" data-length="short">Cold Outreach</button>
+                                    <button type="button" class="btn btn-xs btn-outline content-preset-chip" data-topic="Top 5 breakthroughs in business intelligence, OCR document parsing, and autonomous agent systems this week." data-type="blog" data-tone="friendly" data-length="long">Newsletter</button>
+                                    <button type="button" class="btn btn-xs btn-outline content-preset-chip" data-topic="Our latest Document AI &amp; OCR tool is now live with real-time JSON and CSV exports. Try it free today!" data-type="social" data-tone="casual" data-length="short">Feature Announcement</button>
+                                </div>
                             </div>
                             <div class="content-tool-controls">
                                 <div class="form-group">
@@ -887,7 +894,9 @@
                                 <h3>Generated content</h3>
                                 <div class="content-output-actions">
                                     <button id="contentCopy" type="button" class="btn btn-outline" disabled>Copy</button>
-                                    <button id="contentDownload" type="button" class="btn btn-outline" disabled>Download</button>
+                                    <button id="contentDownload" type="button" class="btn btn-outline" disabled>Download .txt</button>
+                                    <button id="contentDownloadMd" type="button" class="btn btn-outline" disabled>Download .md</button>
+                                    <button id="contentHistoryBtn" type="button" class="btn btn-outline"><i class="fas fa-clock-rotate-left"></i> History (<span id="contentHistoryCount">0</span>)</button>
                                 </div>
                             </div>
                             <pre id="contentOutput" tabindex="0" aria-label="Generated content output"></pre>
@@ -895,6 +904,23 @@
                     </div>
                 </div>
             </section>
+        </div>
+
+        <!-- Content History Drawer -->
+        <div id="contentHistoryDrawer" class="crm-lead-drawer" aria-hidden="true" hidden>
+            <div class="crm-lead-drawer-backdrop" id="contentHistoryBackdrop"></div>
+            <div class="crm-lead-drawer-panel glassmorphic">
+                <div class="crm-lead-drawer-header">
+                    <h3><i class="fas fa-clock-rotate-left"></i> Content History</h3>
+                    <button type="button" id="contentHistoryClose" class="crm-lead-drawer-close" aria-label="Close content history">×</button>
+                </div>
+                <div class="crm-lead-drawer-body" id="contentHistoryList" style="padding:16px; overflow-y:auto; max-height:calc(100vh - 140px);">
+                </div>
+                <div class="crm-lead-drawer-footer" style="padding:12px 16px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; color:var(--text-muted);" id="contentHistoryFooterCount">0 saved items</span>
+                    <button type="button" id="contentClearHistoryBtn" class="btn btn-xs btn-outline" style="color:#ef4444;"><i class="fas fa-trash-can"></i> Clear History</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1530,8 +1556,10 @@
                                 </div>
                                 <div class="ocr-actions-bar">
                                     <button type="button" class="btn btn-sm btn-outline" id="ocrCopyJsonBtn"><i class="fas fa-copy"></i> Copy JSON</button>
+                                    <button type="button" class="btn btn-sm btn-outline" id="ocrDownloadJsonBtn"><i class="fas fa-download"></i> Download JSON</button>
                                     <button type="button" class="btn btn-sm btn-outline" id="ocrExportCsvBtn"><i class="fas fa-file-csv"></i> Export CSV</button>
                                     <button type="button" class="btn btn-sm btn-outline" id="ocrCopyTextBtn"><i class="fas fa-file-alt"></i> Copy Summary</button>
+                                    <button type="button" class="btn btn-sm btn-outline" id="ocrDownloadTxtBtn"><i class="fas fa-file-lines"></i> Download TXT</button>
                                 </div>
                             </div>
                         </div>
@@ -1660,6 +1688,7 @@
                                 </div>
                                 <div class="ocr-actions-bar">
                                     <button type="button" class="btn btn-primary" id="socialCopyPostBtn"><i class="fas fa-copy"></i> Copy Post</button>
+                                    <button type="button" class="btn btn-outline" id="socialExportDraftBtn"><i class="fas fa-download"></i> Export Draft</button>
                                     <button type="button" class="btn btn-outline" id="socialAddToCalendarBtn"><i class="fas fa-calendar-plus"></i> Add to Calendar</button>
                                 </div>
                             </div>
@@ -2692,9 +2721,9 @@
 
                     </div>
 
-                    <p>The other eight tools will roll out across three releases.</p>
+                    <p>All 10 flagship AI tools are now fully unlocked and live across the studio suite.</p>
 
-                    <span class="review-date">Coming soon</span>
+                    <span class="review-date">10/10 Live Tools</span>
 
                 </div>
 

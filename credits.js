@@ -3053,11 +3053,8 @@
     });
 
     bindSafe(document.getElementById('chatNewConversation'), 'click', () => {
-        if (!historyUserId) {
-            setStatus('Sign in before saving a new chat.');
-            return;
-        }
         createChatSession();
+        setStatus('New chat started.');
     });
 
     document.getElementById('chatHistorySearch')?.addEventListener('input', renderChatHistory);

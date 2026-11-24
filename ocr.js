@@ -87,8 +87,10 @@
 
     // Actions
     const copyJsonBtn = document.getElementById('ocrCopyJsonBtn');
+    const downloadJsonBtn = document.getElementById('ocrDownloadJsonBtn');
     const exportCsvBtn = document.getElementById('ocrExportCsvBtn');
     const copyTextBtn = document.getElementById('ocrCopyTextBtn');
+    const downloadTxtBtn = document.getElementById('ocrDownloadTxtBtn');
 
     const SAMPLE_DOCS = {
         saas_invoice: `APEX CLOUD COMPUTING INC.
@@ -592,6 +594,24 @@ Terms: Net 30`
                 });
         });
 
+        // Download JSON file action
+        if (downloadJsonBtn) {
+            bindSafe(downloadJsonBtn, 'click', () => {
+                if (!state.currentResult) {
+                    const curText = textInput ? textInput.value.trim() : '';
+                    state.currentResult = deterministicClientOcr(curText || SAMPLE_DOCS.saas_invoice, 'auto', 'USD');
+                    renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
+                }
+                const jsonStr = JSON.stringify(state.currentResult, null, 2);
+                downloadFile(`OCR_${state.currentResult.invoice_number || 'document'}.json`, jsonStr, 'application/json');
+                window.showToast?.('Extracted JSON downloaded as file!');
+                if (statusEl) {
+                    statusEl.textContent = 'JSON file downloaded.';
+                    statusEl.className = 'ocr-status-msg success';
+                }
+            });
+        }
+
         // Copy Text action
         bindSafe(copyTextBtn, 'click', () => {
             if (!state.currentResult) {
@@ -613,6 +633,24 @@ Terms: Net 30`
                     window.showToast?.('Summary downloaded as text file!');
                 });
         });
+
+        // Download TXT file action
+        if (downloadTxtBtn) {
+            bindSafe(downloadTxtBtn, 'click', () => {
+                if (!state.currentResult) {
+                    const curText = textInput ? textInput.value.trim() : '';
+                    state.currentResult = deterministicClientOcr(curText || SAMPLE_DOCS.saas_invoice, 'auto', 'USD');
+                    renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
+                }
+                const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: $${state.currentResult.subtotal}\nTax: $${state.currentResult.tax_amount}\nTotal: $${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
+                downloadFile(`OCR_Summary_${state.currentResult.invoice_number || 'document'}.txt`, summary, 'text/plain');
+                window.showToast?.('Summary downloaded as text file!');
+                if (statusEl) {
+                    statusEl.textContent = 'Summary text file downloaded.';
+                    statusEl.className = 'ocr-status-msg success';
+                }
+            });
+        }
 
         // Export CSV action
         bindSafe(exportCsvBtn, 'click', () => {

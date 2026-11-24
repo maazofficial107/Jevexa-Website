@@ -85,6 +85,7 @@
 
     // Preview actions
     const copyPostBtn = document.getElementById('socialCopyPostBtn');
+    const exportDraftBtn = document.getElementById('socialExportDraftBtn');
     const addToCalendarBtn = document.getElementById('socialAddToCalendarBtn');
 
     // Calendar Elements
@@ -519,6 +520,38 @@
                     window.showToast?.('Post draft saved to file!');
                 });
         });
+
+        // Export Draft directly
+        if (exportDraftBtn) {
+            bindSafe(exportDraftBtn, 'click', () => {
+                if (!postBodyEl) return;
+                const fullContent = `${postBodyEl.value}\n\nHashtags: ${(state.currentPost?.hashtags || []).join(' ')}\n\nOptimal Posting Time: ${bestTimeEl?.textContent || 'Peak engagement window'}\nViral Impact Score: ${state.currentPost?.hooks?.[0]?.score || 95}%`;
+                const filename = `Social_Draft_${platformSelect?.value || 'post'}_${new Date().toISOString().split('T')[0]}.txt`;
+                downloadFile(filename, fullContent, 'text/plain;charset=utf-8;');
+                window.showToast?.('Draft exported as text file!');
+                if (statusEl) {
+                    statusEl.textContent = `Draft exported to ${filename}.`;
+                    statusEl.className = 'social-status-msg success';
+                }
+            });
+        }
+
+        // Reactive Platform change
+        if (platformSelect) {
+            bindSafe(platformSelect, 'change', () => {
+                const limits = { twitter: 280, linkedin: 3000, instagram: 2200, facebook: 63206 };
+                const plat = platformSelect.value;
+                if (state.currentPost) {
+                    state.currentPost.platform = plat;
+                    state.currentPost.platform_limit = limits[plat] || 2200;
+                }
+                updateCharCount();
+                if (statusEl) {
+                    statusEl.textContent = `Target platform switched to ${plat.toUpperCase()} (limit: ${limits[plat] || 2200} chars).`;
+                    statusEl.className = 'social-status-msg info';
+                }
+            });
+        }
 
         // Add to calendar
         bindSafe(addToCalendarBtn, 'click', addToCalendar);

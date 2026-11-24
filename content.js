@@ -17,6 +17,16 @@
     const output = document.getElementById('contentOutput');
     const copyButton = document.getElementById('contentCopy');
     const downloadButton = document.getElementById('contentDownload');
+    const downloadMdButton = document.getElementById('contentDownloadMd');
+    const historyButton = document.getElementById('contentHistoryBtn');
+    const historyCountBadge = document.getElementById('contentHistoryCount');
+    const historyDrawer = document.getElementById('contentHistoryDrawer');
+    const historyCloseBtn = document.getElementById('contentHistoryClose');
+    const historyBackdrop = document.getElementById('contentHistoryBackdrop');
+    const historyList = document.getElementById('contentHistoryList');
+    const historyClearBtn = document.getElementById('contentClearHistoryBtn');
+    const historyFooterCount = document.getElementById('contentHistoryFooterCount');
+    const presetsRow = document.getElementById('contentPresetsRow');
 
     if (!form || !topicInput || !typeInput || !toneInput || !lengthInput
         || !generateButton || !status || !output || !copyButton || !downloadButton) {
@@ -429,6 +439,17 @@
             forgetPendingRequest(session, requestId);
             copyButton.disabled = false;
             downloadButton.disabled = false;
+            if (downloadMdButton) downloadMdButton.disabled = false;
+            saveContentHistoryItem({
+                id: requestId || String(Date.now()),
+                topic: topicInput.value.trim(),
+                type: typeInput.value,
+                tone: toneInput.value,
+                length: lengthInput.value,
+                content: payload.content,
+                creditsUsed: used,
+                timestamp: Date.now()
+            });
             if (remaining !== null) {
                 const countEl = document.getElementById('creditsCount');
                 if (countEl) countEl.textContent = String(remaining);
@@ -521,6 +542,180 @@
             setStatus('Download failed. Please copy the generated text instead.', 'error');
         }
     });
+
+    if (downloadMdButton) {
+        bindSafe(downloadMdButton, 'click', () => {
+            const text = output.textContent || '';
+            if (!text) return;
+            try {
+                const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+                const objectUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                link.href = objectUrl;
+                link.download = `jevexa-content-${timestamp}.md`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+                setStatus('Content downloaded as a Markdown file.', 'success');
+            } catch {
+                setStatus('Download failed. Please copy the generated text instead.', 'error');
+            }
+        });
+    }
+
+    // Quick Presets
+    if (presetsRow) {
+        presetsRow.querySelectorAll('.content-preset-chip').forEach(chip => {
+            bindSafe(chip, 'click', () => {
+                if (chip.dataset.topic) topicInput.value = chip.dataset.topic;
+                if (chip.dataset.type) typeInput.value = chip.dataset.type;
+                if (chip.dataset.tone) toneInput.value = chip.dataset.tone;
+                if (chip.dataset.length) lengthInput.value = chip.dataset.length;
+                const charCount = document.getElementById('contentCharCount');
+                if (charCount) charCount.textContent = `${topicInput.value.length} / 1000`;
+                setStatus(`Loaded preset: "${chip.textContent.trim()}". Ready to generate.`, 'info');
+                window.showToast?.(`Loaded ${chip.textContent.trim()} preset!`);
+            });
+        });
+    }
+
+    // Content History Management
+    const HISTORY_STORAGE_KEY = 'jevexa_content_history';
+
+    function loadContentHistory() {
+        try {
+            const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function saveContentHistoryItem(item) {
+        try {
+            const history = loadContentHistory();
+            history.unshift(item);
+            // Cap at 50 items
+            if (history.length > 50) history.length = 50;
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+            updateHistoryUI();
+        } catch (e) {
+            console.warn('Could not persist content history item:', e);
+        }
+    }
+
+    function deleteContentHistoryItem(itemId) {
+        try {
+            let history = loadContentHistory();
+            history = history.filter(h => h.id !== itemId);
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+            updateHistoryUI();
+            renderHistoryDrawer();
+            setStatus('Item removed from content history.', 'info');
+            window.showToast?.('History item removed.');
+        } catch (e) {
+            console.warn('Could not delete content history item:', e);
+        }
+    }
+
+    function clearContentHistory() {
+        if (!confirm('Clear all saved content generation history?')) return;
+        try {
+            localStorage.removeItem(HISTORY_STORAGE_KEY);
+            updateHistoryUI();
+            renderHistoryDrawer();
+            setStatus('Content history cleared.', 'info');
+            window.showToast?.('Content history cleared.');
+        } catch (e) {
+            console.warn('Could not clear content history:', e);
+        }
+    }
+
+    function updateHistoryUI() {
+        const history = loadContentHistory();
+        if (historyCountBadge) historyCountBadge.textContent = String(history.length);
+        if (historyFooterCount) historyFooterCount.textContent = `${history.length} saved item${history.length === 1 ? '' : 's'}`;
+    }
+
+    function renderHistoryDrawer() {
+        if (!historyList) return;
+        const history = loadContentHistory();
+        if (history.length === 0) {
+            historyList.innerHTML = '<div style="text-align:center; padding:32px 16px; color:var(--text-muted);"><i class="fas fa-file-circle-question" style="font-size:2rem; margin-bottom:8px; opacity:0.6; display:block;"></i>No saved content generations yet.<br>Generate articles, captions, or emails to build your history.</div>';
+            return;
+        }
+
+        historyList.innerHTML = history.map(item => {
+            const dateStr = new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const preview = (item.content || '').slice(0, 140).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return `
+            <div class="content-history-item glass" data-history-id="${item.id}" style="padding:14px; margin-bottom:12px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.03);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                    <div>
+                        <strong style="color:var(--text-heading); font-size:13.5px;">${(item.topic || 'Untitled').slice(0, 48)}</strong>
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                            <span style="text-transform:uppercase; font-weight:600; color:var(--primary);">${item.type || 'content'}</span> • ${item.tone || 'standard'} • ${dateStr}
+                        </div>
+                    </div>
+                    <span style="font-size:11px; color:#38bdf8; background:rgba(56,189,248,0.1); padding:2px 6px; border-radius:4px;">⚡ ${item.creditsUsed || 0} creds</span>
+                </div>
+                <p style="font-size:12px; line-height:1.5; color:var(--text-body); margin:8px 0 10px; max-height:48px; overflow:hidden; text-overflow:ellipsis;">${preview}…</p>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-xs btn-primary restore-content-history-btn" data-history-id="${item.id}"><i class="fas fa-arrow-rotate-left"></i> Restore</button>
+                    <button type="button" class="btn btn-xs btn-outline delete-content-history-btn" data-history-id="${item.id}" style="color:#ef4444;"><i class="fas fa-trash-can"></i></button>
+                </div>
+            </div>`;
+        }).join('');
+
+        historyList.querySelectorAll('.restore-content-history-btn').forEach(btn => {
+            bindSafe(btn, 'click', () => {
+                const id = btn.dataset.historyId;
+                const item = loadContentHistory().find(h => h.id === id);
+                if (item) {
+                    if (item.topic) topicInput.value = item.topic;
+                    if (item.type) typeInput.value = item.type;
+                    if (item.tone) toneInput.value = item.tone;
+                    if (item.length) lengthInput.value = item.length;
+                    output.textContent = item.content || '';
+                    copyButton.disabled = false;
+                    downloadButton.disabled = false;
+                    if (downloadMdButton) downloadMdButton.disabled = false;
+                    closeHistoryDrawer();
+                    setStatus(`Restored generation "${(item.topic || '').slice(0, 30)}…" from history.`, 'success');
+                    window.showToast?.('Restored from history!');
+                }
+            });
+        });
+
+        historyList.querySelectorAll('.delete-content-history-btn').forEach(btn => {
+            bindSafe(btn, 'click', () => {
+                deleteContentHistoryItem(btn.dataset.historyId);
+            });
+        });
+    }
+
+    function openHistoryDrawer() {
+        if (!historyDrawer) return;
+        renderHistoryDrawer();
+        historyDrawer.hidden = false;
+        historyDrawer.removeAttribute('hidden');
+        historyDrawer.classList.add('open');
+    }
+
+    function closeHistoryDrawer() {
+        if (!historyDrawer) return;
+        historyDrawer.classList.remove('open');
+        historyDrawer.setAttribute('hidden', '');
+        historyDrawer.hidden = true;
+    }
+
+    if (historyButton) bindSafe(historyButton, 'click', openHistoryDrawer);
+    if (historyCloseBtn) bindSafe(historyCloseBtn, 'click', closeHistoryDrawer);
+    if (historyBackdrop) bindSafe(historyBackdrop, 'click', closeHistoryDrawer);
+    if (historyClearBtn) bindSafe(historyClearBtn, 'click', clearContentHistory);
+    updateHistoryUI();
 
         window.JEVEXA_RECONCILE_CONTENT = async () => {
             try {

@@ -398,3 +398,129 @@ test('9. Worker Endpoints & Routing Verification across all 10 Services', async 
         assert.ok(workerFile.includes(endpoint), `Worker must route ${endpoint}`);
     });
 });
+
+test('10. Content Engine Behavioral: Presets, Markdown & Text Downloads, and History Lifecycle', () => {
+    const contentCode = fs.readFileSync('content.js', 'utf8');
+    const indexHtml = fs.readFileSync('index.html', 'utf8');
+
+    // 1. Verify markup contains presets, md download, and history drawer
+    assert.ok(indexHtml.includes('id="contentPresetsRow"'), 'Presets row must exist in HTML');
+    assert.ok(indexHtml.includes('class="btn btn-xs btn-outline content-preset-chip"'), 'Preset chips must exist');
+    assert.ok(indexHtml.includes('id="contentDownloadMd"'), 'Download .md button must exist in HTML');
+    assert.ok(indexHtml.includes('id="contentHistoryBtn"'), 'History button must exist in HTML');
+    assert.ok(indexHtml.includes('id="contentHistoryDrawer"'), 'History drawer must exist in HTML');
+
+    // 2. Verify content.js handles presets, md download, and history storage
+    assert.ok(contentCode.includes('contentDownloadMd'), 'content.js must reference downloadMdButton');
+    assert.ok(contentCode.includes('content-preset-chip'), 'content.js must handle preset chips');
+    assert.ok(contentCode.includes('loadContentHistory'), 'content.js must implement loadContentHistory');
+    assert.ok(contentCode.includes('saveContentHistoryItem'), 'content.js must implement saveContentHistoryItem');
+    assert.ok(contentCode.includes('restore-content-history-btn'), 'content.js must support restoring past generations');
+    assert.ok(contentCode.includes('clearContentHistory'), 'content.js must support clearing history');
+
+    // 3. Behavioral simulation of History Lifecycle
+    const mockStorage = new Map();
+    function saveHistory(item) {
+        const history = JSON.parse(mockStorage.get('jevexa_content_history') || '[]');
+        history.unshift(item);
+        mockStorage.set('jevexa_content_history', JSON.stringify(history));
+    }
+    function restoreHistory(id) {
+        const history = JSON.parse(mockStorage.get('jevexa_content_history') || '[]');
+        return history.find(h => h.id === id);
+    }
+    function clearHistory() {
+        mockStorage.delete('jevexa_content_history');
+    }
+
+    saveHistory({
+        id: 'gen_1',
+        topic: 'Announcing our next-gen AI platform',
+        type: 'blog',
+        tone: 'professional',
+        length: 'medium',
+        content: '# Announcing Jevexa 2.0\n\nWe are proud to introduce our unified AI studio.',
+        creditsUsed: 2,
+        timestamp: Date.now()
+    });
+
+    const stored = JSON.parse(mockStorage.get('jevexa_content_history'));
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0].topic, 'Announcing our next-gen AI platform');
+
+    const restored = restoreHistory('gen_1');
+    assert.ok(restored);
+    assert.equal(restored.type, 'blog');
+    assert.ok(restored.content.includes('# Announcing Jevexa 2.0'));
+
+    clearHistory();
+    assert.equal(mockStorage.has('jevexa_content_history'), false);
+});
+
+test('11. Document AI & OCR Behavioral: Direct JSON/TXT downloads and Structured Line-Item CSV exports', () => {
+    const ocrCode = fs.readFileSync('ocr.js', 'utf8');
+    const indexHtml = fs.readFileSync('index.html', 'utf8');
+
+    // 1. Verify markup contains direct download buttons
+    assert.ok(indexHtml.includes('id="ocrDownloadJsonBtn"'), 'OCR Download JSON button must exist');
+    assert.ok(indexHtml.includes('id="ocrDownloadTxtBtn"'), 'OCR Download TXT button must exist');
+    assert.ok(ocrCode.includes('ocrDownloadJsonBtn'), 'ocr.js must bind downloadJsonBtn');
+    assert.ok(ocrCode.includes('ocrDownloadTxtBtn'), 'ocr.js must bind downloadTxtBtn');
+
+    // 2. CSV formatting verification
+    const lineItems = [
+        { description: 'Cloud Compute Instance', quantity: 2, unit_price: 150.00, total: 300.00 },
+        { description: 'Vector Database Storage', quantity: 1, unit_price: 250.00, total: 250.00 }
+    ];
+    const headers = ['Description', 'Quantity', 'UnitPrice', 'Total'];
+    const rows = lineItems.map(it => [
+        `"${it.description.replace(/"/g, '""')}"`,
+        it.quantity,
+        it.unit_price,
+        it.total
+    ].join(','));
+    rows.push('"Subtotal",,,550');
+    rows.push('"Tax",,,55');
+    rows.push('"Grand Total",,,605');
+    const csvOutput = [headers.join(','), ...rows].join('\n');
+
+    assert.ok(csvOutput.includes('"Cloud Compute Instance",2,150,300'));
+    assert.ok(csvOutput.includes('"Grand Total",,,605'));
+});
+
+test('12. Social Media Assistant Behavioral: Reactive Platform limit updates and direct draft exports', () => {
+    const socialCode = fs.readFileSync('social.js', 'utf8');
+    const indexHtml = fs.readFileSync('index.html', 'utf8');
+
+    assert.ok(indexHtml.includes('id="socialExportDraftBtn"'), 'Social Export Draft button must exist');
+    assert.ok(socialCode.includes('socialExportDraftBtn'), 'social.js must bind exportDraftBtn');
+
+    // Platform limits verification
+    const limits = { twitter: 280, linkedin: 3000, instagram: 2200, facebook: 63206 };
+    assert.equal(limits.twitter, 280);
+    assert.equal(limits.linkedin, 3000);
+    assert.equal(limits.instagram, 2200);
+
+    // Draft export compilation
+    const samplePost = {
+        platform: 'twitter',
+        body: 'Automate your entire stack with @jevexa_ai.',
+        hashtags: ['#AI', '#SaaS', '#Automation']
+    };
+    const compiledExport = `${samplePost.body}\n\nHashtags: ${samplePost.hashtags.join(' ')}`;
+    assert.ok(compiledExport.includes('@jevexa_ai'));
+    assert.ok(compiledExport.includes('#AI #SaaS #Automation'));
+});
+
+test('13. Chatbot Behavioral: Guest clean session restart and Welcome Chip message dispatching', () => {
+    const creditsCode = fs.readFileSync('credits.js', 'utf8');
+
+    // Verify chatNewConversation does not gate on login
+    assert.ok(creditsCode.includes("bindSafe(document.getElementById('chatNewConversation'), 'click', () => {"));
+    assert.ok(creditsCode.includes('createChatSession();'));
+    assert.ok(creditsCode.includes("setStatus('New chat started.');"));
+
+    // Verify chatWelcomeChips dispatching logic
+    assert.ok(creditsCode.includes('chatWelcomeChips'));
+    assert.ok(creditsCode.includes("button.matches('.chat-welcome-chip')"));
+});

@@ -14861,5 +14861,61 @@ body.is-offline .offline-indicator {
     }
 }
 
+.content-presets-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.content-preset-chip {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-muted, #94a3b8);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.content-preset-chip:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+    transform: translateY(-1px);
+}
+
+.content-output-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .content-output-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+    .content-output-actions .btn {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+    }
+    .content-presets-row {
+        gap: 6px;
+    }
+    .content-preset-chip {
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+    }
+}
+
+
 
 

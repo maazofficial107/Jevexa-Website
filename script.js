@@ -4173,7 +4173,7 @@ const JEVEXA_PLANS = {
     const toolsConfig = [
         {
             id: 'chatbot',
-            name: 'AI Chatbot (Jevexa AI)',
+            name: 'AI Chatbot',
             shortName: 'AI Chatbot',
             tagline: 'Multi-model reasoning assistant with real-time web intelligence and file analysis.',
             icon: 'fas fa-comments',

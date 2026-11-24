@@ -14733,4 +14733,138 @@ body.is-offline .offline-indicator {
     }
 }
 
+/* ==========================================================================
+   MODERN DOCUMENT AI & OCR & DATA MANAGEMENT LAYOUT OVERHAUL
+   ========================================================================== */
+.ocr-dropzone,
+.data-upload-zone {
+    border: 2px dashed rgba(34, 211, 238, 0.35) !important;
+    background: rgba(15, 23, 42, 0.65) !important;
+    border-radius: 14px !important;
+    padding: 18px 16px !important;
+    text-align: center !important;
+    cursor: pointer !important;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 14px !important;
+    margin-bottom: 14px !important;
+    user-select: none;
+}
+
+.ocr-dropzone:hover,
+.ocr-dropzone:focus-visible,
+.ocr-dropzone.dragover,
+.data-upload-zone:hover,
+.data-upload-zone:focus-visible,
+.data-upload-zone.dragover {
+    border-color: #38bdf8 !important;
+    background: rgba(34, 211, 238, 0.1) !important;
+    box-shadow: 0 0 25px rgba(56, 189, 248, 0.25) !important;
+    outline: none !important;
+}
+
+.ocr-dropzone .drop-icon,
+.data-upload-zone .drop-icon {
+    font-size: 1.8rem !important;
+    color: #38bdf8 !important;
+    flex-shrink: 0 !important;
+}
+
+.ocr-dropzone-copy,
+.data-dropzone-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    gap: 2px;
+}
+
+.ocr-dropzone-main,
+.data-dropzone-main {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.ocr-browse-text {
+    color: #38bdf8;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.ocr-dropzone-sub,
+.data-dropzone-sub {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+/* 2-Pane Workspace Grid Responsive Modernization */
+@media (min-width: 961px) and (max-width: 1280px) {
+    .tool-workspace-grid {
+        grid-template-columns: minmax(320px, 390px) minmax(0, 1fr) !important;
+        gap: 16px !important;
+    }
+    .tool-pane-setup,
+    .tool-pane-preview {
+        padding: 16px !important;
+    }
+    .data-summary-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 8px !important;
+    }
+}
+
+@media (max-width: 960px) {
+    .tool-workspace-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+    .tool-pane-setup,
+    .tool-pane-preview {
+        padding: 16px !important;
+    }
+    .data-summary-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 8px !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .data-summary-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }
+    .ocr-dropzone,
+    .data-upload-zone {
+        flex-direction: column !important;
+        text-align: center !important;
+        padding: 16px 12px !important;
+    }
+    .ocr-dropzone-copy,
+    .data-dropzone-copy {
+        align-items: center !important;
+        text-align: center !important;
+    }
+    .ocr-actions-bar {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        width: 100% !important;
+    }
+    .ocr-actions-bar .btn {
+        width: 100% !important;
+        min-height: 44px !important;
+        justify-content: center !important;
+    }
+    .ocr-tabs {
+        width: 100% !important;
+        justify-content: flex-start !important;
+        overflow-x: auto !important;
+        padding-bottom: 4px !important;
+    }
+}
+
+
 

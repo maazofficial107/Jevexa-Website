@@ -283,7 +283,7 @@
 
                 <div class="tools-launcher-grid" id="toolsLauncherGrid" role="region" aria-label="AI Tools Launcher Grid">
                     <!-- Tool 1: AI Chatbot (Live) -->
-                    <div class="tool-launcher-card tool-live" data-tool-id="chatbot" data-status="live" role="button" tabindex="0" aria-label="Open AI Chatbot (Jevexa AI) Workspace">
+                    <div class="tool-launcher-card tool-live" data-tool-id="chatbot" data-status="live" role="button" tabindex="0" aria-label="Open AI Chatbot Workspace">
                         <div class="tool-card-glow"></div>
                         <div class="tool-card-top">
                             <span class="tool-card-num">01</span>
@@ -293,7 +293,7 @@
                             <span class="tool-status-badge badge-live"><span class="pulse-ring"></span>● LIVE NOW</span>
                         </div>
                         <div class="tool-card-content">
-                            <h3 class="tool-card-title">AI Chatbot <span class="tool-card-sub">(Jevexa AI)</span></h3>
+                            <h3 class="tool-card-title">AI Chatbot</h3>
                             <p class="tool-card-desc">Multi-model reasoning assistant with real-time web intelligence and file analysis.</p>
                         </div>
                         <div class="tool-card-footer">
@@ -1440,9 +1440,12 @@
                                     <option value="consulting_statement">Nexus Strategy SOW ($3,750.00)</option>
                                 </select>
                             </div>
-                            <div class="ocr-dropzone glass" id="ocrDropzone">
-                                <i class="fas fa-cloud-arrow-up drop-icon"></i>
-                                <span>Click to load file or paste document text below</span>
+                            <div class="ocr-dropzone glass" id="ocrDropzone" role="button" tabindex="0" aria-label="Upload document file or drag and drop">
+                                <i class="fas fa-cloud-arrow-up drop-icon" aria-hidden="true"></i>
+                                <div class="ocr-dropzone-copy">
+                                    <span class="ocr-dropzone-main">Drag &amp; drop document, or <strong class="ocr-browse-text">browse files</strong></span>
+                                    <span class="ocr-dropzone-sub">Supports PDF, PNG, JPG, WebP, TXT</span>
+                                </div>
                                 <input type="file" id="ocrFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt" hidden>
                             </div>
                             <div class="ocr-form-group">
@@ -2171,6 +2174,13 @@
                                     <option value="messy_leads" selected>Messy CRM Leads (Duplicates &amp; Bad Phone Formatting)</option>
                                     <option value="ecommerce_orders">E-Commerce Orders (Mixed Date Formats)</option>
                                 </select>
+                            </div>
+                            <div class="data-upload-zone glass" id="dataDropzone" role="button" tabindex="0" aria-label="Upload CSV or TSV file or drag and drop">
+                                <i class="fas fa-file-csv drop-icon" aria-hidden="true"></i>
+                                <div class="data-dropzone-copy">
+                                    <span class="data-dropzone-main">Drag &amp; drop CSV/TSV, or <strong class="ocr-browse-text">browse files</strong></span>
+                                    <span class="data-dropzone-sub">Upload tabular dataset or paste raw records below</span>
+                                </div>
                             </div>
                             <div class="ocr-form-group">
                                 <label for="dataPasteInput">Paste Tabular CSV / TSV / Records *</label>

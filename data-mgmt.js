@@ -276,37 +276,95 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         }
     }
 
+    function handleDataFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+            const text = loadEvent.target?.result;
+            if (pasteInput && typeof text === 'string') {
+                pasteInput.value = text;
+                if (statusEl) {
+                    const sizeKb = (file.size / 1024).toFixed(1);
+                    statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Click "Clean & Normalize Dataset" to process.`;
+                    statusEl.className = 'data-status-msg info';
+                }
+                window.showToast?.(`File "${file.name}" loaded successfully.`);
+            }
+        };
+        reader.onerror = () => {
+            if (statusEl) {
+                statusEl.textContent = 'Could not read file. Please ensure it is a valid text or CSV file.';
+                statusEl.className = 'data-status-msg error';
+            }
+        };
+        reader.readAsText(file);
+    }
+
     function init() {
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(processBtn, 'click', processData);
 
-        // File upload handler
+        // File upload handler & drag-and-drop
         if (fileInput) {
             bindSafe(fileInput, 'change', (event) => {
                 const file = event.target?.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (loadEvent) => {
-                    const text = loadEvent.target?.result;
-                    if (pasteInput && typeof text === 'string') {
-                        pasteInput.value = text;
-                        if (statusEl) {
-                            const sizeKb = (file.size / 1024).toFixed(1);
-                            statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Click "Clean & Normalize Dataset" to process.`;
-                            statusEl.className = 'data-status-msg info';
-                        }
-                        window.showToast?.(`File "${file.name}" loaded successfully.`);
-                    }
-                };
-                reader.onerror = () => {
-                    if (statusEl) {
-                        statusEl.textContent = 'Could not read file. Please ensure it is a valid text or CSV file.';
-                        statusEl.className = 'data-status-msg error';
-                    }
-                };
-                reader.readAsText(file);
+                if (file) handleDataFile(file);
             });
+        }
+
+        const dataDropzone = document.getElementById('dataDropzone');
+        if (dataDropzone && fileInput) {
+            bindSafe(dataDropzone, 'click', () => fileInput.click());
+            bindSafe(dataDropzone, 'keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInput.click();
+                }
+            });
+            ['dragenter', 'dragover'].forEach(evt => {
+                dataDropzone.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dataDropzone.classList.add('dragover');
+                }, false);
+            });
+            ['dragleave', 'drop'].forEach(evt => {
+                dataDropzone.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dataDropzone.classList.remove('dragover');
+                }, false);
+            });
+            dataDropzone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    handleDataFile(files[0]);
+                }
+            }, false);
+        }
+
+        if (pasteInput) {
+            ['dragenter', 'dragover'].forEach(evt => {
+                pasteInput.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    pasteInput.classList.add('dragover');
+                }, false);
+            });
+            ['dragleave', 'drop'].forEach(evt => {
+                pasteInput.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    pasteInput.classList.remove('dragover');
+                }, false);
+            });
+            pasteInput.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    handleDataFile(files[0]);
+                }
+            }, false);
         }
 
         // Preset selector

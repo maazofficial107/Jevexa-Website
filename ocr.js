@@ -303,6 +303,40 @@ Terms: Net 30`
         }
     }
 
+    function handleOcrFile(file) {
+        if (!file) return;
+        state.uploadedFileName = file.name;
+        state.uploadedFileSize = file.size;
+        const isBinary = file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        const reader = new FileReader();
+
+        if (isBinary) {
+            reader.onload = (e) => {
+                state.uploadedFileData = e.target?.result || null;
+                if (textInput) {
+                    textInput.value = `[Uploaded Binary File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\nReady for OCR extraction and token-weighted processing.`;
+                }
+                if (statusEl) {
+                    statusEl.textContent = `Document "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
+                    statusEl.className = 'ocr-status-msg info';
+                }
+                window.showToast?.(`Loaded "${file.name}" for OCR analysis.`);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            reader.onload = (e) => {
+                state.uploadedFileData = null;
+                if (textInput) textInput.value = e.target?.result || '';
+                if (statusEl) {
+                    statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
+                    statusEl.className = 'ocr-status-msg info';
+                }
+                window.showToast?.(`Loaded "${file.name}" successfully.`);
+            };
+            reader.readAsText(file);
+        }
+    }
+
     function init() {
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
@@ -328,41 +362,42 @@ Terms: Net 30`
             }
         }
 
-        // File dropzone simulation & real file upload
+        // File dropzone & real drag-and-drop file upload
         if (dropzone && fileInput) {
             bindSafe(dropzone, 'click', () => fileInput.click());
+            bindSafe(dropzone, 'keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInput.click();
+                }
+            });
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('dragover');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('dragover');
+                }, false);
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    handleOcrFile(files[0]);
+                }
+            }, false);
+
             bindSafe(fileInput, 'change', () => {
                 const file = fileInput.files?.[0];
-                if (file) {
-                    state.uploadedFileName = file.name;
-                    state.uploadedFileSize = file.size;
-                    const isBinary = file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-                    const reader = new FileReader();
-
-                    if (isBinary) {
-                        reader.onload = (e) => {
-                            state.uploadedFileData = e.target?.result || null;
-                            if (textInput) {
-                                textInput.value = `[Uploaded Binary File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\nReady for OCR extraction and token-weighted processing.`;
-                            }
-                            if (statusEl) {
-                                statusEl.textContent = `Document "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
-                                statusEl.className = 'ocr-status-msg info';
-                            }
-                        };
-                        reader.readAsDataURL(file);
-                    } else {
-                        reader.onload = (e) => {
-                            state.uploadedFileData = null;
-                            if (textInput) textInput.value = e.target?.result || '';
-                            if (statusEl) {
-                                statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
-                                statusEl.className = 'ocr-status-msg info';
-                            }
-                        };
-                        reader.readAsText(file);
-                    }
-                }
+                if (file) handleOcrFile(file);
             });
         }
 

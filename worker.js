@@ -2,8 +2,9 @@ const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key"
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, apikey, X-Client-Info, Cache-Control, Pragma",
+  "Access-Control-Max-Age": "86400"
 };
 
 function json(data, status = 200) {
@@ -4628,7 +4629,7 @@ function deterministicWorkflowRun(steps, inputData) {
   };
 }
 
-function deterministicDataClean(records, operations, dedupKey) {
+function deterministicDataClean(records, operations = {}, dedupKey) {
   const originalCount = records.length;
   let duplicatesRemoved = 0;
   let emailsCleaned = 0;
@@ -4647,7 +4648,7 @@ function deterministicDataClean(records, operations, dedupKey) {
     const row = { ...records[i] };
     let skipRow = false;
 
-    // Deduplication
+    // Deduplication by selected key
     if (doDedup && row[foundKey] !== undefined && row[foundKey] !== null) {
       const normKey = String(row[foundKey]).trim().toLowerCase();
       if (seenKeys.has(normKey)) {
@@ -4664,12 +4665,14 @@ function deterministicDataClean(records, operations, dedupKey) {
     for (const [col, val] of Object.entries(row)) {
       if (typeof val === "string") {
         let str = val;
-        if (operations.cleanWhitespace) {
+        
+        // Whitespace trimming
+        if (operations.cleanWhitespace || operations.trimWhitespace) {
           str = str.trim().replace(/\s+/g, " ");
         }
 
         // Email normalization
-        if (operations.normalizeEmails && (col.toLowerCase().includes("email") || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str))) {
+        if ((operations.normalizeEmails || operations.cleanEmails) && (col.toLowerCase().includes("email") || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str))) {
           const lower = str.toLowerCase();
           if (lower !== str) {
             emailsCleaned++;
@@ -4681,20 +4684,23 @@ function deterministicDataClean(records, operations, dedupKey) {
           }
         }
 
-        // Phone normalization
-        if (operations.formatPhones && (col.toLowerCase().includes("phone") || col.toLowerCase().includes("mobile") || col.toLowerCase().includes("tel"))) {
+        // Phone normalization (E.164: +[country code][number])
+        if ((operations.formatPhones || operations.normalizePhones) && (col.toLowerCase().includes("phone") || col.toLowerCase().includes("mobile") || col.toLowerCase().includes("tel"))) {
           const digits = str.replace(/\D/g, "");
           if (digits.length === 10) {
-            str = `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+            str = `+1${digits}`;
           } else if (digits.length === 11 && digits.startsWith("1")) {
-            str = `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+            str = `+${digits}`;
           } else if (digits.length >= 7) {
             str = `+${digits}`;
+          } else if (digits.length > 0 && digits.length < 7) {
+            anomaliesDetected++;
+            anomalies.push({ row: i + 1, column: col, value: str, reason: "Incomplete phone number" });
           }
         }
 
-        // Date normalization
-        if (operations.normalizeDates && (col.toLowerCase().includes("date") || /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(str))) {
+        // ISO 8601 Date normalization (YYYY-MM-DD)
+        if ((operations.normalizeDates || operations.standardizeDates) && (col.toLowerCase().includes("date") || /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(str))) {
           const parts = str.split(/[/-]/);
           if (parts.length === 3) {
             let year = parts[2].length === 2 ? "20" + parts[2] : parts[2];
@@ -4707,6 +4713,17 @@ function deterministicDataClean(records, operations, dedupKey) {
             if (iso !== str) {
               datesFixed++;
               str = iso;
+            }
+          }
+        }
+
+        // Anomaly Detection
+        if (operations.detectAnomalies || operations.flagAnomalies) {
+          if (col.toLowerCase().includes("deal") || col.toLowerCase().includes("amount") || col.toLowerCase().includes("value") || col.toLowerCase().includes("price")) {
+            const num = parseFloat(str.replace(/[^0-9.-]/g, ""));
+            if (!isNaN(num) && num < 0) {
+              anomaliesDetected++;
+              anomalies.push({ row: i + 1, column: col, value: str, reason: "Negative monetary value" });
             }
           }
         }
@@ -4733,8 +4750,6 @@ function deterministicDataClean(records, operations, dedupKey) {
   };
 }
 
-// ----------------------------------------------------------------------------
-// HANDLER: Document AI & OCR (/api/ocr/extract)
 // ----------------------------------------------------------------------------
 async function handleOcrExtract(request, env) {
   if (request.method === "OPTIONS") {
@@ -5988,7 +6003,8 @@ function handleClientConfig(request, env) {
       headers: {
         "Cache-Control": "no-store",
         "Content-Type": "application/javascript; charset=utf-8",
-        "X-Content-Type-Options": "nosniff"
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*"
       }
     }
   );
@@ -6557,7 +6573,8 @@ function getAssetMimeType(pathname) {
 }
 
 function secureAssetResponse(assetResponse, options = {}) {
-  const secured = new Response(assetResponse.body, assetResponse);
+  const isBodyless = assetResponse.status === 101 || assetResponse.status === 204 || assetResponse.status === 205 || assetResponse.status === 304 || Boolean(options.isHead);
+  const secured = isBodyless ? new Response(null, assetResponse) : new Response(assetResponse.body, assetResponse);
   
   // Hop-by-hop headers forbidden in HTTP/2 and HTTP/3 / QUIC
   const hopByHopHeaders = [
@@ -6801,7 +6818,7 @@ export default {
           pageReq = new Request(new URL("/index.html", request.url), request);
           assetResponse = await env.ASSETS.fetch(pageReq);
         }
-        return secureAssetResponse(assetResponse, { isHtml: true, cacheControl: "public, max-age=0, must-revalidate" });
+        return secureAssetResponse(assetResponse, { isHtml: true, isHead: request.method === "HEAD", cacheControl: "public, max-age=0, must-revalidate" });
       }
 
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
@@ -6823,6 +6840,7 @@ export default {
         }
         return secureAssetResponse(assetResponse, {
           isStaticAsset,
+          isHead: request.method === "HEAD",
           mime: isStaticAsset ? getAssetMimeType(targetPath) : null,
           isHtml: !isStaticAsset,
           cacheControl: isStaticAsset ? "public, max-age=86400, stale-while-revalidate=604800" : "public, max-age=0, must-revalidate"
@@ -6837,6 +6855,7 @@ export default {
       const isHtml = url.pathname.endsWith(".html") || url.pathname === "/" || !url.pathname.includes(".");
       return secureAssetResponse(assetResponse, {
         isStaticAsset: !isHtml,
+        isHead: request.method === "HEAD",
         mime,
         isHtml,
         cacheControl: isHtml ? "public, max-age=0, must-revalidate" : "public, max-age=86400, stale-while-revalidate=604800"

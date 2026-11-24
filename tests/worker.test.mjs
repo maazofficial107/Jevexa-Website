@@ -7016,5 +7016,49 @@ test("Audit & Hardening: Calendar toggles, Data Management upload/metrics, respo
   assert.match(workerJs, /"\/admin\.html":\s*"\/admin\.html"/);
 });
 
+test("Architectural & Service Modernization: (Jevexa AI) removal, edge 304 handling, E.164 phone formatting, drag-and-drop, and 10-service integrity", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const aboutHtml = await readFile(new URL("../about.html", import.meta.url), "utf8");
+  const termsHtml = await readFile(new URL("../terms.html", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const ocrJs = await readFile(new URL("../ocr.js", import.meta.url), "utf8");
+  const dataJs = await readFile(new URL("../data-mgmt.js", import.meta.url), "utf8");
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. (Jevexa AI) blue text removal
+  assert.doesNotMatch(html, /<h3 class="tool-card-title">AI Chatbot <span class="tool-card-sub">\(Jevexa AI\)<\/span><\/h3>/);
+  assert.match(html, /<h3 class="tool-card-title">AI Chatbot<\/h3>/);
+  assert.doesNotMatch(aboutHtml, /AI Chatbot \(Jevexa AI\)/);
+  assert.doesNotMatch(termsHtml, /AI Chatbot \(Jevexa AI\)/);
+  assert.match(scriptJs, /id:\s*'chatbot',\s*name:\s*'AI Chatbot',/);
+
+  // 2. Drag and drop file ingestion for OCR & Data Management
+  assert.match(ocrJs, /handleOcrFile/);
+  assert.match(ocrJs, /dropzone\.addEventListener\(eventName/);
+  assert.match(dataJs, /handleDataFile/);
+  assert.match(dataJs, /dataDropzone\.addEventListener\(evt/);
+  assert.match(dataJs, /pasteInput\.addEventListener\(evt/);
+
+  // 3. E.164 phone formatting & anomaly detection
+  assert.match(workerJs, /operations\.formatPhones/);
+  assert.match(workerJs, /str = `\+1\${digits}`/);
+  assert.match(workerJs, /Negative monetary value/);
+
+  // 4. Edge 304 & bodyless response handling in secureAssetResponse
+  assert.match(workerJs, /const isBodyless = assetResponse\.status === 101/);
+  assert.match(workerJs, /const secured = isBodyless \? new Response\(null, assetResponse\) : new Response\(assetResponse\.body, assetResponse\)/);
+
+  // 5. Modern layout styling for OCR and Data Management
+  assert.match(styles, /\.ocr-dropzone,\s*\.data-upload-zone/);
+  assert.match(styles, /MODERN DOCUMENT AI & OCR & DATA MANAGEMENT LAYOUT OVERHAUL/);
+
+  // 6. 10 Services registered in toolsConfig
+  const tools = ["chatbot", "content-generator", "ocr", "social", "analytics", "admin", "workflows", "data", "crm", "email-outreach"];
+  for (const toolId of tools) {
+    assert.match(scriptJs, new RegExp(`id:\\s*'${toolId}'`));
+  }
+});
+
 
 

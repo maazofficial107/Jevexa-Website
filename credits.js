@@ -1539,6 +1539,7 @@
             modal.classList.remove('open');
             setTimeout(() => { modal.hidden = true; }, 220);
         };
+        window.closeChatCustomizationModal = closeModal;
 
         bindSafe(openBtn, 'click', openModal);
         if (headerSettingsBtn) bindSafe(headerSettingsBtn, 'click', openModal);

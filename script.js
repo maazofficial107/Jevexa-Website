@@ -146,7 +146,11 @@ function closeAllWorkspacesAndModals() {
         'contentHistoryDrawer',
         'contentHistoryBackdrop',
         'teamInviteModal',
-        'teamModalBackdrop'
+        'teamModalBackdrop',
+        'workflowExecModal',
+        'chatCustomizationModal',
+        'comingSoonModal',
+        'comingSoonBackdrop'
     ];
     drawerBackdropIds.forEach(id => {
         const el = document.getElementById(id);
@@ -156,6 +160,22 @@ function closeAllWorkspacesAndModals() {
             el.hidden = true;
         }
     });
+
+    if (typeof window.clearContentProcessing === 'function') {
+        window.clearContentProcessing();
+    }
+    if (typeof window.closeWorkflowExecModal === 'function') {
+        window.closeWorkflowExecModal();
+    } else if (typeof window.JEVEXA_WORKFLOWS?.closeExecModal === 'function') {
+        window.JEVEXA_WORKFLOWS.closeExecModal();
+    }
+    if (typeof window.closeChatCustomizationModal === 'function') {
+        window.closeChatCustomizationModal();
+    }
+    window.closeContentHistoryDrawer?.();
+    window.JEVEXA_CRM?.closeLeadDrawer?.();
+    window.JEVEXA_OUTREACH?.closeHistoryDrawer?.();
+    window.JEVEXA_TEAM?.closeInvite?.();
 
     if (typeof window.closeComingSoonModal === 'function') {
         window.closeComingSoonModal();
@@ -4448,6 +4468,7 @@ const JEVEXA_PLANS = {
         window.abortChatRequest?.();
         window.removeChatTyping?.();
         window.JEVEXA_CLOSE_SELECTORS?.();
+        window.closeChatCustomizationModal?.();
         try {
             localStorage.removeItem('jevexa_last_workspace');
             sessionStorage.removeItem('jevexa_last_workspace');
@@ -4708,6 +4729,8 @@ const JEVEXA_PLANS = {
     }
 
     function closeWorkflowsWorkspace(pushState = true) {
+        window.JEVEXA_WORKFLOWS?.closeExecModal?.();
+        window.closeWorkflowExecModal?.();
         if (workflowsWorkspace) {
             workflowsWorkspace.classList.remove('open');
             workflowsWorkspace.setAttribute('aria-hidden', 'true');

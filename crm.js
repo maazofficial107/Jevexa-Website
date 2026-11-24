@@ -627,6 +627,7 @@
     // Save Lead Form Submit
     async function handleLeadFormSubmit(e) {
         e.preventDefault();
+        const saveBtn = document.getElementById('crmLeadModalSave');
         const session = await getSession();
         if (!session?.user?.id) {
             if (typeof window.openAuthModal === 'function') window.openAuthModal('signup');
@@ -648,6 +649,8 @@
             }
             return;
         }
+
+        if (saveBtn) saveBtn.disabled = true;
 
         const payload = {
             user_id: session.user.id,
@@ -749,6 +752,8 @@
         } catch (err) {
             console.error('Error saving lead:', err);
             if (typeof window.showToast === 'function') window.showToast('Could not save lead: ' + (err.message || 'Error'));
+        } finally {
+            if (saveBtn) saveBtn.disabled = false;
         }
     }
 
@@ -1116,6 +1121,46 @@
         }
     }
 
+    function deterministicClientCrmScore(lead = {}) {
+        const name = lead.name || "Prospective Client";
+        const company = lead.company || "Enterprise Lead";
+        const role = String(lead.role || "").toLowerCase();
+        const dealValue = Number(lead.deal_value) || 0;
+        const stage = lead.stage || "New";
+
+        let baseScore = 65;
+        if (dealValue >= 10000) baseScore += 15;
+        else if (dealValue >= 2500) baseScore += 8;
+
+        if (role.includes("founder") || role.includes("ceo") || role.includes("vp") || role.includes("head") || role.includes("director")) {
+            baseScore += 12;
+        } else if (role.includes("manager") || role.includes("lead")) {
+            baseScore += 6;
+        }
+
+        if (lead.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) baseScore += 5;
+        if (lead.phone) baseScore += 3;
+        if (stage === "Qualified" || stage === "Proposal") baseScore += 5;
+
+        const score = Math.max(25, Math.min(98, baseScore));
+        const likelihood = score >= 75 ? "High" : score >= 50 ? "Medium" : "Low";
+
+        return {
+            lead_score: score,
+            conversion_likelihood: likelihood,
+            summary: `${name} at ${company} represents a ${likelihood.toLowerCase()}-intent prospect with ${role ? role : "decision-making authority"} and an estimated deal scope of $${dealValue.toLocaleString()}.`,
+            pain_points: [
+                "Manual multi-step business overhead",
+                "Fragmented software tool sprawl",
+                "Need for scalable client turnaround times"
+            ],
+            recommended_action: score >= 75
+                ? "Initiate high-touch outreach sequence and propose a 15-minute workflow alignment call."
+                : "Send nurture sequence highlighting automation ROI and customer case studies.",
+            suggested_outreach_angle: `Focus on how automated workflows can eliminate manual processing for ${company}.`
+        };
+    }
+
     // AI Score & Strategy Action
     async function handleAiScore() {
         const leadId = state.selectedLeadId;
@@ -1193,9 +1238,18 @@
                 window.showToast(`AI Score generated: ${data.lead_score}/100 (${data.conversion_likelihood})`);
             }
         } catch (err) {
-            console.error('AI Score error:', err);
+            console.warn('AI Score API request failed, applying deterministic fallback:', err);
+            const fallback = deterministicClientCrmScore(lead);
+            lead.lead_score = fallback.lead_score;
+            lead.ai_summary = fallback.summary;
+            lead.suggested_outreach_angle = fallback.suggested_outreach_angle;
+
+            renderAiStrategyBox(lead);
+            renderAll();
+            await renderDrawerTimeline(leadId);
+
             if (typeof window.showToast === 'function') {
-                window.showToast(err.message || 'Could not complete AI Lead Scoring.');
+                window.showToast(`AI Score generated (Offline Fallback): ${fallback.lead_score}/100 (${fallback.conversion_likelihood})`);
             }
         } finally {
             state.isAiScoring = false;

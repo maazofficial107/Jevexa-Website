@@ -356,6 +356,7 @@
         if (e) e.preventDefault();
         const email = inviteEmailInput ? inviteEmailInput.value.trim() : '';
         const role = inviteRoleSelect ? inviteRoleSelect.value : 'Member';
+        const submitBtn = document.getElementById('teamInviteSubmitBtn');
 
         if (!email) {
             window.showToast?.('Please enter an email address.');
@@ -372,90 +373,96 @@
             return;
         }
 
-        const session = await getSession();
-        if (!session) {
-            // Local client provisioning for guest / demo mode
-            const newMember = {
-                id: 'mem_' + Date.now(),
-                name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                email,
-                role,
-                status: 'Active',
-                last_active_at: new Date().toISOString()
-            };
-            state.members.push(newMember);
-            state.auditLogs.unshift({
-                timestamp: new Date().toISOString(),
-                action: "Member Invited",
-                actor: "Workspace Admin",
-                details: `Dispatched workspace invitation to ${email} as ${role}`,
-                status: "Success"
-            });
-            renderMembers();
-            renderAuditLogs();
-            closeInviteModal();
-            window.showToast?.(`Invitation dispatched to ${email} as ${role}!`);
-            return;
-        }
+        if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const res = await fetch('/api/team/invite', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`
-                },
-                body: JSON.stringify({ email, role, currentMemberCount: state.members.length })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                if (res.status === 402 || res.status === 403) {
-                    window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Team seat expansion');
-                }
-                throw new Error(data.error || 'Failed to dispatch invitation.');
+            const session = await getSession();
+            if (!session) {
+                // Local client provisioning for guest / demo mode
+                const newMember = {
+                    id: 'mem_' + Date.now(),
+                    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    email,
+                    role,
+                    status: 'Active',
+                    last_active_at: new Date().toISOString()
+                };
+                state.members.push(newMember);
+                state.auditLogs.unshift({
+                    timestamp: new Date().toISOString(),
+                    action: "Member Invited",
+                    actor: "Workspace Admin",
+                    details: `Dispatched workspace invitation to ${email} as ${role}`,
+                    status: "Success"
+                });
+                renderMembers();
+                renderAuditLogs();
+                closeInviteModal();
+                window.showToast?.(`Invitation dispatched to ${email} as ${role}!`);
+                return;
             }
 
-            state.members.push(data.member || {
-                id: 'mem_' + Date.now(),
-                name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                email,
-                role,
-                status: 'Active',
-                last_active_at: new Date().toISOString()
-            });
-            state.auditLogs.unshift({
-                timestamp: new Date().toISOString(),
-                action: "Member Invited",
-                actor: "Workspace Admin",
-                details: `Dispatched workspace invitation to ${email} as ${role}`,
-                status: "Success"
-            });
-            renderMembers();
-            renderAuditLogs();
-            closeInviteModal();
-            window.showToast?.(`Invitation sent to ${email} as ${role}!`);
-        } catch (err) {
-            console.warn('API invite failed, using local member addition:', err);
-            const fallbackMember = {
-                id: 'mem_' + Date.now(),
-                name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                email,
-                role,
-                status: 'Active',
-                last_active_at: new Date().toISOString()
-            };
-            state.members.push(fallbackMember);
-            state.auditLogs.unshift({
-                timestamp: new Date().toISOString(),
-                action: "Member Invited",
-                actor: "Workspace Admin",
-                details: `Dispatched workspace invitation to ${email} as ${role}`,
-                status: "Success"
-            });
-            renderMembers();
-            renderAuditLogs();
-            closeInviteModal();
-            window.showToast?.(`Invitation sent to ${email} as ${role}!`);
+            try {
+                const res = await fetch('/api/team/invite', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify({ email, role, currentMemberCount: state.members.length })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    if (res.status === 402 || res.status === 403) {
+                        window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Team seat expansion');
+                    }
+                    throw new Error(data.error || 'Failed to dispatch invitation.');
+                }
+
+                state.members.push(data.member || {
+                    id: 'mem_' + Date.now(),
+                    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    email,
+                    role,
+                    status: 'Active',
+                    last_active_at: new Date().toISOString()
+                });
+                state.auditLogs.unshift({
+                    timestamp: new Date().toISOString(),
+                    action: "Member Invited",
+                    actor: "Workspace Admin",
+                    details: `Dispatched workspace invitation to ${email} as ${role}`,
+                    status: "Success"
+                });
+                renderMembers();
+                renderAuditLogs();
+                closeInviteModal();
+                window.showToast?.(`Invitation sent to ${email} as ${role}!`);
+            } catch (err) {
+                console.warn('API invite failed, using local member addition:', err);
+                const fallbackMember = {
+                    id: 'mem_' + Date.now(),
+                    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    email,
+                    role,
+                    status: 'Active',
+                    last_active_at: new Date().toISOString()
+                };
+                state.members.push(fallbackMember);
+                state.auditLogs.unshift({
+                    timestamp: new Date().toISOString(),
+                    action: "Member Invited",
+                    actor: "Workspace Admin",
+                    details: `Dispatched workspace invitation to ${email} as ${role}`,
+                    status: "Success"
+                });
+                renderMembers();
+                renderAuditLogs();
+                closeInviteModal();
+                window.showToast?.(`Invitation sent to ${email} as ${role}!`);
+            }
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
         }
     }
 

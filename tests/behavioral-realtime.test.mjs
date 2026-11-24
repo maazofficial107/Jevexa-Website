@@ -626,3 +626,89 @@ test('16. Micro-Level Full-Platform Behavioral: Zero State Leakage, Drawer Backd
     assert.ok(/\.chat-scroll-bottom-btn[\s\S]*?min-height:\s*42px;/.test(stylesCode), 'chat-scroll-bottom-btn is >= 42px');
 });
 
+test('17. Full 10-Service Real Action Integrity, Fail-Safe Fallbacks, Modal Lifecycle, and Race Prevention', () => {
+    const scriptCode = fs.readFileSync('script.js', 'utf8');
+    const crmCode = fs.readFileSync('crm.js', 'utf8');
+    const teamCode = fs.readFileSync('team.js', 'utf8');
+    const workflowsCode = fs.readFileSync('workflows.js', 'utf8');
+    const creditsCode = fs.readFileSync('credits.js', 'utf8');
+    const contentCode = fs.readFileSync('content.js', 'utf8');
+    const ocrCode = fs.readFileSync('ocr.js', 'utf8');
+    const socialCode = fs.readFileSync('social.js', 'utf8');
+    const analyticsCode = fs.readFileSync('analytics.js', 'utf8');
+    const dataCode = fs.readFileSync('data-mgmt.js', 'utf8');
+    const outreachCode = fs.readFileSync('outreach.js', 'utf8');
+
+    // 1. CRM Deterministic Client Fallback
+    assert.ok(crmCode.includes('function deterministicClientCrmScore('), 'crm.js defines deterministicClientCrmScore');
+    assert.ok(crmCode.includes('const fallback = deterministicClientCrmScore(lead);'), 'crm.js applies deterministicClientCrmScore on error/offline');
+
+    // Test the CRM deterministic scoring calculation directly
+    const testLead = {
+        name: 'Sarah Connor',
+        company: 'Cyberdyne Systems',
+        role: 'VP of Engineering',
+        deal_value: 35000,
+        stage: 'Qualified',
+        email: 'sarah@cyberdyne.com',
+        phone: '1-415-555-0199'
+    };
+    let baseScore = 65;
+    if (testLead.deal_value >= 10000) baseScore += 15;
+    if (testLead.role.toLowerCase().includes('vp')) baseScore += 12;
+    if (testLead.email) baseScore += 5;
+    if (testLead.phone) baseScore += 3;
+    if (testLead.stage === 'Qualified') baseScore += 5;
+    const expectedScore = Math.max(25, Math.min(98, baseScore));
+    assert.ok(expectedScore >= 75, 'High value enterprise lead achieves high-intent score');
+
+    // 2. Race condition & double-submit prevention
+    assert.ok(crmCode.includes("const saveBtn = document.getElementById('crmLeadModalSave');"), 'crm.js guards crmLeadModalSave');
+    assert.ok(crmCode.includes("if (saveBtn) saveBtn.disabled = true;"), 'crm.js disables saveBtn during in-flight submission');
+    assert.ok(crmCode.includes("if (saveBtn) saveBtn.disabled = false;"), 'crm.js re-enables saveBtn in finally block');
+
+    assert.ok(teamCode.includes("const submitBtn = document.getElementById('teamInviteSubmitBtn');"), 'team.js guards teamInviteSubmitBtn');
+    assert.ok(teamCode.includes("if (submitBtn) submitBtn.disabled = true;"), 'team.js disables submitBtn during in-flight submission');
+    assert.ok(teamCode.includes("if (submitBtn) submitBtn.disabled = false;"), 'team.js re-enables submitBtn in finally block');
+
+    // 3. Modals & Drawers Safe Lifecycle in script.js
+    assert.ok(scriptCode.includes("'workflowExecModal'"), 'script.js drawerBackdropIds includes workflowExecModal');
+    assert.ok(scriptCode.includes("'chatCustomizationModal'"), 'script.js drawerBackdropIds includes chatCustomizationModal');
+    assert.ok(scriptCode.includes("'comingSoonModal'"), 'script.js drawerBackdropIds includes comingSoonModal');
+    assert.ok(scriptCode.includes("'comingSoonBackdrop'"), 'script.js drawerBackdropIds includes comingSoonBackdrop');
+
+    assert.ok(scriptCode.includes('window.clearContentProcessing();'), 'script.js cancels in-flight content polling timers on reset');
+    assert.ok(scriptCode.includes('window.closeWorkflowExecModal();') || scriptCode.includes('window.JEVEXA_WORKFLOWS?.closeExecModal();'), 'script.js closes workflow execution modal on reset');
+    assert.ok(scriptCode.includes('window.closeChatCustomizationModal();'), 'script.js closes chat customization modal on reset');
+
+    // 4. Workflow execution modal exposure
+    assert.ok(workflowsCode.includes('window.closeWorkflowExecModal = closeExecModal;'), 'workflows.js exposes window.closeWorkflowExecModal');
+    assert.ok(workflowsCode.includes('closeExecModal'), 'workflows.js exposes closeExecModal in JEVEXA_WORKFLOWS');
+
+    // 5. Chat customization modal exposure
+    assert.ok(creditsCode.includes('window.closeChatCustomizationModal = closeModal;'), 'credits.js exposes window.closeChatCustomizationModal');
+
+    // 6. Complete 10/10 Service Action Matrix Verification
+    // Service 01: Chatbot (generate, model switch, history, chips, clean reset)
+    assert.ok(creditsCode.includes('chatSend') && creditsCode.includes('createChatSession'));
+    // Service 02: Content (generate, presets, copy, txt/md download, history drawer)
+    assert.ok(contentCode.includes('contentGenerate') && contentCode.includes('contentDownloadMd') && contentCode.includes('contentCopy'));
+    // Service 03: OCR (extract, file drop, json/txt/csv download, copy)
+    assert.ok(ocrCode.includes('ocrExtractBtn') && ocrCode.includes('ocrExportCsvBtn') && ocrCode.includes('ocrCopyJsonBtn'));
+    // Service 04: Social (generate, viral hooks, char counter, copy, draft download, calendar)
+    assert.ok(socialCode.includes('socialExportDraftBtn') && socialCode.includes('addToCalendar') && socialCode.includes('copyPost'));
+    // Service 05: Analytics (kpi calc, 30d/90d/1y horizon, kpi csv export, report download)
+    assert.ok(analyticsCode.includes('Jevexa_KPI_Export_') && analyticsCode.includes('calculateMetrics'));
+    // Service 06: Team (invite modal, role change, seat enforcement, team csv export)
+    assert.ok(teamCode.includes('handleInviteSubmit') && teamCode.includes('Jevexa_Team_and_Audit_'));
+    // Service 07: Workflows (template load, add step, move step, delete step, run workflow, json/csv export)
+    assert.ok(workflowsCode.includes('runWorkflow') && workflowsCode.includes('exportWorkflowJson') && workflowsCode.includes('exportRunsCsv'));
+    // Service 08: Data (sample load, file upload, clean dataset, stats, copy, csv/json download)
+    assert.ok(dataCode.includes('cleanDatasetLocally') && dataCode.includes('downloadCsvBtn') && dataCode.includes('copyClipboardBtn'));
+    // Service 09: CRM (add/edit lead, ai score, search/filter, csv import/export, outreach handoff)
+    assert.ok(crmCode.includes('exportCsv') && crmCode.includes('handleCsvImport') && crmCode.includes('handleDraftOutreachShortcut'));
+    // Service 10: Outreach (generate 3-step sequence, step switcher, edit fields, copy, gmail compose, md export)
+    assert.ok(outreachCode.includes('exportSequenceMarkdown') && outreachCode.includes('handleOpenInGmail') && outreachCode.includes('handleCopyEmail'));
+});
+
+

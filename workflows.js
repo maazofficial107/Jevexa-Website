@@ -538,29 +538,26 @@
         if (exportBtn) bindSafe(exportBtn, 'click', exportWorkflowJson);
         if (exportHistoryBtn) bindSafe(exportHistoryBtn, 'click', exportRunsCsv);
 
+        function closeExecModal() {
+            if (execModal) {
+                execModal.hidden = true;
+                execModal.setAttribute('hidden', '');
+                execModal.classList.remove('open');
+            }
+        }
+        window.closeWorkflowExecModal = closeExecModal;
+
         if (execModalClose) {
-            bindSafe(execModalClose, 'click', () => {
-                if (execModal) {
-                    execModal.hidden = true;
-                    execModal.setAttribute('hidden', '');
-                    execModal.classList.remove('open');
-                }
-            });
+            bindSafe(execModalClose, 'click', closeExecModal);
         }
 
         if (execModal) {
             bindSafe(execModal, 'click', (e) => {
-                if (e.target === execModal) {
-                    execModal.hidden = true;
-                    execModal.setAttribute('hidden', '');
-                    execModal.classList.remove('open');
-                }
+                if (e.target === execModal) closeExecModal();
             });
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && !execModal.hidden) {
-                    execModal.hidden = true;
-                    execModal.setAttribute('hidden', '');
-                    execModal.classList.remove('open');
+                    closeExecModal();
                 }
             });
         }
@@ -577,7 +574,15 @@
         renderSteps,
         renderHistory,
         exportWorkflowJson,
-        exportRunsCsv
+        exportRunsCsv,
+        closeExecModal: () => {
+            const execModal = document.getElementById('workflowExecModal');
+            if (execModal) {
+                execModal.hidden = true;
+                execModal.setAttribute('hidden', '');
+                execModal.classList.remove('open');
+            }
+        }
     };
 
     if (document.readyState === 'loading') {

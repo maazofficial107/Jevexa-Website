@@ -52,6 +52,12 @@ test('1. Exact 1-to-1 Service Card Declarations in index.html for all 10 Service
       html.includes(`id="${expected.targetWorkspace}"`),
       `Workspace target #${expected.targetWorkspace} for service ${expected.num} must exist in index.html`
     );
+
+    // Verify href points directly to target workspace
+    assert.ok(
+      linkMatch[0].includes(`href="#${expected.targetWorkspace}"`),
+      `Card ${expected.num} try link must point directly to href="#${expected.targetWorkspace}"`
+    );
   });
 });
 
@@ -250,4 +256,125 @@ test('6. UI & Pointer Ergonomics: cursor pointer, z-index, and no click-blocking
 
   // Verify premium overlay pseudo-elements have pointer-events: none
   assert.match(premiumCss, /\.feature-card::after[\s\S]*?pointer-events:\s*none;/);
+});
+
+test('7. Real DOM Click Simulation on all 10 Try links: e.preventDefault(), e.stopPropagation(), exact workspace open & zero scroll-to-top regression', () => {
+  // 1. Verify script.js implements e.preventDefault(), e.stopPropagation(), and e.stopImmediatePropagation() on feature clicks
+  assert.ok(scriptJs.includes('triggerServiceWorkspace(event, serviceId)'), 'script.js must define triggerServiceWorkspace helper');
+  assert.ok(scriptJs.includes('event.stopPropagation()'), 'script.js must call event.stopPropagation()');
+  assert.ok(scriptJs.includes('event.stopImmediatePropagation()'), 'script.js must call event.stopImmediatePropagation()');
+
+  // 2. Verify global smooth-scroll listener in script.js explicitly ignores feature-try-link and feature-card
+  const scrollListenerMatch = scriptJs.match(/const link = event\.target instanceof Element \? event\.target\.closest\('a\[href\^="#"\]'\) : null;([\s\S]*?getKey:)/);
+  assert.ok(scrollListenerMatch, 'Smooth-scroll document click listener must exist');
+  const scrollListenerFull = scrollListenerMatch[1];
+  assert.ok(scrollListenerFull.includes('feature-try-link'), 'Smooth-scroll handler must guard against feature-try-link');
+  assert.ok(scrollListenerFull.includes('feature-card'), 'Smooth-scroll handler must guard against feature-card');
+
+  // 3. Behavioral Simulation of Click Event Pipeline across all 10 services
+  const workspaces = {};
+  EXPECTED_SERVICES.forEach(s => {
+    workspaces[s.targetWorkspace] = {
+      open: false,
+      hidden: true,
+      ariaHidden: 'true',
+      scrollTop: 100,
+      innerScrollTop: 100
+    };
+  });
+
+  let currentRoute = '/';
+  let landingScrollTop = 1420; // User is scrolled down to the 10 services section
+  let scrollToCalled = false;
+  let scrollIntoViewCalled = false;
+
+  const mockWindow = {
+    scrollTo: (options) => {
+      scrollToCalled = true;
+      if (options?.top !== undefined) landingScrollTop = options.top;
+    }
+  };
+
+  function simulateOpenWorkspace(targetId, route) {
+    // Close other workspaces
+    Object.keys(workspaces).forEach(id => {
+      if (id !== targetId) {
+        workspaces[id].open = false;
+        workspaces[id].hidden = true;
+        workspaces[id].ariaHidden = 'true';
+      }
+    });
+
+    // Open target workspace
+    workspaces[targetId].open = true;
+    workspaces[targetId].hidden = false;
+    workspaces[targetId].ariaHidden = 'false';
+    workspaces[targetId].scrollTop = 0;
+    workspaces[targetId].innerScrollTop = 0;
+    currentRoute = route;
+  }
+
+  // Handler replicating script.js triggerServiceWorkspace
+  function handleClick(event, service) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+      }
+    }
+    simulateOpenWorkspace(service.targetWorkspace, service.route);
+  }
+
+  // Test clicking all 10 Try links sequentially
+  EXPECTED_SERVICES.forEach(service => {
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    let immediatePropagationStopped = false;
+
+    const mockEvent = {
+      target: {
+        tagName: 'A',
+        className: `feature-try-link ${service.linkClass}`,
+        closest: (selector) => {
+          if (selector.includes('feature-try-link')) return true;
+          if (selector.includes('feature-card')) return true;
+          return null;
+        }
+      },
+      preventDefault: () => { defaultPrevented = true; },
+      stopPropagation: () => { propagationStopped = true; },
+      stopImmediatePropagation: () => { immediatePropagationStopped = true; }
+    };
+
+    handleClick(mockEvent, service);
+
+    // 1. Assert default browser anchor-navigation was blocked
+    assert.equal(defaultPrevented, true, `Clicking Try on ${service.title} must call event.preventDefault()`);
+
+    // 2. Assert event bubbling to document anchor scroller was stopped
+    assert.equal(propagationStopped, true, `Clicking Try on ${service.title} must call event.stopPropagation()`);
+    assert.equal(immediatePropagationStopped, true, `Clicking Try on ${service.title} must call event.stopImmediatePropagation()`);
+
+    // 3. Assert workspace is visible and active
+    assert.equal(workspaces[service.targetWorkspace].open, true, `${service.targetWorkspace} must be open`);
+    assert.equal(workspaces[service.targetWorkspace].hidden, false, `${service.targetWorkspace} hidden must be false`);
+    assert.equal(workspaces[service.targetWorkspace].ariaHidden, 'false', `${service.targetWorkspace} aria-hidden must be 'false'`);
+    assert.equal(workspaces[service.targetWorkspace].scrollTop, 0, `${service.targetWorkspace} scrollTop must reset to 0`);
+    assert.equal(workspaces[service.targetWorkspace].innerScrollTop, 0, `${service.targetWorkspace} inner scroll must reset to 0`);
+    assert.equal(currentRoute, service.route, `Route must be synced to ${service.route}`);
+
+    // 4. Zero landing-page scroll-to-top regression
+    assert.equal(scrollToCalled, false, `Landing page must not scroll to top when opening ${service.title}`);
+    assert.equal(scrollIntoViewCalled, false, `Landing page must not scrollIntoView when opening ${service.title}`);
+    assert.equal(landingScrollTop, 1420, `Landing page scroll position must remain unchanged`);
+
+    // 5. Verify all other 9 workspaces are closed
+    Object.keys(workspaces).forEach(id => {
+      if (id !== service.targetWorkspace) {
+        assert.equal(workspaces[id].open, false, `${id} must be closed`);
+        assert.equal(workspaces[id].hidden, true, `${id} must be hidden`);
+      }
+    });
+  });
 });

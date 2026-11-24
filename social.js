@@ -37,9 +37,28 @@
         setTimeout(() => URL.revokeObjectURL(link.href), 1500);
     }
 
+    const CALENDAR_STORAGE_KEY = 'jevexa_social_calendar_cache';
+
+    function loadCachedCalendar() {
+        try {
+            const raw = localStorage.getItem(CALENDAR_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function saveCachedCalendar() {
+        try {
+            localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify(state.scheduledCalendar));
+        } catch (_) {}
+    }
+
     const state = {
         currentPost: null,
-        scheduledCalendar: [
+        scheduledCalendar: loadCachedCalendar() || [
             {
                 id: 'cal_1',
                 platform: 'linkedin',
@@ -267,6 +286,9 @@
 
     function updateCharCount() {
         if (!postBodyEl || !charCountEl) return;
+        if (state.currentPost) {
+            state.currentPost.post_body = postBodyEl.value;
+        }
         const len = postBodyEl.value.length;
         const limit = state.currentPost?.platform_limit || 3000;
         charCountEl.textContent = `${len} / ${limit} characters`;
@@ -401,6 +423,7 @@
         };
 
         state.scheduledCalendar.push(entry);
+        saveCachedCalendar();
         renderCalendar();
         window.showToast?.(`Post added to Content Calendar (${platform.toUpperCase()})!`);
         if (statusEl) {

@@ -1357,6 +1357,7 @@
             fetchLeads();
         }
         window.dispatchEvent(new CustomEvent('crm:ready'));
+        document.dispatchEvent(new CustomEvent('crm:ready'));
     }
 
     // Auto-init on DOMContentLoaded or immediate

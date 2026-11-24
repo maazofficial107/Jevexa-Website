@@ -937,6 +937,7 @@
             loadSavedSequences();
         }
         window.dispatchEvent(new CustomEvent('outreach:ready'));
+        document.dispatchEvent(new CustomEvent('outreach:ready'));
     }
 
     if (document.readyState === 'loading') {

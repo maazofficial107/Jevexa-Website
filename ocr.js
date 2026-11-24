@@ -201,6 +201,16 @@ Terms: Net 30`
     };
 
     function deterministicClientOcr(text, docType, currency) {
+        const trimmed = (text || '').trim();
+        for (const [key, sampleText] of Object.entries(SAMPLE_DOCS)) {
+            if (sampleText.trim() === trimmed || (trimmed.length > 30 && sampleText.includes(trimmed.slice(0, 40)))) {
+                if (SAMPLE_PARSED[key]) {
+                    const parsedClone = JSON.parse(JSON.stringify(SAMPLE_PARSED[key]));
+                    if (currency && currency !== 'USD') parsedClone.currency = currency;
+                    return parsedClone;
+                }
+            }
+        }
         const lines = (text || '').split('\n').map(l => l.trim()).filter(Boolean);
         const vendor = lines[0] ? lines[0].replace(/^[#\*\s]+/, '') : 'Detected Vendor';
 

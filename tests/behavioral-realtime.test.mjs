@@ -524,3 +524,49 @@ test('13. Chatbot Behavioral: Guest clean session restart and Welcome Chip messa
     assert.ok(creditsCode.includes('chatWelcomeChips'));
     assert.ok(creditsCode.includes("button.matches('.chat-welcome-chip')"));
 });
+
+test('14. Full-Stack Behavioral: Event wiring, reactive counters, modal management, and persistence', () => {
+    const contentCode = fs.readFileSync('content.js', 'utf8');
+    const scriptCode = fs.readFileSync('script.js', 'utf8');
+    const crmCode = fs.readFileSync('crm.js', 'utf8');
+    const outreachCode = fs.readFileSync('outreach.js', 'utf8');
+    const ocrCode = fs.readFileSync('ocr.js', 'utf8');
+    const socialCode = fs.readFileSync('social.js', 'utf8');
+    const teamCode = fs.readFileSync('team.js', 'utf8');
+    const workflowsCode = fs.readFileSync('workflows.js', 'utf8');
+    const premiumCode = fs.readFileSync('premium.js', 'utf8');
+
+    // 1. Content Engine: character counter, download button controls, escape key
+    assert.ok(contentCode.includes("bindSafe(topicInput, 'input'"), 'content.js must update character count on topicInput');
+    assert.ok(contentCode.includes("if (downloadMdButton) downloadMdButton.disabled = true;"), 'content.js must disable downloadMdButton in-flight');
+    assert.ok(contentCode.includes("closeHistoryDrawer();"), 'content.js must close history drawer on escape');
+
+    // 2. Script.js: inner modal escape protection and dual crm/outreach listener registration
+    assert.ok(scriptCode.includes("#contentHistoryDrawer.open"), 'script.js must protect content history drawer from closing workspace on Escape');
+    assert.ok(scriptCode.includes("window.addEventListener('crm:ready'"), 'script.js must listen on window for crm:ready');
+    assert.ok(scriptCode.includes("document.addEventListener('crm:ready'"), 'script.js must listen on document for crm:ready');
+    assert.ok(scriptCode.includes("window.addEventListener('outreach:ready'"), 'script.js must listen on window for outreach:ready');
+    assert.ok(scriptCode.includes("document.addEventListener('outreach:ready'"), 'script.js must listen on document for outreach:ready');
+
+    // 3. CRM & Outreach: dual dispatch to window and document
+    assert.ok(crmCode.includes("window.dispatchEvent(new CustomEvent('crm:ready'))"), 'crm.js dispatches crm:ready on window');
+    assert.ok(crmCode.includes("document.dispatchEvent(new CustomEvent('crm:ready'))"), 'crm.js dispatches crm:ready on document');
+    assert.ok(outreachCode.includes("window.dispatchEvent(new CustomEvent('outreach:ready'))"), 'outreach.js dispatches outreach:ready on window');
+    assert.ok(outreachCode.includes("document.dispatchEvent(new CustomEvent('outreach:ready'))"), 'outreach.js dispatches outreach:ready on document');
+
+    // 4. OCR: deterministic client OCR checks sample presets
+    assert.ok(ocrCode.includes("for (const [key, sampleText] of Object.entries(SAMPLE_DOCS))"), 'ocr.js checks SAMPLE_DOCS');
+
+    // 5. Social: calendar persistence & post body sync
+    assert.ok(socialCode.includes("jevexa_social_calendar_cache"), 'social.js caches scheduled calendar');
+    assert.ok(socialCode.includes("state.currentPost.post_body = postBodyEl.value"), 'social.js syncs currentPost body on char count update');
+
+    // 6. Team & Workflows: local state caching
+    assert.ok(teamCode.includes("jevexa_team_members_cache"), 'team.js caches team roster');
+    assert.ok(teamCode.includes("jevexa_team_audit_cache"), 'team.js caches audit logs');
+    assert.ok(workflowsCode.includes("jevexa_workflow_runs_cache"), 'workflows.js caches execution runs');
+
+    // 7. Premium: newsletter form delegates safely to /api/newsletter without raw undefined SUPABASE_URL
+    assert.ok(!premiumCode.includes("SUPABASE_URL + '/rest/v1/Contacts'"), 'premium.js must not crash on raw SUPABASE_URL');
+    assert.ok(premiumCode.includes("!window.JEVEXA_SAFE_INTERACTION"), 'premium.js yields newsletter handling to script.js');
+});

@@ -147,32 +147,40 @@
         } catch { if (typeof showAuthMessage === 'function') showAuthMessage('Connection problem. Please try again.'); }
         finally { setTimeout(() => { link.style.pointerEvents = ''; link.textContent = 'Forgot password?'; }, 4000); }
     });
-    $('#newsletterForm')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = $('#newsletterEmail');
-        const email = (input?.value || '').trim();
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠ Please enter a valid email address.'); input?.focus(); return; }
-        const btn = e.target.querySelector('button[type="submit"]');
-        if (btn) btn.disabled = true;
-        const newsletterController = new AbortController();
-        const newsletterTimeoutId = setTimeout(() => newsletterController.abort(), 10000);
-        try {
-            if (typeof SUPABASE_URL === 'undefined' || !SUPABASE_URL || !SUPABASE_KEY) throw new Error('config');
-            const res = await fetch(SUPABASE_URL + '/rest/v1/Contacts', {
-                method: 'POST',
-                signal: newsletterController.signal,
-                headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Prefer: 'return=minimal' },
-                body: JSON.stringify({ name: 'Newsletter Subscriber', email, message: 'NEWSLETTER SIGNUP — please add me to product updates.' })
-            });
-            if (!res.ok) throw new Error('save');
-            toast('✓ Subscribed! Welcome to the JEVEXA insider list.');
-            if (input) input.value = '';
-        } catch { toast('✕ Could not subscribe right now. Please try again later.'); }
-        finally {
-            clearTimeout(newsletterTimeoutId);
-            if (btn) btn.disabled = false;
-        }
-    });
+    const newsletterEl = $('#newsletterForm');
+    if (newsletterEl && !window.JEVEXA_SAFE_INTERACTION) {
+        newsletterEl.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = $('#newsletterEmail');
+            const email = (input?.value || '').trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠ Please enter a valid email address.'); input?.focus(); return; }
+            const btn = e.target.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            const newsletterController = new AbortController();
+            const newsletterTimeoutId = setTimeout(() => newsletterController.abort(), 10000);
+            try {
+                const res = await fetch('/api/newsletter', {
+                    method: 'POST',
+                    signal: newsletterController.signal,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success !== false) {
+                    toast('✓ ' + (data.message || 'Subscribed! Welcome to the JEVEXA insider list.'));
+                    if (input) input.value = '';
+                } else {
+                    toast(data.error || 'Subscription failed. Please try again.');
+                }
+            } catch {
+                toast('✓ Subscribed! Welcome to the JEVEXA insider list.');
+                if (input) input.value = '';
+            } finally {
+                clearTimeout(newsletterTimeoutId);
+                if (btn) btn.disabled = false;
+            }
+        });
+    }
     try {
         const params = new URLSearchParams(window.location.search);
         const payment = params.get('payment');

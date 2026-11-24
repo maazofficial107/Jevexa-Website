@@ -4477,6 +4477,7 @@ const JEVEXA_PLANS = {
             if (window.JEVEXA_CRM?.fetchLeads) {
                 window.JEVEXA_CRM.fetchLeads();
             } else {
+                window.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
                 document.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
             }
         }
@@ -4519,6 +4520,7 @@ const JEVEXA_PLANS = {
             if (window.JEVEXA_OUTREACH?.init) {
                 initOutreach();
             } else {
+                window.addEventListener('outreach:ready', initOutreach, { once: true });
                 document.addEventListener('outreach:ready', initOutreach, { once: true });
             }
             if (lead) {
@@ -5075,7 +5077,7 @@ const JEVEXA_PLANS = {
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' || event.key === 'Esc') {
             const hasActiveInnerModal = document.querySelector(
-                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, .crm-lead-drawer.open, .upgrade-modal.open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #supportModal:not([hidden])'
+                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, #contentHistoryDrawer.open, #contentHistoryDrawer:not([hidden]), .crm-lead-drawer.open, .upgrade-modal.open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #supportModal:not([hidden])'
             );
             const activeModalOrDrawer = hasActiveInnerModal;
             if (activeModalOrDrawer) {

@@ -316,6 +316,7 @@
         generateButton.disabled = true;
         copyButton.disabled = true;
         downloadButton.disabled = true;
+        if (downloadMdButton) downloadMdButton.disabled = true;
         showContentProcessing();
         setStatus('Generating content…', 'info');
         rememberPendingRequest(session, requestId);
@@ -372,6 +373,7 @@
                     forgetPendingRequest(session, requestId);
                     copyButton.disabled = false;
                     downloadButton.disabled = false;
+                    if (downloadMdButton) downloadMdButton.disabled = false;
                     setStatus('Content generated successfully! (Credits will reconcile automatically).', 'success');
                     if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {
                         try {
@@ -581,6 +583,12 @@
         });
     }
 
+    // Reactive Topic Character Counter
+    bindSafe(topicInput, 'input', () => {
+        const charCount = document.getElementById('contentCharCount');
+        if (charCount) charCount.textContent = `${topicInput.value.length} / 1000`;
+    });
+
     // Content History Management
     const HISTORY_STORAGE_KEY = 'jevexa_content_history';
 
@@ -678,6 +686,8 @@
                     if (item.type) typeInput.value = item.type;
                     if (item.tone) toneInput.value = item.tone;
                     if (item.length) lengthInput.value = item.length;
+                    const charCount = document.getElementById('contentCharCount');
+                    if (charCount) charCount.textContent = `${topicInput.value.length} / 1000`;
                     output.textContent = item.content || '';
                     copyButton.disabled = false;
                     downloadButton.disabled = false;
@@ -715,6 +725,11 @@
     if (historyCloseBtn) bindSafe(historyCloseBtn, 'click', closeHistoryDrawer);
     if (historyBackdrop) bindSafe(historyBackdrop, 'click', closeHistoryDrawer);
     if (historyClearBtn) bindSafe(historyClearBtn, 'click', clearContentHistory);
+    bindSafe(document, 'keydown', (e) => {
+        if ((e.key === 'Escape' || e.key === 'Esc') && historyDrawer && (historyDrawer.classList.contains('open') || !historyDrawer.hidden)) {
+            closeHistoryDrawer();
+        }
+    });
     updateHistoryUI();
 
         window.JEVEXA_RECONCILE_CONTENT = async () => {

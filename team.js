@@ -77,9 +77,41 @@
         }
     ];
 
+    const MEMBERS_STORAGE_KEY = 'jevexa_team_members_cache';
+    const AUDIT_STORAGE_KEY = 'jevexa_team_audit_cache';
+
+    function loadCachedTeamMembers() {
+        try {
+            const raw = localStorage.getItem(MEMBERS_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function loadCachedAuditLogs() {
+        try {
+            const raw = localStorage.getItem(AUDIT_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function saveCachedTeam() {
+        try {
+            localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(state.members));
+            localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(state.auditLogs));
+        } catch (_) {}
+    }
+
     const state = {
-        members: [...DEFAULT_MEMBERS],
-        auditLogs: [...DEFAULT_AUDIT_LOGS],
+        members: loadCachedTeamMembers() || [...DEFAULT_MEMBERS],
+        auditLogs: loadCachedAuditLogs() || [...DEFAULT_AUDIT_LOGS],
         maxSeats: 5,
         userTier: 'free',
         isLoading: false
@@ -271,6 +303,7 @@
                 window.showToast?.(`Removed member ${targetEmail}.`);
             });
         });
+        saveCachedTeam();
     }
 
     function renderAuditLogs() {
@@ -288,6 +321,7 @@
             `;
             auditTableBody.appendChild(tr);
         });
+        saveCachedTeam();
     }
 
     function openInviteModal() {

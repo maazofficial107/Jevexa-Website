@@ -55,10 +55,29 @@
         }
     };
 
+    const WORKFLOW_RUNS_STORAGE_KEY = 'jevexa_workflow_runs_cache';
+
+    function loadCachedWorkflowRuns() {
+        try {
+            const raw = localStorage.getItem(WORKFLOW_RUNS_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function saveCachedWorkflowRuns() {
+        try {
+            localStorage.setItem(WORKFLOW_RUNS_STORAGE_KEY, JSON.stringify(state.runs));
+        } catch (_) {}
+    }
+
     const state = {
         currentWorkflow: null,
         steps: [],
-        runs: [
+        runs: loadCachedWorkflowRuns() || [
             {
                 id: 'run_init_1',
                 name: 'Inbound Lead Conversion Pipeline',
@@ -450,6 +469,7 @@
             `;
             historyTableBody.appendChild(tr);
         });
+        saveCachedWorkflowRuns();
     }
 
     function escapeHtml(str) {

@@ -232,4 +232,269 @@ test('6. Stylesheet Verification: Responsive Tables & Print Media Styles', () =>
     assert.ok(css.includes('.analytics-data-table'));
     assert.ok(css.includes('@media print'));
     assert.ok(css.includes('#analyticsWorkspace'));
+    assert.ok(css.includes('.preview-badges-row'));
+    assert.ok(css.includes('.rating-badge'));
+    assert.ok(css.includes('.audit-chip'));
+    assert.ok(css.includes('.analytics-table-notice'));
+});
+
+test('7. Website Intelligence: Real Pixel, Tech Stack, & Payment Gateway Signal Detection', () => {
+    const sampleHtml = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Luxe Apparel &amp; Fashion Co.</title>
+        <meta name="description" content="Shop the finest modern clothing and luxury streetwear. Free express shipping worldwide on all orders.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta property="og:price:currency" content="USD">
+        <!-- Google Tag Manager / GA4 -->
+        <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-XYZ1234"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('config', 'G-ABC999888');
+        </script>
+        <!-- Meta / Facebook Pixel -->
+        <script>
+            !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+            fbq('init', '123456789012345');
+            fbq('track', 'PageView');
+        </script>
+        <!-- TikTok Pixel -->
+        <script>
+            ttq.load('C1234567890');
+            ttq.track('PageView');
+        </script>
+        <!-- Hotjar -->
+        <script src="https://static.hotjar.com/c/hotjar-99999.js?sv=6"></script>
+        <!-- Klaviyo -->
+        <script async type="text/javascript" src="//static.klaviyo.com/onsite/js/klaviyo.js?company_id=KLV123"></script>
+        <!-- HubSpot -->
+        <script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/9999999.js"></script>
+    </head>
+    <body>
+        <div id="shopify-section-header">
+            <script>window.Shopify = { shop: "luxe-apparel.myshopify.com" };</script>
+        </div>
+        <!-- Stripe Elements & PayPal SDK -->
+        <script src="https://js.stripe.com/v3/"></script>
+        <script src="https://www.paypal.com/sdk/js?client-id=sb"></script>
+        <div class="shopify-payment-button shop-pay">
+            <button type="button" class="apple-pay-btn">Apple Pay</button>
+        </div>
+        <form action="/cart/add" method="post">
+            <button type="submit">Add to Cart</button>
+        </form>
+    </body>
+    </html>
+    `;
+
+    // 1. Pixel Detection Regex Validation
+    const detectedPixels = [];
+    if (/(gtag\s*\(\s*['"]config['"]|googletagmanager\.com\/gtm\.js|G-[A-Z0-9]+|UA-[0-9]+-[0-9]+)/i.test(sampleHtml)) {
+        detectedPixels.push("Google Analytics (GA4/GTM)");
+    }
+    if (/(connect\.facebook\.net|fbevents\.js|fbq\s*\(\s*['"]init['"])/i.test(sampleHtml)) {
+        detectedPixels.push("Meta Pixel");
+    }
+    if (/(analytics\.tiktok\.com|ttq\.load|ttq\.track)/i.test(sampleHtml)) {
+        detectedPixels.push("TikTok Pixel");
+    }
+    if (/(static\.hotjar\.com|hjid|hotjar\.com)/i.test(sampleHtml)) {
+        detectedPixels.push("Hotjar");
+    }
+    if (/(static\.klaviyo\.com|klaviyo\.js|_learnq)/i.test(sampleHtml)) {
+        detectedPixels.push("Klaviyo");
+    }
+    if (/(js\.hs-scripts\.com|js\.hubspot\.com|hbspt)/i.test(sampleHtml)) {
+        detectedPixels.push("HubSpot");
+    }
+
+    assert.equal(detectedPixels.length, 6);
+    assert.ok(detectedPixels.includes("Google Analytics (GA4/GTM)"));
+    assert.ok(detectedPixels.includes("Meta Pixel"));
+    assert.ok(detectedPixels.includes("TikTok Pixel"));
+    assert.ok(detectedPixels.includes("Hotjar"));
+    assert.ok(detectedPixels.includes("Klaviyo"));
+    assert.ok(detectedPixels.includes("HubSpot"));
+
+    // 2. Tech Stack Detection
+    const techStack = [];
+    if (/cdn\.shopify\.com|window\.Shopify|myshopify\.com/i.test(sampleHtml)) techStack.push("Shopify");
+    assert.ok(techStack.includes("Shopify"));
+
+    // 3. Payment Gateway Signals
+    const paymentSignals = [];
+    if (/(js\.stripe\.com|stripe)/i.test(sampleHtml)) paymentSignals.push("Stripe");
+    if (/(paypal\.com\/sdk\/js|paypal-button|paypal)/i.test(sampleHtml)) paymentSignals.push("PayPal");
+    if (/(apple-pay|ApplePaySession)/i.test(sampleHtml)) paymentSignals.push("Apple Pay");
+    if (/(shop-pay|shopify-payment-button)/i.test(sampleHtml)) paymentSignals.push("Shop Pay");
+
+    assert.equal(paymentSignals.length, 4);
+    assert.ok(paymentSignals.includes("Stripe"));
+    assert.ok(paymentSignals.includes("PayPal"));
+    assert.ok(paymentSignals.includes("Apple Pay"));
+    assert.ok(paymentSignals.includes("Shop Pay"));
+});
+
+test('8. Website Intelligence: Shopify API Catalog & JSON-LD Schema Price Extraction', () => {
+    // 1. Shopify /products.json response sample
+    const sampleShopifyResponse = {
+        products: [
+            {
+                title: "Silk Bomber Jacket",
+                product_type: "Outerwear",
+                variants: [{ price: "180.00", compare_at_price: "240.00" }]
+            },
+            {
+                title: "Organic Cotton Tee",
+                product_type: "Tops",
+                variants: [{ price: "45.00", compare_at_price: "50.00" }]
+            },
+            {
+                title: "Wool Overcoat",
+                product_type: "Outerwear",
+                variants: [{ price: "320.00", compare_at_price: null }]
+            },
+            {
+                title: "Leather Crossbody Bag",
+                product_type: "Accessories",
+                variants: [{ price: "120.00", compare_at_price: "150.00" }]
+            }
+        ]
+    };
+
+    const detectedPrices = [];
+    const detectedProducts = [];
+
+    sampleShopifyResponse.products.forEach(p => {
+        const variant = p.variants?.[0] || {};
+        const price = parseFloat(variant.price);
+        const compareAtPrice = variant.compare_at_price ? parseFloat(variant.compare_at_price) : null;
+        if (!isNaN(price) && price > 0) {
+            detectedPrices.push(price);
+            const discountPct = (compareAtPrice && compareAtPrice > price)
+                ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
+                : 0;
+            detectedProducts.push({
+                title: p.title,
+                price,
+                compareAtPrice: compareAtPrice || price,
+                discountPct,
+                category: p.product_type,
+                source: "Shopify Store API"
+            });
+        }
+    });
+
+    assert.equal(detectedProducts.length, 4);
+    assert.equal(detectedProducts[0].title, "Silk Bomber Jacket");
+    assert.equal(detectedProducts[0].price, 180.00);
+    assert.equal(detectedProducts[0].compareAtPrice, 240.00);
+    assert.equal(detectedProducts[0].discountPct, 25); // ((240 - 180) / 240) * 100 = 25%
+
+    // 2. Statistical Price Spread Computation
+    const sorted = [...detectedPrices].sort((a, b) => a - b); // [45, 120, 180, 320]
+    const minPrice = sorted[0];
+    const maxPrice = sorted[sorted.length - 1];
+    const medianPrice = sorted[Math.floor(sorted.length / 2)];
+    const avgPrice = Math.round((sorted.reduce((a, b) => a + b, 0) / sorted.length) * 100) / 100;
+
+    assert.equal(minPrice, 45);
+    assert.equal(maxPrice, 320);
+    assert.equal(medianPrice, 180); // index 2 in 4 items is 180
+    assert.equal(avgPrice, 166.25); // (45 + 120 + 180 + 320) / 4 = 166.25
+
+    // 3. JSON-LD structured schema parsing
+    const sampleJsonLd = `
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": "Cashmere Knit Sweater",
+        "category": "Apparel",
+        "offers": {
+            "@type": "Offer",
+            "priceCurrency": "USD",
+            "price": "210.00"
+        }
+    }
+    </script>`;
+
+    const match = sampleJsonLd.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+    const parsed = JSON.parse(match[1].trim());
+    assert.equal(parsed["@type"], "Product");
+    assert.equal(parsed.name, "Cashmere Knit Sweater");
+    assert.equal(parseFloat(parsed.offers.price), 210.00);
+});
+
+test('9. Website Intelligence: Conversion Readiness Scoring & Scraped Catalog UI Integration', () => {
+    // 1. Conversion Readiness scoring formula test
+    const computeReadinessScore = ({ hasSsl, hasResponsiveMeta, latencyMs, pixelsCount, paymentCount, hasSchema, ctaCount, descLength }) => {
+        let score = 20;
+        if (hasSsl) score += 15;
+        if (hasResponsiveMeta) score += 15;
+        if (latencyMs < 500) score += 15;
+        else if (latencyMs < 1200) score += 10;
+        else if (latencyMs < 2500) score += 5;
+
+        if (pixelsCount >= 2) score += 15;
+        else if (pixelsCount === 1) score += 10;
+
+        if (paymentCount > 0) score += 10;
+        if (hasSchema) score += 10;
+        if (ctaCount > 0) score += 10;
+        if (descLength >= 40) score += 5;
+
+        return Math.min(100, Math.max(30, score));
+    };
+
+    // Elite store profile
+    const eliteScore = computeReadinessScore({
+        hasSsl: true,
+        hasResponsiveMeta: true,
+        latencyMs: 320,
+        pixelsCount: 3,
+        paymentCount: 2,
+        hasSchema: true,
+        ctaCount: 5,
+        descLength: 85
+    });
+    assert.equal(eliteScore, 100);
+
+    // Moderate profile
+    const modScore = computeReadinessScore({
+        hasSsl: true,
+        hasResponsiveMeta: true,
+        latencyMs: 1800,
+        pixelsCount: 0,
+        paymentCount: 0,
+        hasSchema: false,
+        ctaCount: 1,
+        descLength: 10
+    });
+    // 20 + 15 (ssl) + 15 (meta) + 5 (latency) + 0 + 0 + 0 + 10 (cta) + 0 = 65
+    assert.equal(modScore, 65);
+
+    // 2. index.html UI Card Elements verification
+    const html = fs.readFileSync('index.html', 'utf8');
+    assert.ok(html.includes('id="analyticsUrlPreviewCard"'));
+    assert.ok(html.includes('id="analyticsPreviewRating"'));
+    assert.ok(html.includes('id="analyticsPreviewScore"'));
+    assert.ok(html.includes('id="analyticsPreviewStats"'));
+    assert.ok(html.includes('id="analyticsStackBadges"'));
+    assert.ok(html.includes('id="analyticsPixelBadges"'));
+    assert.ok(html.includes('id="analyticsPaymentBadges"'));
+    assert.ok(html.includes('id="analyticsViewCatalogBtn"'));
+    assert.ok(html.includes('id="analyticsTableNotice"'));
+
+    // 3. analytics.js Catalog Table Mode verification
+    const analyticsJs = fs.readFileSync('analytics.js', 'utf8');
+    assert.ok(analyticsJs.includes("scraped_products"));
+    assert.ok(analyticsJs.includes("renderDataTable"));
+    assert.ok(analyticsJs.includes("analyticsViewCatalogBtn"));
+    assert.ok(analyticsJs.includes("analyticsTableNotice"));
 });

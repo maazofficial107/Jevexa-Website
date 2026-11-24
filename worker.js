@@ -5440,7 +5440,7 @@ async function handleAnalyticsFetchUrl(request, env) {
   try {
     const res = await fetch(targetUrl.href, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 JevexaBot/2.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 JevexaBot/2.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       },
       signal: controller.signal,
@@ -5456,6 +5456,7 @@ async function handleAnalyticsFetchUrl(request, env) {
     }
 
     const html = await res.text();
+    const htmlSizeKb = Math.round((html.length || 0) / 1024);
 
     // Extract Title & Meta Description
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -5469,39 +5470,128 @@ async function handleAnalyticsFetchUrl(request, env) {
     const ogPriceMatch = html.match(/<meta[^>]*property=["']og:price:amount["'][^>]*content=["']([^"']+)["']/i);
     const ogCurrencyMatch = html.match(/<meta[^>]*property=["']og:price:currency["'][^>]*content=["']([^"']+)["']/i);
 
-    // Tech Stack Detection
+    // 1. Tech & Commerce Stack Detection
     const techStack = [];
     if (/cdn\.shopify\.com|window\.Shopify|myshopify\.com/i.test(html)) techStack.push("Shopify");
     if (/woocommerce|wc-block|wp-content\/plugins\/woocommerce/i.test(html)) techStack.push("WooCommerce");
     if (/wp-content|wp-includes/i.test(html) && !techStack.includes("WooCommerce")) techStack.push("WordPress");
-    if (/js\.stripe\.com|stripe/i.test(html)) techStack.push("Stripe");
-    if (/cdn11\.bigcommerce\.com|bigcommerce/i.test(html)) techStack.push("BigCommerce");
     if (/mage\/|magento/i.test(html)) techStack.push("Magento");
+    if (/cdn11\.bigcommerce\.com|bigcommerce/i.test(html)) techStack.push("BigCommerce");
     if (/webflow\.com|wf-/i.test(html)) techStack.push("Webflow");
+    if (/wix\.com|wixstatic\.com/i.test(html)) techStack.push("Wix");
+    if (/squarespace\.com/i.test(html)) techStack.push("Squarespace");
     if (/__NEXT_DATA__|\/_next\//i.test(html)) techStack.push("Next.js");
     if (/react|data-reactroot/i.test(html) && !techStack.includes("Next.js")) techStack.push("React");
+    if (/cloudflare|cf-ray|cf-cache/i.test(html) || res.headers.get("server")?.toLowerCase().includes("cloudflare")) techStack.push("Cloudflare");
     if (!techStack.length) techStack.push("Custom Web Stack");
 
-    // Product Pricing Signals & Structured JSON-LD
+    // 2. Marketing & Ad Pixels Detection
+    const detectedPixels = [];
+    if (/(gtag\s*\(\s*['"]config['"]|googletagmanager\.com\/gtm\.js|G-[A-Z0-9]+|UA-[0-9]+-[0-9]+)/i.test(html)) {
+      detectedPixels.push("Google Analytics (GA4/GTM)");
+    }
+    if (/(connect\.facebook\.net|fbevents\.js|fbq\s*\(\s*['"]init['"])/i.test(html)) {
+      detectedPixels.push("Meta Pixel");
+    }
+    if (/(analytics\.tiktok\.com|ttq\.load|ttq\.track)/i.test(html)) {
+      detectedPixels.push("TikTok Pixel");
+    }
+    if (/(static\.hotjar\.com|hjid|hotjar\.com)/i.test(html)) {
+      detectedPixels.push("Hotjar");
+    }
+    if (/(static\.klaviyo\.com|klaviyo\.js|_learnq)/i.test(html)) {
+      detectedPixels.push("Klaviyo");
+    }
+    if (/(js\.hs-scripts\.com|js\.hubspot\.com|hbspt)/i.test(html)) {
+      detectedPixels.push("HubSpot");
+    }
+
+    // 3. Payment & Trust Signals
+    const paymentSignals = [];
+    if (/(js\.stripe\.com|stripe)/i.test(html)) paymentSignals.push("Stripe");
+    if (/(paypal\.com\/sdk\/js|paypal-button|paypal)/i.test(html)) paymentSignals.push("PayPal");
+    if (/(apple-pay|ApplePaySession)/i.test(html)) paymentSignals.push("Apple Pay");
+    if (/(shop-pay|shopify-payment-button)/i.test(html)) paymentSignals.push("Shop Pay");
+
+    const hasSsl = targetUrl.protocol === "https:";
+    const hasStructuredData = /(schema\.org|application\/ld\+json)/i.test(html);
+    const hasResponsiveMeta = /name=["']viewport["']/i.test(html);
+
+    const trustSignals = [];
+    if (hasSsl) trustSignals.push("SSL/HTTPS");
+    if (hasStructuredData) trustSignals.push("Schema.org Structured Data");
+    if (hasResponsiveMeta) trustSignals.push("Mobile Responsive");
+
+    // 4. Live Product & Pricing Extraction
     const detectedPrices = [];
     const detectedProducts = [];
 
-    // Parse JSON-LD
+    // Check Shopify /products.json?limit=50 discovery
+    const isShopify = techStack.includes("Shopify") || html.includes("cdn.shopify.com");
+    if (isShopify) {
+      try {
+        const shopifyProductsUrl = new URL("/products.json?limit=50", targetUrl.origin).href;
+        const shopifyController = new AbortController();
+        const shopifyTimeout = setTimeout(() => shopifyController.abort(), 3500);
+        const shopifyRes = await fetch(shopifyProductsUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) JevexaBot/2.0",
+            "Accept": "application/json"
+          },
+          signal: shopifyController.signal
+        });
+        clearTimeout(shopifyTimeout);
+        if (shopifyRes.ok) {
+          const shopifyData = await shopifyRes.json();
+          if (Array.isArray(shopifyData?.products)) {
+            shopifyData.products.forEach(p => {
+              const variant = p.variants?.[0] || {};
+              const price = parseFloat(variant.price);
+              const compareAtPrice = variant.compare_at_price ? parseFloat(variant.compare_at_price) : null;
+              if (!isNaN(price) && price > 0) {
+                detectedPrices.push(price);
+                const discountPct = (compareAtPrice && compareAtPrice > price) ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100) : 0;
+                detectedProducts.push({
+                  title: p.title || "Product Item",
+                  price,
+                  compareAtPrice: compareAtPrice || price,
+                  discountPct,
+                  category: p.product_type || "Catalog Item",
+                  source: "Shopify Store API"
+                });
+              }
+            });
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Parse JSON-LD structured data if needed
     const jsonLdMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
     for (const match of jsonLdMatches) {
       try {
         const rawJson = match.replace(/<\/?script[^>]*>/gi, "").trim();
         const data = JSON.parse(rawJson);
-        const items = Array.isArray(data) ? data : [data];
+        const items = Array.isArray(data) ? data : (data["@graph"] ? data["@graph"] : [data]);
         for (const item of items) {
           if (item?.["@type"] === "Product" || item?.["@type"] === "IndividualProduct") {
             const name = item.name || "Product";
-            const price = item.offers?.price || item.offers?.[0]?.price || item.price;
+            const offers = item.offers || {};
+            const price = offers.price || (Array.isArray(offers) ? offers[0]?.price : null) || item.price;
             if (price) {
               const numPrice = parseFloat(String(price).replace(/[^0-9.]/g, ""));
               if (!isNaN(numPrice) && numPrice > 0) {
-                detectedPrices.push(numPrice);
-                detectedProducts.push({ name, price: numPrice });
+                if (!detectedPrices.includes(numPrice)) detectedPrices.push(numPrice);
+                if (!detectedProducts.some(p => p.title === name)) {
+                  detectedProducts.push({
+                    title: name,
+                    price: numPrice,
+                    compareAtPrice: numPrice,
+                    discountPct: 0,
+                    category: item.category || "Structured Schema",
+                    source: "JSON-LD Schema"
+                  });
+                }
               }
             }
           }
@@ -5509,39 +5599,57 @@ async function handleAnalyticsFetchUrl(request, env) {
       } catch (_) {}
     }
 
-    // Regex Price Detection if needed
+    // Regex Price Detection as supplementary catalog signals
     const priceRegex = /(?:\$|£|€|PKR\s*|Rs\.?\s*)([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/gi;
     let pMatch;
-    while ((pMatch = priceRegex.exec(html)) !== null && detectedPrices.length < 30) {
+    while ((pMatch = priceRegex.exec(html)) !== null && detectedPrices.length < 50) {
       const num = parseFloat(pMatch[1].replace(/,/g, ""));
       if (!isNaN(num) && num >= 1 && num <= 50000 && !detectedPrices.includes(num)) {
         detectedPrices.push(num);
       }
     }
 
-    // CTAs & Forms
-    const ctaRegex = /\b(add to cart|buy now|checkout|order now|subscribe|get started|shop now|purchase)\b/gi;
+    // 5. CTAs, Forms & Conversion Elements
+    const ctaRegex = /\b(add to cart|buy now|checkout|order now|subscribe|get started|shop now|purchase|claim offer|join now)\b/gi;
     const ctaMatches = html.match(ctaRegex) || [];
     const formsCount = (html.match(/<form/gi) || []).length;
-    const hasSsl = targetUrl.protocol === "https:";
-    const hasResponsiveMeta = /name=["']viewport["']/i.test(html);
 
-    // Estimated AOV
-    let estimatedAov = 65;
+    // Pricing Analysis
+    let minPrice = 0, maxPrice = 0, medianPrice = 0, avgPrice = 0, avgDiscountPct = 0;
     if (detectedPrices.length > 0) {
       const sorted = [...detectedPrices].sort((a, b) => a - b);
-      const median = sorted[Math.floor(sorted.length / 2)];
-      estimatedAov = Math.round(median);
+      minPrice = sorted[0];
+      maxPrice = sorted[sorted.length - 1];
+      medianPrice = sorted[Math.floor(sorted.length / 2)];
+      avgPrice = Math.round((sorted.reduce((a, b) => a + b, 0) / sorted.length) * 100) / 100;
+    }
+    if (detectedProducts.length > 0) {
+      const discounts = detectedProducts.map(p => p.discountPct || 0).filter(d => d > 0);
+      if (discounts.length > 0) {
+        avgDiscountPct = Math.round(discounts.reduce((a, b) => a + b, 0) / discounts.length);
+      }
     }
 
-    // Readiness Score
-    let readinessScore = 50;
-    if (hasSsl) readinessScore += 10;
-    if (hasResponsiveMeta) readinessScore += 10;
-    if (techStack.some(t => ["Shopify", "WooCommerce", "Stripe", "BigCommerce"].includes(t))) readinessScore += 15;
+    let estimatedAov = Math.round(medianPrice || avgPrice || 65);
+
+    // 6. Conversion Readiness Score (0-100) Breakdown
+    let readinessScore = 20;
+    if (hasSsl) readinessScore += 15;
+    if (hasResponsiveMeta) readinessScore += 15;
+    if (latencyMs < 500) readinessScore += 15;
+    else if (latencyMs < 1200) readinessScore += 10;
+    else if (latencyMs < 2500) readinessScore += 5;
+
+    if (detectedPixels.length >= 2) readinessScore += 15;
+    else if (detectedPixels.length === 1) readinessScore += 10;
+
+    if (paymentSignals.length > 0) readinessScore += 10;
+    if (hasStructuredData) readinessScore += 10;
     if (ctaMatches.length > 0) readinessScore += 10;
-    if (latencyMs < 1000) readinessScore += 5;
-    readinessScore = Math.min(100, readinessScore);
+    if (description.length >= 40) readinessScore += 5;
+    readinessScore = Math.min(100, Math.max(30, readinessScore));
+
+    const readinessRating = readinessScore >= 85 ? "Elite" : (readinessScore >= 70 ? "Strong" : (readinessScore >= 50 ? "Moderate" : "Needs Optimization"));
 
     return json({
       ok: true,
@@ -5551,14 +5659,27 @@ async function handleAnalyticsFetchUrl(request, env) {
         title,
         description,
         techStack,
+        pixels: detectedPixels,
+        paymentSignals,
+        trustSignals,
         latencyMs,
+        htmlSizeKb,
         estimatedAov,
+        pricing: {
+          min: minPrice,
+          max: maxPrice,
+          median: medianPrice,
+          average: avgPrice,
+          discountRatePct: avgDiscountPct,
+          count: detectedPrices.length
+        },
         pricingCount: detectedPrices.length,
-        samplePrices: detectedPrices.slice(0, 8),
-        products: detectedProducts.slice(0, 10),
+        samplePrices: detectedPrices.slice(0, 10),
+        products: detectedProducts.slice(0, 50),
         ctaCount: ctaMatches.length,
         formsCount,
         readinessScore,
+        readinessRating,
         currency: ogCurrencyMatch ? ogCurrencyMatch[1] : (html.includes("Rs") ? "PKR" : html.includes("£") ? "GBP" : html.includes("€") ? "EUR" : "USD")
       }
     });

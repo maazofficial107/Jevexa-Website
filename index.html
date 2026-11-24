@@ -1875,16 +1875,45 @@
                                 <div class="analytics-url-preview-card glass" id="analyticsUrlPreviewCard" hidden>
                                     <div class="url-preview-header">
                                         <div class="preview-title-wrap">
-                                            <span class="preview-badge" id="analyticsPreviewType">Store Detected</span>
+                                            <div class="preview-badges-row">
+                                                <span class="preview-badge" id="analyticsPreviewType">Store Audit</span>
+                                                <span class="rating-badge" id="analyticsPreviewRating">Elite</span>
+                                            </div>
                                             <h4 id="analyticsPreviewTitle">Store Name</h4>
                                             <p id="analyticsPreviewDesc" class="preview-desc"></p>
                                         </div>
                                         <div class="preview-score-badge">
-                                            <span>Readiness:</span>
+                                            <span>Conversion Readiness:</span>
                                             <strong id="analyticsPreviewScore">85/100</strong>
                                         </div>
                                     </div>
+
+                                    <!-- Audit Badges: Tech Stack, Tracking Pixels, Payment & Trust Signals -->
+                                    <div class="analytics-audit-sections">
+                                        <div class="audit-section-group">
+                                            <span class="audit-group-title"><i class="fas fa-layer-group"></i> Commerce &amp; Tech Stack:</span>
+                                            <div class="audit-badges-wrap" id="analyticsStackBadges"></div>
+                                        </div>
+                                        <div class="audit-section-group">
+                                            <span class="audit-group-title"><i class="fas fa-bullseye"></i> Marketing &amp; Ad Tracking Pixels:</span>
+                                            <div class="audit-badges-wrap" id="analyticsPixelBadges"></div>
+                                        </div>
+                                        <div class="audit-section-group">
+                                            <span class="audit-group-title"><i class="fas fa-shield-check"></i> Payment Gateways &amp; Trust Signals:</span>
+                                            <div class="audit-badges-wrap" id="analyticsPaymentBadges"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Key Real Extracted Metrics Grid -->
                                     <div class="preview-stats-grid" id="analyticsPreviewStats"></div>
+
+                                    <!-- Scraped Products Table Shortcut Action -->
+                                    <div class="preview-actions-bar">
+                                        <button type="button" class="btn btn-primary btn-sm" id="analyticsViewCatalogBtn">
+                                            <i class="fas fa-table-list"></i> View Scraped Catalog in Data Table
+                                        </button>
+                                        <span class="catalog-note" id="analyticsCatalogNote"></span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2062,6 +2091,12 @@
                                     <i class="fas fa-file-csv"></i> Export Table CSV
                                 </button>
                             </div>
+                        </div>
+
+                        <!-- Table Context Notice -->
+                        <div class="analytics-table-notice" id="analyticsTableNotice" hidden>
+                            <i class="fas fa-circle-info"></i>
+                            <span id="analyticsNoticeText">Displaying real extracted catalog products and pricing signals from target store.</span>
                         </div>
 
                         <div class="table-responsive-wrapper analytics-table-wrapper">

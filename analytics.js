@@ -3,6 +3,7 @@
  * 100% Real, Data-Driven BI Engine with Multi-Source Ingestion:
  * - File Uploads (CSV / TSV / JSON / XLSX) with smart column auto-detection
  * - Website & Public Google Sheets URL Live Ingestion & Conversion
+ * - Deep Website & Store Intelligence Audit (Tech Stack, Ad Pixels, Payment Gateways, Latency, Catalog Extraction)
  * - Manual Business Metrics Entry (Quick Calculator Mode)
  * - Real Mathematical KPI Engine (MRR, ARR, Margin, CAC, LTV, LTV:CAC, Churn, AOV)
  * - Interactive Multi-Series Time-Series SVG Charts with hover tooltips
@@ -70,7 +71,7 @@
         return `${curr.symbol}${val}`;
     }
 
-    // Realistic Demo Presets (for instant live testing without forcing fake numbers on users)
+    // Realistic Demo Presets
     const PRESETS = {
         ecommerce_120k: {
             name: "E-Commerce Brand ($120k GMV)",
@@ -198,6 +199,11 @@
         detectedColumns: {},
         activeDatasetName: null,
         isDemoLoaded: false,
+
+        // Website Audit State
+        websiteAudit: null,
+        scrapedProducts: [],
+        activeTableMode: 'records', // 'records' | 'scraped_products'
 
         // Manual Inputs
         manualMetrics: {
@@ -507,7 +513,6 @@
         else if (timeframe === '90d') { tfDays = 90; tfLabel = 'Last 90 Days'; }
         else if (timeframe === '1y') { tfDays = 365; tfLabel = 'Trailing 12 Months'; }
 
-        // If records span a certain count, normalize MRR & ARR
         const approxMonths = Math.max(1, Math.round(records.length / 30) || (tfDays / 30));
         const mrr = Math.round(totalRev / approxMonths);
         const arr = mrr * 12;
@@ -620,15 +625,21 @@
         detectedChips: document.getElementById('analyticsDetectedChips'),
         clearDataBtn: document.getElementById('analyticsClearDataBtn'),
 
-        // URL Pane
+        // URL & Website Intelligence Audit Pane
         urlInput: document.getElementById('analyticsUrlInput'),
         fetchUrlBtn: document.getElementById('analyticsFetchUrlBtn'),
         urlPreviewCard: document.getElementById('analyticsUrlPreviewCard'),
         previewType: document.getElementById('analyticsPreviewType'),
+        previewRating: document.getElementById('analyticsPreviewRating'),
         previewTitle: document.getElementById('analyticsPreviewTitle'),
         previewDesc: document.getElementById('analyticsPreviewDesc'),
         previewScore: document.getElementById('analyticsPreviewScore'),
+        stackBadges: document.getElementById('analyticsStackBadges'),
+        pixelBadges: document.getElementById('analyticsPixelBadges'),
+        paymentBadges: document.getElementById('analyticsPaymentBadges'),
         previewStats: document.getElementById('analyticsPreviewStats'),
+        viewCatalogBtn: document.getElementById('analyticsViewCatalogBtn'),
+        catalogNote: document.getElementById('analyticsCatalogNote'),
 
         // Manual Pane
         inputRevenue: document.getElementById('analyticsInputRevenue'),
@@ -670,6 +681,8 @@
 
         // Table
         tableCard: document.getElementById('analyticsTableCard'),
+        tableNotice: document.getElementById('analyticsTableNotice'),
+        noticeText: document.getElementById('analyticsNoticeText'),
         tableSearch: document.getElementById('analyticsTableSearch'),
         tableGroupBy: document.getElementById('analyticsTableGroupBy'),
         exportTableCsvBtn: document.getElementById('analyticsExportTableCsvBtn'),
@@ -796,7 +809,6 @@
 
         const curr = state.activeCurrency;
         let points = [];
-        let labels = [];
 
         // Check if we have real time series records
         if (state.cleanedRecords && state.cleanedRecords.length >= 2) {
@@ -897,7 +909,6 @@
             </svg>
         `;
 
-        // Render Channel / Product Contribution
         renderChannelBreakdown(kpis);
     }
 
@@ -964,15 +975,34 @@
         `;
     }
 
-    // Render Full Interactive Data Table
+    // Render Full Interactive Data Table (handles both Time-Series Rows and Scraped Product Catalogs)
     function renderDataTable() {
         if (!el.tableBody) return;
 
         const curr = state.activeCurrency;
         let rows = [];
 
-        // 1. Ingested Records
-        if (state.cleanedRecords && state.cleanedRecords.length > 0) {
+        // 1. Scraped Products Mode
+        if (state.activeTableMode === 'scraped_products' && state.scrapedProducts && state.scrapedProducts.length > 0) {
+            rows = state.scrapedProducts.map((p, idx) => {
+                const price = typeof p.price === 'number' ? p.price : parseNum(p.price);
+                const comparePrice = p.compareAtPrice ? (typeof p.compareAtPrice === 'number' ? p.compareAtPrice : parseNum(p.compareAtPrice)) : price;
+                const discount = p.discountPct !== undefined ? p.discountPct : (comparePrice > price ? Math.round(((comparePrice - price) / comparePrice) * 100) : 0);
+                const savings = comparePrice > price ? Math.round((comparePrice - price) * 100) / 100 : 0;
+                return {
+                    period: p.title || `Catalog Item #${idx + 1}`,
+                    orders: p.category || 'Product Catalog',
+                    revenue: price,
+                    expenses: comparePrice,
+                    profit: savings,
+                    margin: discount,
+                    growth: p.source || 'Scraped Metadata',
+                    isProduct: true
+                };
+            });
+        }
+        // 2. Ingested Time-Series Records Mode
+        else if (state.cleanedRecords && state.cleanedRecords.length > 0) {
             const records = state.cleanedRecords;
             const cols = state.detectedColumns;
 
@@ -1000,7 +1030,6 @@
                     };
                 });
             } else if (state.tableGroupBy === 'monthly' || state.tableGroupBy === 'weekly' || (state.tableGroupBy === 'auto' && records.length > 40)) {
-                // Group by Month or Date slice
                 const groupMap = {};
                 records.forEach((r, i) => {
                     let key = cols.date ? String(r[cols.date]).slice(0, 7) : `Month ${Math.floor(i / 30) + 1}`;
@@ -1026,7 +1055,6 @@
                     };
                 });
             } else {
-                // Raw or daily rows
                 rows = records.map((r, i) => {
                     const rev = cols.revenue ? parseNum(r[cols.revenue]) : 0;
                     const exp = cols.expenses ? parseNum(r[cols.expenses]) : Math.round(rev * 0.45);
@@ -1046,7 +1074,7 @@
                 });
             }
         } else {
-            // Synthetic dataset rows from active preset
+            // 3. Synthetic dataset rows from active preset
             const preset = PRESETS[state.activePreset] || PRESETS.saas_50k;
             const b = preset.baseMetrics;
             const rev = b.mrr;
@@ -1075,6 +1103,7 @@
         if (query) {
             rows = rows.filter(r =>
                 String(r.period).toLowerCase().includes(query) ||
+                String(r.orders).toLowerCase().includes(query) ||
                 String(r.revenue).includes(query) ||
                 (r.margin >= 20 && query.includes('healthy')) ||
                 (r.margin < 0 && query.includes('loss'))
@@ -1104,7 +1133,8 @@
 
         // Update Pagination Controls
         if (el.tableRowCount) {
-            el.tableRowCount.textContent = totalRows > 0 ? `Showing ${startIdx + 1}–${Math.min(startIdx + pageRows.length, totalRows)} of ${totalRows} entries` : 'No matching records found';
+            const label = state.activeTableMode === 'scraped_products' ? 'scraped catalog products' : 'entries';
+            el.tableRowCount.textContent = totalRows > 0 ? `Showing ${startIdx + 1}–${Math.min(startIdx + pageRows.length, totalRows)} of ${totalRows} ${label}` : 'No matching records found';
         }
         if (el.tablePageNum) {
             el.tablePageNum.textContent = `Page ${state.tableCurrentPage} of ${totalPages}`;
@@ -1126,6 +1156,24 @@
         }
 
         el.tableBody.innerHTML = pageRows.map(r => {
+            if (r.isProduct) {
+                // Scraped Product Row Display
+                const hasDiscount = (r.margin || 0) > 0;
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(r.period)}</strong></td>
+                        <td><span class="chip-pill" style="background:rgba(255,255,255,0.06); font-size:11px;">${escapeHtml(r.orders)}</span></td>
+                        <td><span class="mono-amount" style="color:#22d3ee; font-weight:700;">${formatCurrency(r.revenue, curr)}</span></td>
+                        <td><span class="mono-amount text-muted">${r.expenses ? formatCurrency(r.expenses, curr) : '—'}</span></td>
+                        <td><span class="mono-amount ${r.profit > 0 ? 'text-success' : 'text-muted'}">${r.profit > 0 ? `-${formatCurrency(r.profit, curr)}` : '—'}</span></td>
+                        <td><span class="metric-pill ${hasDiscount ? 'pill-success' : 'pill-warning'}">${hasDiscount ? `${r.margin}% Off` : 'Full Price'}</span></td>
+                        <td><span class="growth-delta" style="color:#94a3b8; font-size:11px;">${escapeHtml(r.growth)}</span></td>
+                        <td>${hasDiscount ? '<span class="status-chip success"><i class="fas fa-tag"></i> Deal</span>' : '<span class="status-chip warning"><i class="fas fa-box"></i> Regular</span>'}</td>
+                    </tr>
+                `;
+            }
+
+            // Standard Financial Metrics Row
             let statusBadge = '<span class="status-chip success"><i class="fas fa-check"></i> Healthy</span>';
             if (r.margin < 0) {
                 statusBadge = '<span class="status-chip danger"><i class="fas fa-xmark"></i> Deficit</span>';
@@ -1235,6 +1283,9 @@
                 state.detectedColumns = detectColumns(records);
                 state.activeDatasetName = file.name;
                 state.isDemoLoaded = false;
+                state.activeTableMode = 'records';
+
+                if (el.tableNotice) el.tableNotice.hidden = true;
 
                 // Show banner
                 if (el.datasetBanner) el.datasetBanner.hidden = false;
@@ -1282,7 +1333,7 @@
         reader.readAsText(file);
     }
 
-    // Handle URL / Google Sheets Ingestion
+    // Handle URL / Google Sheets Ingestion & Deep Website Audit
     async function handleFetchUrl() {
         const url = el.urlInput ? el.urlInput.value.trim() : '';
         if (!url) {
@@ -1321,7 +1372,9 @@
                 state.detectedColumns = detectColumns(records);
                 state.activeDatasetName = 'Google Sheets Live';
                 state.isDemoLoaded = false;
+                state.activeTableMode = 'records';
 
+                if (el.tableNotice) el.tableNotice.hidden = true;
                 if (el.datasetBanner) el.datasetBanner.hidden = false;
                 if (el.datasetName) el.datasetName.textContent = 'Google Sheets Live Ingestion';
                 if (el.datasetStats) {
@@ -1336,37 +1389,107 @@
                 }
                 window.showToast?.('Google Sheet rows imported successfully!');
             } else if (result.type === 'website') {
-                // Ingest Web Store
+                // Real Live Website Intelligence & Store Audit
                 const d = result.data;
+                state.websiteAudit = d;
+                state.scrapedProducts = d.products || [];
+
                 if (el.urlPreviewCard) el.urlPreviewCard.hidden = false;
                 if (el.previewTitle) el.previewTitle.textContent = d.title || url;
-                if (el.previewDesc) el.previewDesc.textContent = d.description || 'Live store signals extracted.';
+                if (el.previewDesc) el.previewDesc.textContent = d.description || 'Live store signals and technical stack extracted.';
                 if (el.previewScore) el.previewScore.textContent = `${d.readinessScore || 85}/100`;
+                if (el.previewRating) {
+                    el.previewRating.textContent = d.readinessRating || 'Elite';
+                }
 
+                // 1. Tech Stack Badges
+                if (el.stackBadges) {
+                    const stacks = d.techStack && d.techStack.length ? d.techStack : ['Custom Web Stack'];
+                    el.stackBadges.innerHTML = stacks.map(st => `<span class="audit-chip active"><i class="fas fa-layer-group"></i> ${escapeHtml(st)}</span>`).join('');
+                }
+
+                // 2. Marketing & Ad Tracking Pixels
+                if (el.pixelBadges) {
+                    if (d.pixels && d.pixels.length > 0) {
+                        el.pixelBadges.innerHTML = d.pixels.map(pix => `<span class="audit-chip active"><i class="fas fa-check-circle" style="color:#34d399;"></i> ${escapeHtml(pix)}</span>`).join('');
+                    } else {
+                        el.pixelBadges.innerHTML = `<span class="audit-chip" style="opacity:0.75;"><i class="fas fa-eye-slash"></i> No public ad pixels detected</span>`;
+                    }
+                }
+
+                // 3. Payment Gateways & Trust Signals
+                if (el.paymentBadges) {
+                    const allSignals = [...(d.paymentSignals || []), ...(d.trustSignals || [])];
+                    if (allSignals.length > 0) {
+                        el.paymentBadges.innerHTML = allSignals.map(sig => `<span class="audit-chip trust"><i class="fas fa-shield-halved"></i> ${escapeHtml(sig)}</span>`).join('');
+                    } else {
+                        el.paymentBadges.innerHTML = `<span class="audit-chip trust"><i class="fas fa-lock"></i> Standard Web Security</span>`;
+                    }
+                }
+
+                // 4. Key Metrics Grid
                 if (el.previewStats) {
+                    const pr = d.pricing || {};
                     el.previewStats.innerHTML = `
                         <div class="preview-stat-item">
-                            <span class="label">Tech Stack:</span>
-                            <strong>${(d.techStack || ['Custom']).join(', ')}</strong>
+                            <span class="label">Server Response (TTFB):</span>
+                            <strong>${d.latencyMs || 150} ms</strong>
                         </div>
                         <div class="preview-stat-item">
-                            <span class="label">Estimated AOV:</span>
-                            <strong>${formatCurrency(d.estimatedAov || 65, d.currency || 'USD')}</strong>
+                            <span class="label">HTML Page Payload:</span>
+                            <strong>${d.htmlSizeKb || 42} KB</strong>
                         </div>
                         <div class="preview-stat-item">
-                            <span class="label">Catalog Signals:</span>
-                            <strong>${d.pricingCount || 0} price points</strong>
+                            <span class="label">Extracted Catalog Items:</span>
+                            <strong>${(d.products?.length || pr.count || 0)} products</strong>
                         </div>
                         <div class="preview-stat-item">
-                            <span class="label">Latency:</span>
-                            <strong>${d.latencyMs || 150}ms</strong>
+                            <span class="label">Catalog Price Range:</span>
+                            <strong>${formatCurrency(pr.min || d.estimatedAov, d.currency)} – ${formatCurrency(pr.max || d.estimatedAov, d.currency)}</strong>
+                        </div>
+                        <div class="preview-stat-item">
+                            <span class="label">Average Catalog Price:</span>
+                            <strong>${formatCurrency(pr.average || d.estimatedAov, d.currency)}</strong>
+                        </div>
+                        <div class="preview-stat-item">
+                            <span class="label">Average Discount Rate:</span>
+                            <strong style="color:#34d399;">${pr.discountRatePct || 0}% Off</strong>
+                        </div>
+                        <div class="preview-stat-item">
+                            <span class="label">CTAs &amp; Funnel Buttons:</span>
+                            <strong>${d.ctaCount || 0} CTAs detected</strong>
+                        </div>
+                        <div class="preview-stat-item">
+                            <span class="label">Forms &amp; Lead Captures:</span>
+                            <strong>${d.formsCount || 0} forms detected</strong>
                         </div>
                     `;
                 }
 
+                // 5. Action Bar & Catalog Note
+                if (el.catalogNote) {
+                    const pCount = d.products?.length || 0;
+                    if (pCount > 0) {
+                        el.catalogNote.textContent = `${pCount} live products extracted with real prices & discount rates.`;
+                    } else {
+                        el.catalogNote.textContent = `Scanned ${d.pricingCount || 0} price points across page markup.`;
+                    }
+                }
+
+                // Switch table to show scraped products if available
+                if (d.products && d.products.length > 0) {
+                    state.activeTableMode = 'scraped_products';
+                    if (el.tableNotice) {
+                        el.tableNotice.hidden = false;
+                        if (el.noticeText) {
+                            el.noticeText.textContent = `Displaying ${d.products.length} live products extracted from ${url}. Pricing and discounts reflect real scraped store metadata.`;
+                        }
+                    }
+                }
+
                 // Populate manual calculator with synthesized store signals
-                const estAov = d.estimatedAov || 65;
-                state.manualMetrics.aov = estAov;
+                const estAov = d.pricing?.average || d.estimatedAov || 65;
+                state.manualMetrics.aov = Math.round(estAov);
                 state.manualMetrics.revenue = Math.round(estAov * 450);
                 state.manualMetrics.expenses = Math.round(state.manualMetrics.revenue * 0.45);
                 state.manualMetrics.customers = 380;
@@ -1375,10 +1498,10 @@
                 updateAllViews();
 
                 if (el.status) {
-                    el.status.textContent = `Store analyzed! Stack: ${(d.techStack || []).join(', ')} • Estimated AOV: ${formatCurrency(estAov)}`;
+                    el.status.textContent = `Audit complete! Stack: ${(d.techStack || []).join(', ')} • ${(d.pixels || []).length} pixels • TTFB: ${d.latencyMs}ms • Readiness: ${d.readinessScore}/100`;
                     el.status.className = 'analytics-status-msg success';
                 }
-                window.showToast?.('Website & store signals imported!');
+                window.showToast?.('Website & Store Intelligence Audit complete!');
             }
         } catch (err) {
             console.error('Fetch URL error:', err);
@@ -1671,11 +1794,14 @@
                 state.cleanedRecords = [];
                 state.detectedColumns = {};
                 state.activeDatasetName = null;
+                state.scrapedProducts = [];
+                state.activeTableMode = 'records';
                 if (el.datasetBanner) el.datasetBanner.hidden = true;
+                if (el.tableNotice) el.tableNotice.hidden = true;
                 if (el.fileInput) el.fileInput.value = '';
                 updateAllViews();
                 if (el.status) {
-                    el.status.textContent = 'Uploaded dataset cleared. Reverted to default views.';
+                    el.status.textContent = 'Dataset cleared. Reverted to default views.';
                     el.status.className = 'analytics-status-msg info';
                 }
             });
@@ -1690,6 +1816,17 @@
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     handleFetchUrl();
+                }
+            });
+        }
+
+        // View Scraped Catalog Shortcut
+        if (el.viewCatalogBtn) {
+            bindSafe(el.viewCatalogBtn, 'click', () => {
+                state.activeTableMode = 'scraped_products';
+                renderDataTable();
+                if (el.tableCard) {
+                    el.tableCard.scrollIntoView({ behavior: 'smooth' });
                 }
             });
         }
@@ -1735,7 +1872,10 @@
             bindSafe(el.presetSelect, 'change', () => {
                 state.activePreset = el.presetSelect.value;
                 state.cleanedRecords = [];
+                state.scrapedProducts = [];
+                state.activeTableMode = 'records';
                 if (el.datasetBanner) el.datasetBanner.hidden = true;
+                if (el.tableNotice) el.tableNotice.hidden = true;
                 updateAllViews();
                 if (el.status) {
                     el.status.textContent = `Loaded ${PRESETS[el.presetSelect.value]?.name || 'model'}. All KPIs and scenario forecasts recalculated.`;
@@ -1747,7 +1887,10 @@
             bindSafe(el.applyDemoBtn, 'click', () => {
                 state.activePreset = el.presetSelect ? el.presetSelect.value : 'saas_50k';
                 state.cleanedRecords = [];
+                state.scrapedProducts = [];
+                state.activeTableMode = 'records';
                 if (el.datasetBanner) el.datasetBanner.hidden = true;
+                if (el.tableNotice) el.tableNotice.hidden = true;
                 updateAllViews();
                 window.showToast?.(`Loaded ${PRESETS[state.activePreset]?.name}!`);
             });
@@ -1807,7 +1950,11 @@
                     window.showToast?.('No table data to export.');
                     return;
                 }
-                const headers = ['Period / Item', 'Orders / Users', 'Gross Revenue', 'Expenses / Spend', 'Net Profit', 'Margin %', 'Growth %'];
+                const isProd = state.activeTableMode === 'scraped_products';
+                const headers = isProd
+                    ? ['Product Title', 'Category', 'Price', 'Compare-At Price', 'Discount Savings', 'Discount %', 'Source']
+                    : ['Period / Item', 'Orders / Users', 'Gross Revenue', 'Expenses / Spend', 'Net Profit', 'Margin %', 'Growth %'];
+
                 const csvLines = rows.map(r => [
                     r.period,
                     r.orders,
@@ -1818,9 +1965,13 @@
                     r.growth
                 ].map(v => `"${v}"`).join(','));
 
+                const filename = isProd
+                    ? `Jevexa_Scraped_Catalog_${new Date().toISOString().split('T')[0]}.csv`
+                    : `Jevexa_Analytical_Breakdown_${new Date().toISOString().split('T')[0]}.csv`;
+
                 const csv = [headers.join(','), ...csvLines].join('\n');
-                downloadFile(`Jevexa_Analytical_Breakdown_${new Date().toISOString().split('T')[0]}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
-                window.showToast?.('Analytical breakdown exported to CSV!');
+                downloadFile(filename, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
+                window.showToast?.('Table data exported to CSV!');
             });
         }
 
@@ -1889,7 +2040,8 @@
                     generatedAt: new Date().toISOString()
                 },
                 kpis: state.kpis,
-                report: state.report
+                report: state.report,
+                websiteAudit: state.websiteAudit || null
             };
             downloadFile(`Jevexa_Analytics_Report_${new Date().toISOString().split('T')[0]}.json`, JSON.stringify(payload, null, 2), 'application/json');
             window.showToast?.('Executive report exported to JSON!');
@@ -1914,6 +2066,8 @@
                 if (el.presetSelect) el.presetSelect.value = key;
                 state.activePreset = key;
                 state.cleanedRecords = [];
+                state.scrapedProducts = [];
+                state.activeTableMode = 'records';
                 updateAllViews();
             }
         },

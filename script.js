@@ -4786,7 +4786,7 @@ const JEVEXA_PLANS = {
             }
         }
 
-        if (cleanPath === '/tools/chatbot' || cleanHash === '#/tools/chatbot') {
+        if (cleanPath === '/tools/chatbot' || cleanHash === '#/tools/chatbot' || cleanHash === '#chatbot' || cleanHash === '#chatTool') {
             openChatWorkspace(false);
         } else if ((cleanPath === '/' || cleanPath === '') && !cleanHash && localStorage.getItem('jevexa_last_workspace') === 'chatbot') {
             openChatWorkspace(false);

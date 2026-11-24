@@ -6,7 +6,8 @@
             target?.addEventListener(type, handler, options?.listenerOptions);
         }
     };
-    const modal = document.getElementById('supportModal');
+    function initSupportModal() {
+        const modal = document.getElementById('supportModal');
     const form = document.getElementById('supportTicketForm');
     const aiForm = document.getElementById('supportAiForm');
     const aiMessages = document.getElementById('supportAiMessages');
@@ -284,5 +285,11 @@
             }
         }
     });
+    }
 
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSupportModal);
+    } else {
+        initSupportModal();
+    }
 })();

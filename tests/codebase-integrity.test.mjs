@@ -125,3 +125,68 @@ test('Codebase Integrity: All client API endpoints are handled in worker.js', ()
     );
   }
 });
+
+
+test('Codebase Integrity: All buttons across all HTML files have an explicit type attribute', () => {
+  const htmlFiles = fs.readdirSync('.').filter(f => f.endsWith('.html'));
+  const failures = [];
+
+  for (const file of htmlFiles) {
+    const content = fs.readFileSync(file, 'utf8');
+    const buttonRegex = /<button\b([^>]*)>/g;
+    let match;
+    while ((match = buttonRegex.exec(content)) !== null) {
+      const attrs = match[1];
+      if (!/\btype=["'](button|submit|reset)["']/.test(attrs)) {
+        failures.push(`${file}: ${match[0]}`);
+      }
+    }
+  }
+
+  assert.deepEqual(failures, [], `All HTML buttons must define type="button", type="submit", or type="reset":\n${failures.join('\n')}`);
+});
+
+test('Codebase Integrity: Zero duplicate IDs in any HTML file', () => {
+  const htmlFiles = fs.readdirSync('.').filter(f => f.endsWith('.html'));
+  const duplicatesFound = [];
+
+  for (const file of htmlFiles) {
+    const content = fs.readFileSync(file, 'utf8');
+    const idRegex = /(?:^|\s)id=["']([^"']+)["']/g;
+    const ids = new Map();
+    let m;
+    while ((m = idRegex.exec(content)) !== null) {
+      const id = m[1];
+      ids.set(id, (ids.get(id) || 0) + 1);
+    }
+    const dupes = [...ids.entries()].filter(([_, count]) => count > 1);
+    if (dupes.length > 0) {
+      duplicatesFound.push({ file, dupes });
+    }
+  }
+
+  assert.deepEqual(duplicatesFound, [], `Duplicate IDs must not exist in HTML files`);
+});
+
+test('Codebase Integrity: All internal anchor links in index.html resolve to existing element IDs', () => {
+  const indexHtml = fs.readFileSync('index.html', 'utf8');
+  const anchorRegex = /href=["']#([a-zA-Z0-9_-]+)["']/g;
+  let match;
+  const missing = [];
+
+  while ((match = anchorRegex.exec(indexHtml)) !== null) {
+    const targetId = match[1];
+    const hasTarget = indexHtml.includes(`id="${targetId}"`) || indexHtml.includes(`id='${targetId}'`);
+    if (!hasTarget) {
+      missing.push(targetId);
+    }
+  }
+
+  assert.deepEqual([...new Set(missing)], [], `All internal anchor links must resolve to elements with matching IDs`);
+});
+
+test('Codebase Integrity: index.html loads /config.js for worker and production environments', () => {
+  const indexHtml = fs.readFileSync('index.html', 'utf8');
+  assert.ok(indexHtml.includes('/config.js'), 'index.html must reference /config.js');
+  assert.ok(indexHtml.includes("location.hostname.endsWith('.workers.dev')"), 'index.html must support Cloudflare Workers preview domains');
+});

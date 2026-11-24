@@ -3107,9 +3107,10 @@
 
     <!-- Luxury Premium Chatbot -->
 
+    <span id="chatTool" style="display:none;" aria-hidden="true"></span>
     <div class="chatbot" id="chatbot">
 
-        <button class="chatbot-toggle" id="chatbotToggle" aria-label="Open Jevexa AI" aria-expanded="false" aria-controls="chatbotWindow">
+        <button type="button" class="chatbot-toggle" id="chatbotToggle" aria-label="Open Jevexa AI" aria-expanded="false" aria-controls="chatbotWindow">
 
             <div class="ct-glow"></div>
 
@@ -3188,7 +3189,7 @@
                     <button type="button" class="chatbot-header-settings-btn" id="chatHeaderSettingsBtn" aria-label="Open Chat Settings" title="Settings">
                         <i class="fas fa-gear" aria-hidden="true"></i>
                     </button>
-                    <button class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
+                    <button type="button" class="chatbot-close" id="chatbotClose" aria-label="Close chat"><i class="fas fa-times"></i></button>
                 </div>
             </div>
             <div class="chat-empty-state" id="chatEmptyState">
@@ -3264,7 +3265,7 @@
                 <button type="button" id="chatAttachButton" class="chat-attach" aria-label="Attach an image, PDF, or ZIP file"><i class="fas fa-paperclip" aria-hidden="true"></i></button>
                 <textarea id="chatInput" rows="1" placeholder="Ask Jevexa AI anything..." autocomplete="off" aria-label="Message Jevexa AI"></textarea>
 
-                <button id="chatSend" class="chat-send" aria-label="Send message"><i class="fas fa-paper-plane"></i></button>
+                <button type="button" id="chatSend" class="chat-send" aria-label="Send message"><i class="fas fa-paper-plane"></i></button>
 
             </div>
 

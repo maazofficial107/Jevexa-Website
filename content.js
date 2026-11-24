@@ -6,7 +6,8 @@
             target?.addEventListener(type, handler, options?.listenerOptions);
         }
     };
-    const form = document.getElementById('contentForm');
+    function initContentEngine() {
+        const form = document.getElementById('contentForm');
     const topicInput = document.getElementById('contentTopic');
     const typeInput = document.getElementById('contentType');
     const toneInput = document.getElementById('contentTone');
@@ -521,12 +522,19 @@
         }
     });
 
-    window.JEVEXA_RECONCILE_CONTENT = async () => {
-        try {
-            const session = await getSession();
-            if (session) {
-                await reconcilePendingRequest(session);
-            }
-        } catch (_) {}
-    };
+        window.JEVEXA_RECONCILE_CONTENT = async () => {
+            try {
+                const session = await getSession();
+                if (session) {
+                    await reconcilePendingRequest(session);
+                }
+            } catch (_) {}
+        };
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initContentEngine);
+    } else {
+        initContentEngine();
+    }
 })();

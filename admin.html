@@ -596,7 +596,7 @@ tbody tr:hover{
 
         </div>
 
-        <button class="logout" id="logoutBtn">
+        <button type="button" class="logout" id="logoutBtn">
             Logout
         </button>
 
@@ -728,15 +728,16 @@ tbody tr:hover{
 ===================================================== */
 
 const supabaseConfig = window.JEVEXA_SUPABASE_CONFIG;
-if (!supabaseConfig?.url || !supabaseConfig?.anonKey) {
-    throw new Error('Supabase configuration is unavailable. Set staging Worker Supabase variables before testing.');
+let supabaseClient = null;
+if (supabaseConfig?.url && supabaseConfig?.anonKey && typeof window.supabase?.createClient === 'function') {
+    try {
+        supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+    } catch (e) {
+        console.error('Failed to initialize Supabase client:', e);
+    }
+} else {
+    console.warn('Supabase configuration is unavailable.');
 }
-
-const supabaseClient =
-window.supabase.createClient(
-    supabaseConfig.url,
-    supabaseConfig.anonKey
-);
 
 
 /* =====================================================
@@ -777,6 +778,11 @@ loginForm.addEventListener('submit', async (e)=>{
     e.preventDefault();
 
     loginError.textContent='';
+
+    if (!supabaseClient) {
+        loginError.textContent = 'Supabase client is not ready. Please try again.';
+        return;
+    }
 
     const email =
     document.getElementById('email')
@@ -917,6 +923,7 @@ adminLogoutButton?.addEventListener('click', async () => {
 ===================================================== */
 
 async function checkSession(){
+    if (!supabaseClient) return;
     try {
         const { data, error } = await supabaseClient.auth.getSession();
         if (error) throw error;

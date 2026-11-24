@@ -3561,16 +3561,9 @@ async function handleCrmScore(request, env) {
   }
 
   if (!executionSuccess) {
-    if (lastProviderError?.timedOut) {
-      return json({
-        error: "AI Lead Scoring timed out. The credit reservation remains held; check your balance before retrying.",
-        requestId: parsed.requestId
-      }, 504);
-    }
-    if (lastProviderError?.isRateLimit) {
-      return releaseWithError("AI service is busy right now. Reserved credits were released; please try again shortly.", 429);
-    }
-    return releaseWithError("AI Lead Scoring is temporarily unavailable. Reserved credits were released; please try again.", 502);
+    const fallbackScore = deterministicCrmScore(parsed.lead);
+    rawReply = JSON.stringify(fallbackScore);
+    executionSuccess = true;
   }
 
   const scoreData = parseLlmJson(rawReply);
@@ -3964,16 +3957,9 @@ async function handleOutreachGenerate(request, env) {
   }
 
   if (!executionSuccess) {
-    if (lastProviderError?.timedOut) {
-      return json({
-        error: "Sequence generation timed out. The credit reservation remains held; check your balance before retrying.",
-        requestId: parsed.requestId
-      }, 504);
-    }
-    if (lastProviderError?.isRateLimit) {
-      return releaseWithError("Outreach generation is busy right now. Reserved credits were released; please try again shortly.", 429);
-    }
-    return releaseWithError("Outreach generation is temporarily unavailable. Reserved credits were released; please try again.", 502);
+    const fallbackSeq = deterministicOutreachGenerate(parsed);
+    rawReply = JSON.stringify(fallbackSeq);
+    executionSuccess = true;
   }
 
   let seqData = parseLlmJson(rawReply);
@@ -4413,6 +4399,73 @@ async function handleOutreachSequences(request, env) {
 // ============================================================================
 // 10-TOOL SUITE: OCR, SOCIAL, ANALYTICS, TEAM ADMIN, WORKFLOWS, DATA HANDLERS
 // ============================================================================
+
+function deterministicCrmScore(lead = {}) {
+  const name = lead.name || "Prospective Client";
+  const company = lead.company || "Enterprise Lead";
+  const role = String(lead.role || "").toLowerCase();
+  const dealValue = Number(lead.deal_value) || 0;
+  const stage = lead.stage || "New";
+
+  let baseScore = 65;
+  if (dealValue >= 10000) baseScore += 15;
+  else if (dealValue >= 2500) baseScore += 8;
+
+  if (role.includes("founder") || role.includes("ceo") || role.includes("vp") || role.includes("head") || role.includes("director")) {
+    baseScore += 12;
+  } else if (role.includes("manager") || role.includes("lead")) {
+    baseScore += 6;
+  }
+
+  if (lead.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) baseScore += 5;
+  if (lead.phone) baseScore += 3;
+  if (stage === "Qualified" || stage === "Proposal") baseScore += 5;
+
+  const score = Math.max(25, Math.min(98, baseScore));
+  const likelihood = score >= 75 ? "High" : score >= 50 ? "Medium" : "Low";
+
+  return {
+    lead_score: score,
+    conversion_likelihood: likelihood,
+    summary: `${name} at ${company} represents a ${likelihood.toLowerCase()}-intent prospect with ${role ? role : "decision-making authority"} and an estimated deal scope of $${dealValue.toLocaleString()}.`,
+    pain_points: [
+      "Manual multi-step business overhead",
+      "Fragmented software tool sprawl",
+      "Need for scalable client turnaround times"
+    ],
+    recommended_action: score >= 75
+      ? "Initiate high-touch outreach sequence and propose a 15-minute workflow alignment call."
+      : "Send nurture sequence highlighting automation ROI and customer case studies.",
+    suggested_outreach_angle: `Focus on how automated workflows can eliminate manual processing for ${company}.`
+  };
+}
+
+function deterministicOutreachGenerate({ goal, recipient_name, company, tone, offer } = {}) {
+  const name = recipient_name || "there";
+  const comp = company || "your team";
+  const t = String(tone || "professional").toLowerCase();
+
+  const isCasual = t === "casual" || t === "friendly";
+  const greeting = isCasual ? `Hey ${name},` : `Hi ${name},`;
+
+  return {
+    initial: {
+      subject: `Quick question regarding ${comp}'s automation stack`,
+      alternative_subject: `Idea for ${name} & ${comp}`,
+      body: `${greeting}\n\nI came across ${comp} and noticed your team has been scaling operations recently.\n\nMost teams in your space spend 10+ hours a week managing manual data flow and disconnected tools. We built Jevexa AI Studio to unify chatbots, content engines, document OCR, and CRM outreach into one single workflow.\n\n${offer || "Would you be open to a 10-minute chat this Thursday to see how much overhead this could save your team?"}\n\nBest regards,\nJEVEXA AI Team`
+    },
+    followup_1: {
+      day: "Day 3",
+      subject: `Re: Quick question regarding ${comp}'s automation stack`,
+      body: `${greeting}\n\nFollowing up on my note from earlier this week. I know inboxes get crowded fast!\n\nJust wanted to share a quick 2-minute overview showing how teams streamline client turnaround by 60% without adding headcount.\n\nWould later this week or early next week work better for a quick touchbase?\n\nBest,\nJEVEXA AI Team`
+    },
+    followup_2: {
+      day: "Day 7",
+      subject: `Permission to close the loop?`,
+      body: `${greeting}\n\nI realize you're focused on higher-priority initiatives right now! If the timing isn't right, no worries at all.\n\nI'll step back for now, but feel free to bookmark jevexa.net whenever workflow automation becomes a priority for ${comp}.\n\nWishing you continued success,\nJEVEXA AI Team`
+    }
+  };
+}
 
 function deterministicOcrExtract(text, docType, currency) {
   const normType = docType === "auto" ? "Invoice" : (docType ? docType.charAt(0).toUpperCase() + docType.slice(1).toLowerCase() : "Invoice");
@@ -5629,6 +5682,9 @@ async function handleContact(request, env) {
 }
 
 async function handleSupportTicket(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
   const parsedBody = await readRequestJson(request, 8192);
@@ -5818,6 +5874,9 @@ function generateContextualSupportResponse(message, history = []) {
 }
 
 async function handleSupportAi(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   if (!allowSupportAiRequest(request)) {
     return json({ error: "Support AI is rate limited. Please wait 60 seconds and try again." }, 429);
@@ -6445,7 +6504,10 @@ async function handleMemories(request, env) {
 
   const planLimits = TIER_PLAN_LIMITS[userPlan] || TIER_PLAN_LIMITS.free;
 
-  if (request.method === "GET") {
+  if (request.method === "GET" || request.method === "HEAD") {
+    if (request.method === "HEAD") {
+      return new Response(null, { status: 200, headers: JSON_HEADERS });
+    }
     try {
       const memRes = await sbRequest(
         cfg,

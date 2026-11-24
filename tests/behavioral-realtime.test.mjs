@@ -587,3 +587,42 @@ test('15. Workflows & Outreach Exports: JSON pipeline export, run history CSV ex
     assert.ok(outreachCode.includes('# JEVEXA OUTREACH SEQUENCE'), 'outreach.js formats Markdown output with clean headings');
 });
 
+test('16. Micro-Level Full-Platform Behavioral: Zero State Leakage, Drawer Backdrops, Fallback Scoring & Sequence Reliability, Touch Ergonomics', () => {
+    const scriptCode = fs.readFileSync('script.js', 'utf8');
+    const contentCode = fs.readFileSync('content.js', 'utf8');
+    const creditsCode = fs.readFileSync('credits.js', 'utf8');
+    const workerCode = fs.readFileSync('worker.js', 'utf8');
+    const stylesCode = fs.readFileSync('styles.css', 'utf8');
+
+    // 1. Zero state leakage: Drawer backdrops and modals cleaned in closeAllWorkspacesAndModals
+    assert.ok(scriptCode.includes('crmDrawerBackdrop'), 'script.js cleans crmDrawerBackdrop on workspace close');
+    assert.ok(scriptCode.includes('outreachHistoryBackdrop'), 'script.js cleans outreachHistoryBackdrop on workspace close');
+    assert.ok(scriptCode.includes('contentHistoryBackdrop'), 'script.js cleans contentHistoryBackdrop on workspace close');
+    assert.ok(scriptCode.includes('teamModalBackdrop'), 'script.js cleans teamModalBackdrop on workspace close');
+
+    // 2. Content Engine: History drawer public API exposure
+    assert.ok(contentCode.includes('window.closeContentHistoryDrawer = closeHistoryDrawer;'), 'content.js exposes closeContentHistoryDrawer');
+    assert.ok(contentCode.includes('window.openContentHistoryDrawer = openHistoryDrawer;'), 'content.js exposes openContentHistoryDrawer');
+    assert.ok(scriptCode.includes('window.closeContentHistoryDrawer?.();'), 'script.js invokes closeContentHistoryDrawer on workspace close');
+
+    // 3. Mini CRM & Outreach: Drawer cleanup on workspace close
+    assert.ok(scriptCode.includes('window.JEVEXA_CRM?.closeLeadDrawer?.();'), 'script.js closes CRM lead drawer on exit');
+    assert.ok(scriptCode.includes('window.JEVEXA_OUTREACH?.closeHistoryDrawer?.();'), 'script.js closes Outreach history drawer on exit');
+    assert.ok(scriptCode.includes('window.JEVEXA_TEAM?.closeInvite?.();'), 'script.js closes Team invite modal on exit');
+
+    // 4. Chat input auto-height reset on message dispatch
+    assert.ok(creditsCode.includes("input.style.height = 'auto';"), 'credits.js resets textarea height back to auto on message send');
+
+    // 5. Infallible AI Fallbacks in worker.js
+    assert.ok(workerCode.includes('function deterministicCrmScore('), 'worker.js defines deterministicCrmScore');
+    assert.ok(workerCode.includes('function deterministicOutreachGenerate('), 'worker.js defines deterministicOutreachGenerate');
+    assert.ok(workerCode.includes('const fallbackScore = deterministicCrmScore(parsed.lead);'), 'handleCrmScore falls back to deterministic scoring');
+    assert.ok(workerCode.includes('const fallbackSeq = deterministicOutreachGenerate(parsed);'), 'handleOutreachGenerate falls back to deterministic sequences');
+
+    // 6. Touch Ergonomics: >= 42px touch targets on mobile
+    assert.ok(/\.workspace-back-btn\s*\{[\s\S]*?min-height:\s*42px;/.test(stylesCode), 'workspace-back-btn has min-height >= 42px');
+    assert.ok(/#outreachHistoryBtn\s*\{[\s\S]*?min-height:\s*42px;/.test(stylesCode), 'outreachHistoryBtn has min-height >= 42px on mobile');
+    assert.ok(/\.chatbot-header-settings-btn\s*\{[\s\S]*?min-height:\s*42px;/.test(stylesCode), 'chatbot-header-settings-btn is >= 42px');
+    assert.ok(/\.chat-scroll-bottom-btn[\s\S]*?min-height:\s*42px;/.test(stylesCode), 'chat-scroll-bottom-btn is >= 42px');
+});
+

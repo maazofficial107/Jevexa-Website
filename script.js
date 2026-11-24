@@ -137,6 +137,26 @@ function closeAllWorkspacesAndModals() {
         }
     });
 
+    const drawerBackdropIds = [
+        'crmDrawerBackdrop',
+        'crmLeadDrawer',
+        'crmLeadModal',
+        'outreachHistoryDrawer',
+        'outreachHistoryBackdrop',
+        'contentHistoryDrawer',
+        'contentHistoryBackdrop',
+        'teamInviteModal',
+        'teamModalBackdrop'
+    ];
+    drawerBackdropIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('open', 'is-open');
+            el.setAttribute('aria-hidden', 'true');
+            el.hidden = true;
+        }
+    });
+
     if (typeof window.closeComingSoonModal === 'function') {
         window.closeComingSoonModal();
     }
@@ -1812,6 +1832,12 @@ async function logoutUser() {
     if (outreachBackdrop) { outreachBackdrop.hidden = true; outreachBackdrop.classList.remove('open'); }
     const teamModal = document.getElementById('teamInviteModal');
     if (teamModal) { teamModal.hidden = true; teamModal.classList.remove('open'); }
+    const teamBackdrop = document.getElementById('teamModalBackdrop');
+    if (teamBackdrop) { teamBackdrop.hidden = true; teamBackdrop.classList.remove('open'); }
+    const contentDrawer = document.getElementById('contentHistoryDrawer');
+    if (contentDrawer) { contentDrawer.hidden = true; contentDrawer.classList.remove('open'); }
+    const contentBackdrop = document.getElementById('contentHistoryBackdrop');
+    if (contentBackdrop) { contentBackdrop.hidden = true; contentBackdrop.classList.remove('open'); }
     const wfModal = document.getElementById('workflowExecModal');
     if (wfModal) { wfModal.hidden = true; wfModal.classList.remove('open'); }
     const comingSoonModal = document.getElementById('comingSoonModal');
@@ -4454,6 +4480,7 @@ const JEVEXA_PLANS = {
 
     function closeContentWorkspace(pushState = true) {
         window.clearContentProcessing?.();
+        window.closeContentHistoryDrawer?.();
         if (contentWorkspace) {
             contentWorkspace.classList.remove('open');
             contentWorkspace.setAttribute('aria-hidden', 'true');
@@ -4487,6 +4514,8 @@ const JEVEXA_PLANS = {
     }
 
     function closeCrmWorkspace(pushState = true) {
+        window.JEVEXA_CRM?.closeLeadDrawer?.();
+        window.JEVEXA_CRM?.closeLeadModal?.();
         if (crmWorkspace) {
             crmWorkspace.classList.remove('open');
             crmWorkspace.setAttribute('aria-hidden', 'true');
@@ -4537,6 +4566,7 @@ const JEVEXA_PLANS = {
     }
 
     function closeOutreachWorkspace(pushState = true) {
+        window.JEVEXA_OUTREACH?.closeHistoryDrawer?.();
         if (outreachWorkspace) {
             outreachWorkspace.classList.remove('open');
             outreachWorkspace.setAttribute('aria-hidden', 'true');
@@ -4649,6 +4679,7 @@ const JEVEXA_PLANS = {
     }
 
     function closeTeamAdminWorkspace(pushState = true) {
+        window.JEVEXA_TEAM?.closeInvite?.();
         if (teamAdminWorkspace) {
             teamAdminWorkspace.classList.remove('open');
             teamAdminWorkspace.setAttribute('aria-hidden', 'true');

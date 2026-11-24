@@ -730,6 +730,8 @@
             closeHistoryDrawer();
         }
     });
+    window.closeContentHistoryDrawer = closeHistoryDrawer;
+    window.openContentHistoryDrawer = openHistoryDrawer;
     updateHistoryUI();
 
         window.JEVEXA_RECONCILE_CONTENT = async () => {

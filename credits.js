@@ -2537,7 +2537,10 @@
         conversation.push({ role: 'user', text: displayText });
         const userMsgIndex = conversation.length - 1;
         appendMessage(displayText, true, userMsgIndex);
-        if (input) input.value = '';
+        if (input) {
+            input.value = '';
+            input.style.height = 'auto';
+        }
         pendingAttachments.length = 0;
         renderAttachments();
 

@@ -3361,8 +3361,10 @@ section { padding: 100px 0; position: relative; }
         top: 10px !important;
         right: 10px !important;
 
-        width: 36px !important;
-        height: 36px !important;
+        width: 42px !important;
+        height: 42px !important;
+        min-width: 42px !important;
+        min-height: 42px !important;
     }
 }
 
@@ -8912,8 +8914,10 @@ body.chat-is-resizing {
     flex-shrink: 0;
 }
 .chatbot-header-settings-btn {
-    width: 36px;
-    height: 36px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.05);
@@ -9478,7 +9482,7 @@ body.chat-is-resizing {
 .chat-code-copy.copied { background: #059669; border-color: #10b981; color: #fff; }
 .chat-code-block pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; line-height: 1.55; color: #e2e8f0; scrollbar-width: thin; }
 .chat-receipt-tier { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; background: rgba(139, 92, 246, 0.18); border: 1px solid rgba(167, 139, 250, 0.35); color: #ddd6fe; font-size: 10.5px; font-weight: 750; margin-right: 8px; letter-spacing: 0.02em; }
-.chat-scroll-bottom-btn { position: absolute; right: clamp(20px, 4vw, 40px); bottom: 130px; width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, rgba(38, 30, 80, 0.95), rgba(18, 34, 60, 0.95)); border: 1px solid rgba(167, 139, 250, 0.4); color: #c4b5fd; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); z-index: 15; transition: transform 200ms ease, opacity 200ms ease; }
+.chat-scroll-bottom-btn { position: absolute; right: clamp(20px, 4vw, 40px); bottom: 130px; width: 42px; height: 42px; min-width: 42px; min-height: 42px; border-radius: 50%; background: linear-gradient(135deg, rgba(38, 30, 80, 0.95), rgba(18, 34, 60, 0.95)); border: 1px solid rgba(167, 139, 250, 0.4); color: #c4b5fd; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); z-index: 15; transition: transform 200ms ease, opacity 200ms ease; }
 .chat-scroll-bottom-btn:hover { transform: translateY(-2px); color: #fff; border-color: #a78bfa; }
 .chat-scroll-bottom-btn[hidden] { display: none !important; }
 .msg-content code { padding: 2px 5px; border-radius: 5px; background: rgba(0,0,0,.24); }
@@ -10544,7 +10548,7 @@ body.chat-is-resizing {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 38px;
+    min-height: 42px;
     padding: 0 16px;
     border-radius: 10px;
     background: rgba(139, 92, 246, 0.14);
@@ -10650,10 +10654,10 @@ body.chat-is-resizing {
 }
 
 .workspace-close-btn {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.04);
@@ -11900,7 +11904,7 @@ body.is-offline .offline-indicator {
     #crmWorkspace .workspace-back-btn,
     #outreachWorkspace .workspace-back-btn {
         padding: 0 10px;
-        min-height: 36px;
+        min-height: 42px;
     }
     #crmWorkspace .workspace-title,
     #outreachWorkspace .workspace-title {
@@ -11924,7 +11928,7 @@ body.is-offline .offline-indicator {
     }
     #outreachHistoryBtn {
         padding: 0 10px;
-        min-height: 36px;
+        min-height: 42px;
     }
 }
 

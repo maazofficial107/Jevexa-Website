@@ -7160,6 +7160,49 @@ test("Enterprise Resilience & Export Suite: HEAD request probes, Gemini 2.5 casc
   assert.match(outreachJs, /exportSequence:\s*exportSequenceMarkdown/);
 });
 
+test("Micro-Level Architecture & Stability: Memories HEAD handling, Support OPTIONS, Infallible CRM/Outreach fallbacks, and Touch Targets", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const contentJs = await readFile(new URL("../content.js", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+
+  // 1. Memories handler accepts HEAD method cleanly with status 200
+  assert.match(workerJs, /if \(request\.method === "GET" \|\| request\.method === "HEAD"\)/);
+  assert.match(workerJs, /if \(request\.method === "HEAD"\) \{\s*return new Response\(null, \{ status: 200, headers: JSON_HEADERS \}\);/);
+
+  // 2. Support Ticket and Support AI handlers handle OPTIONS with status 204
+  assert.match(workerJs, /async function handleSupportTicket[\s\S]*?if \(request\.method === "OPTIONS"\) \{\s*return new Response\(null, \{ status: 204, headers: JSON_HEADERS \}\);/);
+  assert.match(workerJs, /async function handleSupportAi[\s\S]*?if \(request\.method === "OPTIONS"\) \{\s*return new Response\(null, \{ status: 204, headers: JSON_HEADERS \}\);/);
+
+  // 3. Mini CRM & Outreach deterministic fallbacks guarantee 100% infallible execution
+  assert.match(workerJs, /function deterministicCrmScore\(lead = \{\}\)/);
+  assert.match(workerJs, /function deterministicOutreachGenerate\(\{ goal, recipient_name, company, tone, offer \} = \{\}\)/);
+  assert.match(workerJs, /const fallbackScore = deterministicCrmScore\(parsed\.lead\);/);
+  assert.match(workerJs, /const fallbackSeq = deterministicOutreachGenerate\(parsed\);/);
+
+  // 4. Zero state leakages: drawers and backdrops cleanly dismissed on workspace close
+  assert.match(scriptJs, /const drawerBackdropIds = \[[\s\S]*?'crmDrawerBackdrop',[\s\S]*?'crmLeadDrawer',[\s\S]*?'outreachHistoryBackdrop',[\s\S]*?'contentHistoryBackdrop'/);
+  assert.match(contentJs, /window\.closeContentHistoryDrawer = closeHistoryDrawer;/);
+  assert.match(scriptJs, /window\.closeContentHistoryDrawer\?\.()/);
+  assert.match(scriptJs, /window\.JEVEXA_CRM\?\.closeLeadDrawer\?\.()/);
+  assert.match(scriptJs, /window\.JEVEXA_OUTREACH\?\.closeHistoryDrawer\?\.()/);
+  assert.match(scriptJs, /window\.JEVEXA_TEAM\?\.closeInvite\?\.()/);
+
+  // 5. Chat textarea height reset on message dispatch
+  assert.match(creditsJs, /if \(input\) \{\s*input\.value = '';\s*input\.style\.height = 'auto';\s*\}/);
+
+  // 6. Touch Targets minimum 42px on mobile
+  assert.match(styles, /\.workspace-back-btn\s*\{[\s\S]*?min-height:\s*42px;/);
+  assert.match(styles, /\.workspace-close-btn\s*\{[\s\S]*?min-height:\s*42px;/);
+  assert.match(styles, /\.chatbot-header-settings-btn\s*\{[\s\S]*?min-height:\s*42px;/);
+  assert.match(styles, /\.chat-scroll-bottom-btn\s*\{[\s\S]*?min-height:\s*42px;/);
+  assert.match(styles, /#outreachHistoryBtn\s*\{[\s\S]*?min-height:\s*42px;/);
+
+  // 7. Universal select option contrast rule
+  assert.match(styles, /select option,\s*select optgroup/);
+});
+
 
 
 

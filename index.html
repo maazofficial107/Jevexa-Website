@@ -1752,96 +1752,353 @@
                 <div class="container workspace-container">
                     <div class="section-header">
                         <span class="section-tag"><i class="fas fa-chart-pie"></i> Executive Intelligence</span>
-                        <h2 class="section-title" id="analyticsToolTitle">Executive Growth &amp; KPI <span class="gradient-text">Dashboard</span></h2>
+                        <h2 class="section-title" id="analyticsToolTitle">Executive Growth &amp; KPI <span class="gradient-text">Engine</span></h2>
                     </div>
 
-                    <!-- Toolbar -->
-                    <div class="analytics-toolbar glass">
-                        <div class="analytics-toolbar-left">
-                            <label for="analyticsPresetSelect">Business Model:</label>
-                            <select id="analyticsPresetSelect" class="crm-select">
-                                <option value="saas_50k" selected>B2B SaaS ($50k MRR)</option>
-                                <option value="ecommerce_120k">E-Commerce Brand ($120k GMV)</option>
-                                <option value="agency_35k">Digital Agency ($35k/mo)</option>
-                            </select>
-                            <label for="analyticsTimeframe">Time Horizon:</label>
-                            <select id="analyticsTimeframe" class="crm-select">
-                                <option value="30d">Last 30 Days</option>
-                                <option value="90d" selected>Last 90 Days</option>
-                                <option value="1y">Trailing 12 Months</option>
-                            </select>
+                    <!-- 1. Top Control Panel: Ingestion Tabs & Engine Settings -->
+                    <div class="analytics-control-panel glass">
+                        <!-- Navigation Tabs & Mode Selector -->
+                        <div class="analytics-tabs-bar">
+                            <div class="analytics-tabs-list" role="tablist" aria-label="Data Ingestion Modes">
+                                <button type="button" class="analytics-tab-btn active" role="tab" aria-selected="true" id="analyticsTabUpload" data-tab="upload">
+                                    <i class="fas fa-cloud-arrow-up"></i> <span>Upload File</span>
+                                </button>
+                                <button type="button" class="analytics-tab-btn" role="tab" aria-selected="false" id="analyticsTabUrl" data-tab="url">
+                                    <i class="fas fa-globe"></i> <span>Website / Sheets URL</span>
+                                </button>
+                                <button type="button" class="analytics-tab-btn" role="tab" aria-selected="false" id="analyticsTabManual" data-tab="manual">
+                                    <i class="fas fa-calculator"></i> <span>Manual Metrics</span>
+                                </button>
+                                <button type="button" class="analytics-tab-btn" role="tab" aria-selected="false" id="analyticsTabDemo" data-tab="demo">
+                                    <i class="fas fa-database"></i> <span>Live Demo Preset</span>
+                                </button>
+                            </div>
+
+                            <!-- Engine Settings Bar -->
+                            <div class="analytics-settings-bar">
+                                <div class="analytics-setting-item">
+                                    <label for="analyticsCurrency"><i class="fas fa-coins"></i> Currency:</label>
+                                    <select id="analyticsCurrency" class="crm-select analytics-select-sm">
+                                        <option value="USD" selected>USD ($)</option>
+                                        <option value="PKR">PKR (Rs)</option>
+                                        <option value="EUR">EUR (€)</option>
+                                        <option value="GBP">GBP (£)</option>
+                                    </select>
+                                </div>
+                                <div class="analytics-setting-item">
+                                    <label for="analyticsTimeframe"><i class="fas fa-calendar-alt"></i> Horizon:</label>
+                                    <select id="analyticsTimeframe" class="crm-select analytics-select-sm">
+                                        <option value="7d">Last 7 Days</option>
+                                        <option value="30d">Last 30 Days</option>
+                                        <option value="90d" selected>Last 90 Days</option>
+                                        <option value="1y">Trailing 12 Months</option>
+                                    </select>
+                                </div>
+                                <div class="analytics-setting-item">
+                                    <label for="analyticsFeeSelect"><i class="fas fa-receipt"></i> Tax/Fee:</label>
+                                    <select id="analyticsFeeSelect" class="crm-select analytics-select-sm">
+                                        <option value="0" selected>None (0%)</option>
+                                        <option value="2.9">Stripe (2.9%)</option>
+                                        <option value="5.0">Standard (5%)</option>
+                                        <option value="10.0">VAT/Tax (10%)</option>
+                                        <option value="15.0">High Tax (15%)</option>
+                                    </select>
+                                </div>
+                                <div class="analytics-setting-item">
+                                    <button type="button" class="btn btn-outline btn-sm" id="analyticsPrintSummaryBtn" title="Printable Executive Summary">
+                                        <i class="fas fa-print"></i> <span>Print</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="analytics-toolbar-right">
-                            <button type="button" class="btn btn-primary btn-sm" id="analyticsGenerateBtn">
-                                <i class="fas fa-chart-line"></i> Generate Executive Forecast
-                            </button>
+
+                        <!-- Tab Panes Container -->
+                        <div class="analytics-tab-panes">
+                            <!-- Pane 1: File Upload (CSV, TSV, JSON, XLSX) -->
+                            <div class="analytics-tab-pane active" id="analyticsPaneUpload" role="tabpanel" aria-labelledby="analyticsTabUpload">
+                                <div class="analytics-dropzone" id="analyticsDropzone">
+                                    <input type="file" id="analyticsFileInput" accept=".csv,.tsv,.json,.txt,.xlsx" hidden />
+                                    <div class="dropzone-content">
+                                        <div class="dropzone-icon"><i class="fas fa-file-import"></i></div>
+                                        <div class="dropzone-text">
+                                            <h4>Drop your sales or financial export here, or <span class="browse-link">browse</span></h4>
+                                            <p>Supports CSV, TSV, JSON, and XLSX exports from Shopify, Stripe, WooCommerce, QuickBooks, or POS</p>
+                                        </div>
+                                        <div class="dropzone-actions">
+                                            <button type="button" class="btn btn-primary btn-sm" id="analyticsBrowseBtn">
+                                                <i class="fas fa-folder-open"></i> Browse Files
+                                            </button>
+                                            <button type="button" class="btn btn-outline btn-sm" id="analyticsDownloadSampleBtn">
+                                                <i class="fas fa-download"></i> Download Sample CSV
+                                            </button>
+                                            <button type="button" class="btn btn-outline btn-sm" id="analyticsLoadDemoBtn">
+                                                <i class="fas fa-bolt"></i> Load Live Demo Dataset
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Ingested Dataset Summary Banner -->
+                                <div class="analytics-dataset-banner" id="analyticsDatasetBanner" hidden>
+                                    <div class="dataset-meta">
+                                        <div class="dataset-icon"><i class="fas fa-table-cells"></i></div>
+                                        <div class="dataset-details">
+                                            <strong id="analyticsDatasetName">orders_export.csv</strong>
+                                            <span id="analyticsDatasetStats">128 rows parsed • 6 columns detected</span>
+                                            <div class="detected-cols-chips" id="analyticsDetectedChips"></div>
+                                        </div>
+                                    </div>
+                                    <div class="dataset-banner-actions">
+                                        <button type="button" class="btn btn-outline btn-sm" id="analyticsClearDataBtn">
+                                            <i class="fas fa-xmark"></i> Clear Data
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Pane 2: Website / Store / Public Sheets URL -->
+                            <div class="analytics-tab-pane" id="analyticsPaneUrl" role="tabpanel" aria-labelledby="analyticsTabUrl" hidden>
+                                <div class="analytics-url-form">
+                                    <div class="url-input-wrap">
+                                        <i class="fas fa-link url-icon"></i>
+                                        <input type="url" id="analyticsUrlInput" class="crm-input analytics-url-input" placeholder="Paste Public Google Sheets share link or Store Website URL (e.g. docs.google.com/spreadsheets/d/... or https://brand.com)" />
+                                        <button type="button" class="btn btn-primary" id="analyticsFetchUrlBtn">
+                                            <i class="fas fa-magnifying-glass-chart"></i> Fetch &amp; Ingest
+                                        </button>
+                                    </div>
+                                    <div class="url-hints">
+                                        <span><i class="fab fa-google-drive"></i> Public Google Sheets auto-converts to live CSV</span>
+                                        <span><i class="fas fa-store"></i> Web stores auto-extract catalog signals, AOV &amp; tech stack</span>
+                                    </div>
+                                </div>
+
+                                <div class="analytics-url-preview-card glass" id="analyticsUrlPreviewCard" hidden>
+                                    <div class="url-preview-header">
+                                        <div class="preview-title-wrap">
+                                            <span class="preview-badge" id="analyticsPreviewType">Store Detected</span>
+                                            <h4 id="analyticsPreviewTitle">Store Name</h4>
+                                            <p id="analyticsPreviewDesc" class="preview-desc"></p>
+                                        </div>
+                                        <div class="preview-score-badge">
+                                            <span>Readiness:</span>
+                                            <strong id="analyticsPreviewScore">85/100</strong>
+                                        </div>
+                                    </div>
+                                    <div class="preview-stats-grid" id="analyticsPreviewStats"></div>
+                                </div>
+                            </div>
+
+                            <!-- Pane 3: Manual Business Metrics (Quick Calculator) -->
+                            <div class="analytics-tab-pane" id="analyticsPaneManual" role="tabpanel" aria-labelledby="analyticsTabManual" hidden>
+                                <div class="analytics-manual-grid">
+                                    <div class="manual-field">
+                                        <label for="analyticsInputRevenue">Monthly Gross Revenue</label>
+                                        <div class="input-with-symbol">
+                                            <span class="input-currency-symbol">$</span>
+                                            <input type="number" id="analyticsInputRevenue" class="crm-input" placeholder="48500" min="0" step="any" />
+                                        </div>
+                                    </div>
+                                    <div class="manual-field">
+                                        <label for="analyticsInputExpenses">Monthly Expenses / COGS</label>
+                                        <div class="input-with-symbol">
+                                            <span class="input-currency-symbol">$</span>
+                                            <input type="number" id="analyticsInputExpenses" class="crm-input" placeholder="20370" min="0" step="any" />
+                                        </div>
+                                    </div>
+                                    <div class="manual-field">
+                                        <label for="analyticsInputAdSpend">Marketing / Ad Spend</label>
+                                        <div class="input-with-symbol">
+                                            <span class="input-currency-symbol">$</span>
+                                            <input type="number" id="analyticsInputAdSpend" class="crm-input" placeholder="8500" min="0" step="any" />
+                                        </div>
+                                    </div>
+                                    <div class="manual-field">
+                                        <label for="analyticsInputCustomers">Active Paying Customers</label>
+                                        <input type="number" id="analyticsInputCustomers" class="crm-input" placeholder="340" min="1" step="1" />
+                                    </div>
+                                    <div class="manual-field">
+                                        <label for="analyticsInputNewCustomers">New Customers Acquired</label>
+                                        <input type="number" id="analyticsInputNewCustomers" class="crm-input" placeholder="35" min="0" step="1" />
+                                    </div>
+                                    <div class="manual-field">
+                                        <label for="analyticsInputChurned">Churned / Refunded</label>
+                                        <input type="number" id="analyticsInputChurned" class="crm-input" placeholder="7" min="0" step="1" />
+                                    </div>
+                                    <div class="manual-field">
+                                        <label for="analyticsInputAov">Average Order Value (AOV)</label>
+                                        <div class="input-with-symbol">
+                                            <span class="input-currency-symbol">$</span>
+                                            <input type="number" id="analyticsInputAov" class="crm-input" placeholder="142" min="0" step="any" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="manual-actions-bar">
+                                    <span class="manual-calc-note"><i class="fas fa-bolt"></i> Real-time mathematical calculation triggers immediately on every keystroke.</span>
+                                    <button type="button" class="btn btn-outline btn-sm" id="analyticsResetManualBtn">
+                                        <i class="fas fa-rotate-left"></i> Reset Defaults
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Pane 4: Live Demo Preset -->
+                            <div class="analytics-tab-pane" id="analyticsPaneDemo" role="tabpanel" aria-labelledby="analyticsTabDemo" hidden>
+                                <div class="analytics-demo-bar">
+                                    <div class="demo-select-wrap">
+                                        <label for="analyticsPresetSelect">Select Live Demo Dataset:</label>
+                                        <select id="analyticsPresetSelect" class="crm-select">
+                                            <option value="saas_50k" selected>B2B SaaS Growth ($50k MRR)</option>
+                                            <option value="ecommerce_120k">E-Commerce Brand ($120k GMV)</option>
+                                            <option value="agency_35k">Digital Agency ($35k/mo)</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" id="analyticsApplyDemoBtn">
+                                        <i class="fas fa-check"></i> Load Dataset
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <p id="analyticsStatus" class="analytics-status-msg" role="status" aria-live="polite"></p>
 
-                    <!-- KPI Cards Grid -->
+                    <!-- Status Notification & AI Forecast Trigger Bar -->
+                    <div class="analytics-action-ribbon">
+                        <p id="analyticsStatus" class="analytics-status-msg" role="status" aria-live="polite"></p>
+                        <button type="button" class="btn btn-primary btn-sm" id="analyticsGenerateBtn">
+                            <i class="fas fa-chart-line"></i> Generate Executive Forecast
+                        </button>
+                    </div>
+
+                    <!-- Dynamic Mathematical KPI Cards Grid (8 Cards) -->
                     <div class="analytics-kpi-grid">
                         <div class="analytics-kpi-card glass">
                             <span class="kpi-label">Monthly Recurring Revenue</span>
                             <strong class="kpi-val" id="analyticsMetricMrr">$48,500</strong>
-                            <span class="kpi-trend positive"><i class="fas fa-arrow-up"></i> +14.5% MoM</span>
+                            <span class="kpi-trend positive" id="analyticsTrendMrr"><i class="fas fa-arrow-up"></i> +14.5% MoM</span>
                         </div>
                         <div class="analytics-kpi-card glass">
                             <span class="kpi-label">Annual Run-Rate (ARR)</span>
                             <strong class="kpi-val" id="analyticsMetricArr">$582,000</strong>
-                            <span class="kpi-trend positive"><i class="fas fa-check"></i> Profitable</span>
+                            <span class="kpi-trend positive" id="analyticsTrendArr"><i class="fas fa-check"></i> Profitable</span>
                         </div>
                         <div class="analytics-kpi-card glass">
                             <span class="kpi-label">Trailing Revenue</span>
                             <strong class="kpi-val" id="analyticsMetricRevenue">$145,500</strong>
-                            <span class="kpi-sub">Last 90 days</span>
+                            <span class="kpi-sub" id="analyticsSubRevenue">Last 90 days</span>
                         </div>
                         <div class="analytics-kpi-card glass">
                             <span class="kpi-label">Net Profit Margin</span>
                             <strong class="kpi-val" id="analyticsMetricMargin">58.1%</strong>
-                            <span class="kpi-trend positive"><i class="fas fa-shield"></i> Healthy</span>
+                            <span class="kpi-trend positive" id="analyticsTrendMargin"><i class="fas fa-shield"></i> Healthy</span>
                         </div>
                         <div class="analytics-kpi-card glass">
-                            <span class="kpi-label">CAC</span>
+                            <span class="kpi-label">CAC (Customer Acquisition)</span>
                             <strong class="kpi-val" id="analyticsMetricCac">$240</strong>
-                            <span class="kpi-sub">Acquisition cost</span>
+                            <span class="kpi-sub" id="analyticsSubCac">Acquisition cost</span>
                         </div>
                         <div class="analytics-kpi-card glass">
                             <span class="kpi-label">Customer LTV</span>
                             <strong class="kpi-val" id="analyticsMetricLtv">$1,850</strong>
-                            <span class="kpi-sub">Lifetime value</span>
+                            <span class="kpi-sub" id="analyticsSubLtv">Lifetime value</span>
                         </div>
                         <div class="analytics-kpi-card glass">
                             <span class="kpi-label">LTV / CAC Ratio</span>
                             <strong class="kpi-val" id="analyticsMetricLtvCac">7.7x</strong>
-                            <span class="kpi-trend positive"><i class="fas fa-trophy"></i> Elite (&gt;3x)</span>
+                            <span class="kpi-trend positive" id="analyticsTrendLtvCac"><i class="fas fa-trophy"></i> Elite (&gt;3x)</span>
                         </div>
                         <div class="analytics-kpi-card glass">
-                            <span class="kpi-label">Logo Churn Rate</span>
+                            <span class="kpi-label">Churn / Refund Rate</span>
                             <strong class="kpi-val" id="analyticsMetricChurn">2.1%</strong>
-                            <span class="kpi-trend positive"><i class="fas fa-circle-check"></i> Low Risk</span>
+                            <span class="kpi-trend positive" id="analyticsTrendChurn"><i class="fas fa-circle-check"></i> Low Risk</span>
                         </div>
                     </div>
 
-                    <!-- Charts Section -->
+                    <!-- Dynamic Visualizations Grid -->
                     <div class="analytics-charts-grid">
                         <div class="analytics-chart-box glass">
                             <div class="pane-head">
-                                <h3>Revenue Growth Trajectory</h3>
-                                <span class="chart-badge">5-Month Trend</span>
+                                <div>
+                                    <h3>Revenue vs. Expense &amp; Profit Trajectory</h3>
+                                    <span class="chart-subtitle">Dynamic multi-series performance trajectory</span>
+                                </div>
+                                <span class="chart-badge" id="analyticsChartBadge">Time-Series</span>
                             </div>
                             <div id="analyticsChartRevenue" class="analytics-chart-canvas"></div>
                         </div>
                         <div class="analytics-chart-box glass">
                             <div class="pane-head">
-                                <h3>Conversion Funnel Velocity</h3>
-                                <span class="chart-badge">Visitor → Paid</span>
+                                <div>
+                                    <h3>Channel &amp; Product Contribution</h3>
+                                    <span class="chart-subtitle">Revenue volume &amp; conversion velocity</span>
+                                </div>
+                                <span class="chart-badge">Breakdown</span>
                             </div>
                             <div id="analyticsChartFunnel" class="analytics-chart-canvas"></div>
                         </div>
                     </div>
 
-                    <!-- Executive Forecast Report -->
+                    <!-- 4. Interactive Analytical Data Table -->
+                    <div class="analytics-table-card glass" id="analyticsTableCard">
+                        <div class="analytics-table-header">
+                            <div class="table-title-group">
+                                <h3><i class="fas fa-table-list"></i> Analytical Business Breakdown Table</h3>
+                                <p>Comprehensive row-level and grouped metrics from your active data source</p>
+                            </div>
+                            <div class="analytics-table-actions">
+                                <div class="table-search-wrap">
+                                    <i class="fas fa-search table-search-icon"></i>
+                                    <input type="text" id="analyticsTableSearch" class="crm-input analytics-search-input" placeholder="Filter rows..." />
+                                </div>
+                                <div class="table-group-wrap">
+                                    <label for="analyticsTableGroupBy">Group:</label>
+                                    <select id="analyticsTableGroupBy" class="crm-select analytics-select-sm">
+                                        <option value="auto" selected>Auto</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                        <option value="channel">By Channel/Item</option>
+                                        <option value="raw">Raw Records</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-outline btn-sm" id="analyticsExportTableCsvBtn">
+                                    <i class="fas fa-file-csv"></i> Export Table CSV
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive-wrapper analytics-table-wrapper">
+                            <table class="analytics-data-table" id="analyticsDataTable">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="period" class="sortable">Period / Item <i class="fas fa-sort"></i></th>
+                                        <th data-sort="orders" class="sortable">Orders / Users <i class="fas fa-sort"></i></th>
+                                        <th data-sort="revenue" class="sortable">Gross Revenue <i class="fas fa-sort"></i></th>
+                                        <th data-sort="expenses" class="sortable">Expenses / Spend <i class="fas fa-sort"></i></th>
+                                        <th data-sort="profit" class="sortable">Net Profit <i class="fas fa-sort"></i></th>
+                                        <th data-sort="margin" class="sortable">Margin % <i class="fas fa-sort"></i></th>
+                                        <th data-sort="growth" class="sortable">Growth % <i class="fas fa-sort"></i></th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="analyticsTableBody">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="analytics-table-footer">
+                            <span class="table-count-label" id="analyticsTableRowCount">Showing rows</span>
+                            <div class="table-pagination">
+                                <button type="button" class="btn btn-ghost btn-sm" id="analyticsTablePrevBtn" disabled>
+                                    <i class="fas fa-chevron-left"></i> Prev
+                                </button>
+                                <span class="page-indicator" id="analyticsTablePageNum">Page 1 of 1</span>
+                                <button type="button" class="btn btn-ghost btn-sm" id="analyticsTableNextBtn" disabled>
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 5. Executive Forecast Report -->
                     <div id="analyticsReportCard" class="analytics-report-card glass">
                         <div class="report-header">
                             <div>
@@ -1861,13 +2118,13 @@
                                 <ul id="analyticsStrengthsList" class="report-bullet-list"></ul>
                             </div>
                             <div class="report-section glass">
-                                <h4><i class="fas fa-triangle-exclamation"></i> Risks &amp; Bottlenecks</h4>
+                                <h4><i class="fas fa-triangle-exclamation"></i> Risks &amp; Margin Leaks</h4>
                                 <ul id="analyticsRisksList" class="report-bullet-list"></ul>
                             </div>
                         </div>
 
                         <div class="forecast-scenarios-box glass">
-                            <h4><i class="fas fa-calculator"></i> 90-Day Revenue Forecast Scenarios</h4>
+                            <h4><i class="fas fa-calculator"></i> 30 / 60 / 90-Day Revenue Forecast Scenarios</h4>
                             <div class="forecast-scenarios-grid">
                                 <div class="forecast-card conservative">
                                     <span class="scen-label">Conservative (+6%)</span>

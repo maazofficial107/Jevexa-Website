@@ -1728,6 +1728,9 @@ function parseAnalyticsPayload(body) {
   const csvText = typeof body?.csvText === "string" ? body.csvText.trim().slice(0, 50000) : "";
   const businessType = typeof body?.businessType === "string" ? body.businessType.trim() : "saas";
   const timeframe = typeof body?.timeframe === "string" ? body.timeframe.trim() : "90d";
+  const topSegments = Array.isArray(body?.topSegments) ? body.topSegments : null;
+  const anomalies = Array.isArray(body?.anomalies) ? body.anomalies : null;
+  const datasetSummary = (body?.datasetSummary && typeof body.datasetSummary === "object") ? body.datasetSummary : null;
 
   const tf = timeframe.toLowerCase();
   const tfFactor = tf === "365d" ? 2.0 : tf === "180d" ? 1.75 : tf === "90d" ? 1.5 : tf === "60d" ? 1.25 : 1.0;
@@ -1741,6 +1744,9 @@ function parseAnalyticsPayload(body) {
     csvText,
     businessType,
     timeframe,
+    topSegments,
+    anomalies,
+    datasetSummary,
     timeframeMultiplier,
     maxTokens: 1400,
     estimatedTokens
@@ -5127,7 +5133,7 @@ async function handleSocialGenerate(request, env) {
 }
 
 // ----------------------------------------------------------------------------
-// HANDLER: Business Analytics (/api/analytics/report)
+// HANDLER: Business Analytics (/api/analytics/report & /api/analytics/forecast)
 // ----------------------------------------------------------------------------
 async function handleAnalyticsReport(request, env) {
   if (request.method === "OPTIONS") {
@@ -5172,10 +5178,134 @@ async function handleAnalyticsReport(request, env) {
 
   const analyticsBase = deterministicAnalyticsReport(parsed.metrics, parsed.businessType, parsed.timeframe);
 
+  let finalReport = analyticsBase.report;
+  let measuredPromptTokens = null;
+  let measuredCompletionTokens = null;
+  let measuredTotalTokens = null;
+
+  const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
+  const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
+  const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
+
+  const promptText = `Business Model: ${parsed.businessType}
+Time Horizon: ${parsed.timeframe}
+Computed Real KPIs:
+- Revenue: $${analyticsBase.kpis.revenue}
+- MRR: $${analyticsBase.kpis.mrr}
+- ARR: $${analyticsBase.kpis.arr}
+- Expenses: $${analyticsBase.kpis.expenses}
+- Net Profit: $${analyticsBase.kpis.net_profit}
+- Net Profit Margin: ${analyticsBase.kpis.net_margin}%
+- Active Customers: ${analyticsBase.kpis.customers}
+- CAC: $${analyticsBase.kpis.cac}
+- LTV: $${analyticsBase.kpis.ltv}
+- LTV/CAC Ratio: ${analyticsBase.kpis.ltv_cac_ratio}x
+- Churn Rate: ${analyticsBase.kpis.churn_rate}%
+- MoM Growth Rate: ${analyticsBase.kpis.mom_growth}%
+${parsed.topSegments ? `Top Performing Segments: ${JSON.stringify(parsed.topSegments)}` : ""}
+${parsed.anomalies ? `Detected Margin Leaks / Anomalies: ${JSON.stringify(parsed.anomalies)}` : ""}
+${parsed.datasetSummary ? `Dataset Summary: ${JSON.stringify(parsed.datasetSummary)}` : ""}
+
+Task: Synthesize an executive forecasting report strictly adhering to the JSON schema. Cite the exact computed numbers, identify concrete margin leaks or opportunities, and calculate 30/60/90-day Conservative (+6%), Expected (+15%), and Aggressive (+25%) revenue projections.`;
+
+  // AI Multi-Provider Cascade: Groq -> Gemini -> OpenRouter -> Deterministic
+  if (groqApiKey) {
+    try {
+      const groqRes = await executeGroqWithFallback({
+        apiKey: groqApiKey,
+        systemInstruction: ANALYTICS_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: promptText }],
+        maxTokens: parsed.maxTokens || 1400,
+        temperature: 0.5,
+        requestId: parsed.requestId,
+        serviceName: "BusinessAnalyticsAI",
+        models: getGroqModels(env)
+      });
+      if (groqRes?.ok && groqRes?.reply) {
+        const parsedReport = parseLlmJson(groqRes.reply);
+        if (parsedReport && parsedReport.executive_summary) {
+          finalReport = {
+            ...analyticsBase.report,
+            ...parsedReport,
+            forecast: {
+              ...analyticsBase.report.forecast,
+              ...(parsedReport.forecast || {})
+            }
+          };
+          measuredPromptTokens = groqRes.promptTokens;
+          measuredCompletionTokens = groqRes.completionTokens;
+          measuredTotalTokens = groqRes.totalTokens;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (finalReport === analyticsBase.report && geminiApiKey) {
+    try {
+      const geminiRes = await executeGeminiWithFallback({
+        apiKey: geminiApiKey,
+        systemInstruction: ANALYTICS_SYSTEM_PROMPT,
+        contents: [{ role: "user", parts: [{ text: promptText }] }],
+        maxTokens: parsed.maxTokens || 1400,
+        temperature: 0.5,
+        requestId: parsed.requestId,
+        serviceName: "BusinessAnalyticsAI",
+        userTier
+      });
+      if (geminiRes?.ok && geminiRes?.reply) {
+        const parsedReport = parseLlmJson(geminiRes.reply);
+        if (parsedReport && parsedReport.executive_summary) {
+          finalReport = {
+            ...analyticsBase.report,
+            ...parsedReport,
+            forecast: {
+              ...analyticsBase.report.forecast,
+              ...(parsedReport.forecast || {})
+            }
+          };
+          measuredPromptTokens = geminiRes.promptTokens;
+          measuredCompletionTokens = geminiRes.completionTokens;
+          measuredTotalTokens = geminiRes.totalTokens;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (finalReport === analyticsBase.report && openRouterApiKey) {
+    try {
+      const orRes = await executeOpenRouterWithFallback({
+        apiKey: openRouterApiKey,
+        systemInstruction: ANALYTICS_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: promptText }],
+        maxTokens: parsed.maxTokens || 1400,
+        temperature: 0.5,
+        requestId: parsed.requestId,
+        serviceName: "BusinessAnalyticsAI",
+        userTier
+      });
+      if (orRes?.ok && orRes?.reply) {
+        const parsedReport = parseLlmJson(orRes.reply);
+        if (parsedReport && parsedReport.executive_summary) {
+          finalReport = {
+            ...analyticsBase.report,
+            ...parsedReport,
+            forecast: {
+              ...analyticsBase.report.forecast,
+              ...(parsedReport.forecast || {})
+            }
+          };
+          measuredPromptTokens = orRes.promptTokens;
+          measuredCompletionTokens = orRes.completionTokens;
+          measuredTotalTokens = orRes.totalTokens;
+        }
+      }
+    } catch (_) {}
+  }
+
   const tf = (parsed.timeframe || "90d").toLowerCase();
   const tfFactor = tf === "365d" ? 2.0 : tf === "180d" ? 1.75 : tf === "90d" ? 1.5 : tf === "60d" ? 1.25 : 1.0;
   const rowTokens = Math.ceil((parsed.csvText?.length || 200) / 4);
-  const totalTokens = Math.min(12000, Math.ceil((1200 + rowTokens) * tfFactor));
+  const totalTokens = measuredTotalTokens || Math.min(12000, Math.ceil((1200 + rowTokens) * tfFactor));
 
   const usage = calculateUsageCredits({
     tier: userTier,
@@ -5195,13 +5325,249 @@ async function handleAnalyticsReport(request, env) {
   return json({
     ok: true,
     kpis: analyticsBase.kpis,
-    report: analyticsBase.report,
+    report: finalReport,
     tier: userTier,
     requestId: parsed.requestId,
     charged_credits: settlement.chargedCredits,
     remaining_credits: settlement.remainingCredits,
     tokens: usage.totalTokens
   });
+}
+
+// ----------------------------------------------------------------------------
+// HANDLER: Business Analytics URL / Sheets Ingestion (/api/analytics/fetch-url)
+// ----------------------------------------------------------------------------
+async function handleAnalyticsFetchUrl(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+
+  const parsedBody = await readRequestJson(request, 16384);
+  if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+
+  const rawUrl = typeof parsedBody.body?.url === "string" ? parsedBody.body.url.trim() : "";
+  if (!rawUrl) {
+    return json({ error: "Please enter a valid website URL or Google Sheets link." }, 400);
+  }
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `https://${rawUrl}`);
+  } catch {
+    return json({ error: "Invalid URL format. Please include http:// or https://" }, 400);
+  }
+
+  // 1. Google Sheets Detection & Automated CSV Export Conversion
+  const isGoogleSheet = targetUrl.hostname.includes("docs.google.com") && targetUrl.pathname.includes("/spreadsheets/");
+
+  if (isGoogleSheet) {
+    let exportUrl = "";
+    const dMatch = targetUrl.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    const pubMatch = targetUrl.pathname.match(/\/spreadsheets\/d\/e\/([a-zA-Z0-9_-]+)/);
+
+    let gid = targetUrl.searchParams.get("gid") || "";
+    if (!gid && targetUrl.hash) {
+      const gidHashMatch = targetUrl.hash.match(/gid=([0-9]+)/);
+      if (gidHashMatch) gid = gidHashMatch[1];
+    }
+    const gidParam = gid ? `&gid=${gid}` : "";
+
+    if (pubMatch) {
+      exportUrl = `https://docs.google.com/spreadsheets/d/e/${pubMatch[1]}/pub?output=csv${gidParam}`;
+    } else if (dMatch) {
+      exportUrl = `https://docs.google.com/spreadsheets/d/${dMatch[1]}/export?format=csv${gidParam}`;
+    } else {
+      exportUrl = targetUrl.href.replace(/\/edit.*$/, "/export?format=csv") + gidParam;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9500);
+
+    try {
+      const res = await fetch(exportUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) JevexaAnalytics/2.0",
+          "Accept": "text/csv, text/plain, */*"
+        },
+        signal: controller.signal,
+        redirect: "follow"
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        return json({
+          error: `Google Sheets returned status ${res.status}. Please check permissions: set 'General access' to 'Anyone with the link' (Viewer).`
+        }, 400);
+      }
+
+      const text = await res.text();
+
+      // Check if redirected to HTML Google login page
+      if (text.includes("<!DOCTYPE html") && (text.includes('id="service-name"') || text.includes("accounts.google.com") || text.includes("Sign in - Google Accounts"))) {
+        return json({
+          error: "This Google Sheet is private or requires Google sign-in. In Google Sheets: click Share -> General Access -> change from 'Restricted' to 'Anyone with the link' (Viewer)."
+        }, 403);
+      }
+
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 2) {
+        return json({ error: "The Google Sheet appears empty or contains only a header row." }, 400);
+      }
+
+      return json({
+        ok: true,
+        type: "sheet",
+        title: "Google Sheets Live Import",
+        url: targetUrl.href,
+        exportUrl,
+        csv: text,
+        rowsCount: lines.length - 1
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      return json({
+        error: `Could not fetch Google Sheet (${err.name === "AbortError" ? "timeout after 9s" : err.message}). Please ensure the spreadsheet is public.`
+      }, 502);
+    }
+  }
+
+  // 2. Website / E-Commerce Store URL Scraping & Signal Extraction
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9500);
+  const startTime = Date.now();
+
+  try {
+    const res = await fetch(targetUrl.href, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 JevexaBot/2.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      },
+      signal: controller.signal,
+      redirect: "follow"
+    });
+    clearTimeout(timeout);
+    const latencyMs = Date.now() - startTime;
+
+    if (!res.ok) {
+      return json({
+        error: `Website returned status ${res.status} (${res.statusText}). Could not fetch store content.`
+      }, 400);
+    }
+
+    const html = await res.text();
+
+    // Extract Title & Meta Description
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : targetUrl.hostname;
+
+    const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                      html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+    const description = descMatch ? descMatch[1].trim() : "";
+
+    // OpenGraph & Meta Pricing
+    const ogPriceMatch = html.match(/<meta[^>]*property=["']og:price:amount["'][^>]*content=["']([^"']+)["']/i);
+    const ogCurrencyMatch = html.match(/<meta[^>]*property=["']og:price:currency["'][^>]*content=["']([^"']+)["']/i);
+
+    // Tech Stack Detection
+    const techStack = [];
+    if (/cdn\.shopify\.com|window\.Shopify|myshopify\.com/i.test(html)) techStack.push("Shopify");
+    if (/woocommerce|wc-block|wp-content\/plugins\/woocommerce/i.test(html)) techStack.push("WooCommerce");
+    if (/wp-content|wp-includes/i.test(html) && !techStack.includes("WooCommerce")) techStack.push("WordPress");
+    if (/js\.stripe\.com|stripe/i.test(html)) techStack.push("Stripe");
+    if (/cdn11\.bigcommerce\.com|bigcommerce/i.test(html)) techStack.push("BigCommerce");
+    if (/mage\/|magento/i.test(html)) techStack.push("Magento");
+    if (/webflow\.com|wf-/i.test(html)) techStack.push("Webflow");
+    if (/__NEXT_DATA__|\/_next\//i.test(html)) techStack.push("Next.js");
+    if (/react|data-reactroot/i.test(html) && !techStack.includes("Next.js")) techStack.push("React");
+    if (!techStack.length) techStack.push("Custom Web Stack");
+
+    // Product Pricing Signals & Structured JSON-LD
+    const detectedPrices = [];
+    const detectedProducts = [];
+
+    // Parse JSON-LD
+    const jsonLdMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+    for (const match of jsonLdMatches) {
+      try {
+        const rawJson = match.replace(/<\/?script[^>]*>/gi, "").trim();
+        const data = JSON.parse(rawJson);
+        const items = Array.isArray(data) ? data : [data];
+        for (const item of items) {
+          if (item?.["@type"] === "Product" || item?.["@type"] === "IndividualProduct") {
+            const name = item.name || "Product";
+            const price = item.offers?.price || item.offers?.[0]?.price || item.price;
+            if (price) {
+              const numPrice = parseFloat(String(price).replace(/[^0-9.]/g, ""));
+              if (!isNaN(numPrice) && numPrice > 0) {
+                detectedPrices.push(numPrice);
+                detectedProducts.push({ name, price: numPrice });
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Regex Price Detection if needed
+    const priceRegex = /(?:\$|£|€|PKR\s*|Rs\.?\s*)([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{2})?)/gi;
+    let pMatch;
+    while ((pMatch = priceRegex.exec(html)) !== null && detectedPrices.length < 30) {
+      const num = parseFloat(pMatch[1].replace(/,/g, ""));
+      if (!isNaN(num) && num >= 1 && num <= 50000 && !detectedPrices.includes(num)) {
+        detectedPrices.push(num);
+      }
+    }
+
+    // CTAs & Forms
+    const ctaRegex = /\b(add to cart|buy now|checkout|order now|subscribe|get started|shop now|purchase)\b/gi;
+    const ctaMatches = html.match(ctaRegex) || [];
+    const formsCount = (html.match(/<form/gi) || []).length;
+    const hasSsl = targetUrl.protocol === "https:";
+    const hasResponsiveMeta = /name=["']viewport["']/i.test(html);
+
+    // Estimated AOV
+    let estimatedAov = 65;
+    if (detectedPrices.length > 0) {
+      const sorted = [...detectedPrices].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      estimatedAov = Math.round(median);
+    }
+
+    // Readiness Score
+    let readinessScore = 50;
+    if (hasSsl) readinessScore += 10;
+    if (hasResponsiveMeta) readinessScore += 10;
+    if (techStack.some(t => ["Shopify", "WooCommerce", "Stripe", "BigCommerce"].includes(t))) readinessScore += 15;
+    if (ctaMatches.length > 0) readinessScore += 10;
+    if (latencyMs < 1000) readinessScore += 5;
+    readinessScore = Math.min(100, readinessScore);
+
+    return json({
+      ok: true,
+      type: "website",
+      url: targetUrl.href,
+      data: {
+        title,
+        description,
+        techStack,
+        latencyMs,
+        estimatedAov,
+        pricingCount: detectedPrices.length,
+        samplePrices: detectedPrices.slice(0, 8),
+        products: detectedProducts.slice(0, 10),
+        ctaCount: ctaMatches.length,
+        formsCount,
+        readinessScore,
+        currency: ogCurrencyMatch ? ogCurrencyMatch[1] : (html.includes("Rs") ? "PKR" : html.includes("£") ? "GBP" : html.includes("€") ? "EUR" : "USD")
+      }
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    return json({
+      error: `Could not fetch website (${err.name === "AbortError" ? "timeout after 9s" : err.message}). Please verify the domain is online.`
+    }, 502);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -6753,8 +7119,12 @@ export default {
       return handleSocialGenerate(request, env, ctx);
     }
 
-    if (url.pathname === "/api/analytics/report") {
+    if (url.pathname === "/api/analytics/report" || url.pathname === "/api/analytics/forecast") {
       return handleAnalyticsReport(request, env, ctx);
+    }
+
+    if (url.pathname === "/api/analytics/fetch-url") {
+      return handleAnalyticsFetchUrl(request, env, ctx);
     }
 
     if (url.pathname === "/api/team/members" || url.pathname.startsWith("/api/team/members/")) {

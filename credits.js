@@ -2515,18 +2515,48 @@
 
         const attachments = pendingAttachments.map(item => ({ ...item }));
         const displayText = text || `Attached: ${attachments.map(item => item.name).join(', ')}`;
-        const messageIndex = conversation.length;
 
-        // Render user bubble and show animated live status
-        appendMessage(displayText, true, messageIndex);
+        // Guarantee active session and user ID
+        historyUserId = session.user.id;
+        activeAuthUserId = session.user.id;
+        if (!activeChatId) {
+            activeChatId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            chatSessions.unshift({
+                id: activeChatId,
+                title: (text || 'New chat').slice(0, 48),
+                updatedAt: Date.now(),
+                pinned: false,
+                messages: []
+            });
+            try {
+                localStorage.setItem(activeChatKey(historyUserId), activeChatId);
+            } catch (_) {}
+        }
+
+        // Optimistically record user prompt in conversation and render user bubble immediately
+        conversation.push({ role: 'user', text: displayText });
+        const userMsgIndex = conversation.length - 1;
+        appendMessage(displayText, true, userMsgIndex);
         if (input) input.value = '';
         pendingAttachments.length = 0;
         renderAttachments();
+
+        // Update active session metadata and recent chats list
+        const activeSess = chatSessions.find(item => item.id === activeChatId);
+        if (activeSess) {
+            activeSess.messages = conversation.slice(-100);
+            activeSess.updatedAt = Date.now();
+            if (!activeSess.title || activeSess.title === 'New chat') {
+                activeSess.title = (text || 'New chat').slice(0, 48);
+            }
+            saveChatSessions();
+        }
+        renderChatHistory();
+
         showTyping();
         setStatus('Checking sign-in, tier access, and credit cost…');
 
         try {
-            loadConversation(session.user.id);
             if (await reconcilePendingRequest(session)) {
                 removeTyping();
                 return;
@@ -2609,8 +2639,11 @@
             if (wallet && Number(wallet.balance) < estimatedCredits) {
                 removeTyping();
                 const requiredPlanName = selectedTier === 'lite' ? 'Lite' : selectedTier === 'pro' ? 'Pro' : selectedTier === 'max' ? 'Max' : 'Ultra';
+                const warningMsg = `Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ~${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`;
                 setStatus(`This ${selectedTier.toUpperCase()} message costs ~${estimatedCredits} token-weighted credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
-                appendMessage(`Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ~${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`);
+                conversation.push({ role: 'assistant', text: warningMsg });
+                appendMessage(warningMsg, false, conversation.length - 1);
+                persistConversation(session.user.id);
                 if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                     window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlanName, 'additional AI credits');
                 }
@@ -2634,7 +2667,6 @@
 
                 removeTyping();
                 const replyText = String(result.reply || '').trim();
-                conversation.push({ role: 'user', text: displayText });
                 conversation.push({ role: 'assistant', text: replyText });
                 appendMessage(replyText, false, conversation.length - 1, result);
                 if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
@@ -2673,7 +2705,6 @@
                 await refreshDisplayedCredits();
                 if (error.payload?.reply) {
                     const replyText = String(error.payload.reply).trim();
-                    conversation.push({ role: 'user', text: displayText });
                     conversation.push({ role: 'assistant', text: replyText });
                     appendMessage(replyText, false, conversation.length - 1);
                     if (conversation.length > 16) conversation.splice(0, conversation.length - 16);

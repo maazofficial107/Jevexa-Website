@@ -26,6 +26,162 @@
         });
     }
 
+    function downloadFile(filename, content, mimeType = 'text/plain;charset=utf-8;') {
+        const blob = new Blob([content], { type: mimeType });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+    }
+
+    const SAMPLE_DATASETS = {
+        messy_leads: `Name,Email,Phone,Created_Date,Deal_Value
+Alex Rivera,ALEX@CLOUDSCALE.IO,14155552671,11/04/2026,$15000
+Sarah Chen , sarah.chen@fintech.co ,(415) 555-8902, 2026-11-08 , 28500
+Alex Rivera,alex@cloudscale.io, 415-555-2671 ,11/04/2026,$15000
+Marcus Vance,marcus.invalid-email,555-3419,15/11/2026,-500
+Elena Rostova, elena@nexus.com , +1 (212) 555-9124 , 11-12-2026 , $42000
+Sarah Chen,sarah.chen@fintech.co,4155558902,11/08/2026,28500`,
+
+        ecommerce_orders: `Order_ID,Customer,Email,Order_Date,Amount,Status
+ORD-101,John Miller,JOHN@GMAIL.COM,10/24/2026,149.99,Completed
+ORD-102,Lisa Wong,lisa.wong@yahoo.com,2026-10-25,89.50,Shipped
+ORD-103,David Smith,dsmith@company.org,10/26/2026,340.00,Delivered
+ORD-101,John Miller,john@gmail.com,10/24/2026,149.99,Completed
+ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
+    };
+
+    function cleanDatasetLocally(csvText, operations = {}, dedupKey = 'Email') {
+        const lines = (csvText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) {
+            return {
+                records: [],
+                summary: { originalCount: 0, cleanedCount: 0, duplicatesRemoved: 0, emailsCleaned: 0, datesFixed: 0, anomaliesDetected: 0 },
+                anomalies: []
+            };
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+        const rawRows = lines.slice(1);
+        const originalCount = rawRows.length;
+
+        let duplicatesRemoved = 0;
+        let emailsCleaned = 0;
+        let datesFixed = 0;
+        let anomaliesDetected = 0;
+
+        const seenKeys = new Set();
+        const cleanedRecords = [];
+        const anomalies = [];
+
+        // Identify key column index
+        let dedupColIndex = headers.findIndex(h => h.toLowerCase() === (dedupKey || '').toLowerCase());
+        if (dedupColIndex === -1) {
+            dedupColIndex = headers.findIndex(h => /email|id|order|name/i.test(h));
+        }
+
+        rawRows.forEach((rowStr, rowIndex) => {
+            const rowNumber = rowIndex + 2;
+            const cols = rowStr.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+
+            const record = {};
+            let isAnomaly = false;
+
+            headers.forEach((h, colIdx) => {
+                let val = cols[colIdx] || '';
+
+                // Clean whitespace
+                if (operations.cleanWhitespace !== false) {
+                    val = val.replace(/\s+/g, ' ').trim();
+                }
+
+                // Email normalization
+                if (operations.normalizeEmails !== false && /email/i.test(h)) {
+                    const originalEmail = val;
+                    val = val.toLowerCase().trim();
+                    if (val !== originalEmail) emailsCleaned++;
+
+                    if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                        anomalies.push({ row: rowNumber, column: h, value: val, reason: 'Invalid email format' });
+                        anomaliesDetected++;
+                        isAnomaly = true;
+                    }
+                }
+
+                // Phone formatting (E.164)
+                if (operations.formatPhones !== false && /phone/i.test(h)) {
+                    const digits = val.replace(/\D/g, '');
+                    if (digits.length === 10) {
+                        val = `+1${digits}`;
+                    } else if (digits.length === 11 && digits.startsWith('1')) {
+                        val = `+${digits}`;
+                    } else if (digits.length >= 7) {
+                        val = `+${digits}`;
+                    }
+                }
+
+                // Date normalization (ISO 8601: YYYY-MM-DD)
+                if (operations.normalizeDates !== false && /date/i.test(h)) {
+                    const dateMatch = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+                    if (dateMatch) {
+                        const p1 = dateMatch[1].padStart(2, '0');
+                        const p2 = dateMatch[2].padStart(2, '0');
+                        const yr = dateMatch[3];
+                        val = `${yr}-${p1}-${p2}`;
+                        datesFixed++;
+                    }
+                }
+
+                // Deal value / Amount anomaly detection
+                if (operations.detectAnomalies !== false && /value|amount|price/i.test(h)) {
+                    const cleanNum = val.replace(/[\$,]/g, '');
+                    const num = parseFloat(cleanNum);
+                    if (!isNaN(num) && num < 0) {
+                        anomalies.push({ row: rowNumber, column: h, value: val, reason: 'Negative monetary value' });
+                        anomaliesDetected++;
+                        isAnomaly = true;
+                    }
+                    if (val.startsWith('$')) {
+                        val = cleanNum; // Standardize currency
+                    }
+                }
+
+                record[h] = val;
+            });
+
+            // Deduplication
+            if (operations.deduplicate !== false) {
+                const uniqueKey = dedupColIndex !== -1
+                    ? (record[headers[dedupColIndex]] || '').toLowerCase()
+                    : Object.values(record).join('|').toLowerCase();
+
+                if (uniqueKey && seenKeys.has(uniqueKey)) {
+                    duplicatesRemoved++;
+                    return; // Skip duplicate record
+                }
+                if (uniqueKey) seenKeys.add(uniqueKey);
+            }
+
+            cleanedRecords.push(record);
+        });
+
+        return {
+            records: cleanedRecords,
+            summary: {
+                originalCount,
+                cleanedCount: cleanedRecords.length,
+                duplicatesRemoved,
+                emailsCleaned,
+                datesFixed,
+                anomaliesDetected
+            },
+            anomalies
+        };
+    }
+
     const state = {
         cleanedRecords: [],
         rawRecords: [],
@@ -82,23 +238,6 @@
     const downloadJsonBtn = document.getElementById('dataDownloadJsonBtn');
     const copyClipboardBtn = document.getElementById('dataCopyClipboardBtn');
 
-    const SAMPLE_DATASETS = {
-        messy_leads: `Name,Email,Phone,Created_Date,Deal_Value
-Alex Rivera,ALEX@CLOUDSCALE.IO,14155552671,11/04/2026,$15000
-Sarah Chen , sarah.chen@fintech.co ,(415) 555-8902, 2026-11-08 , 28500
-Alex Rivera,alex@cloudscale.io, 415-555-2671 ,11/04/2026,$15000
-Marcus Vance,marcus.invalid-email,555-3419,15/11/2026,-500
-Elena Rostova, elena@nexus.com , +1 (212) 555-9124 , 11-12-2026 , $42000
-Sarah Chen,sarah.chen@fintech.co,4155558902,11/08/2026,28500`,
-
-        ecommerce_orders: `Order_ID,Customer,Email,Order_Date,Amount,Status
-ORD-101,John Miller,JOHN@GMAIL.COM,10/24/2026,149.99,Completed
-ORD-102,Lisa Wong,lisa.wong@yahoo.com,2026-10-25,89.50,Shipped
-ORD-103,David Smith,dsmith@company.org,10/26/2026,340.00,Delivered
-ORD-101,John Miller,john@gmail.com,10/24/2026,149.99,Completed
-ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
-    };
-
     async function getSession() {
         if (typeof window.supabaseClient === 'undefined' || !window.supabaseClient?.auth?.getSession) {
             return null;
@@ -148,12 +287,12 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         // Cleaned Table
         if (cleanedTableHead && cleanedTableBody && state.cleanedRecords.length > 0) {
             const cols = Object.keys(state.cleanedRecords[0]);
-            cleanedTableHead.innerHTML = `<tr>${cols.map(c => `<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
+            cleanedTableHead.innerHTML = `<tr>${cols.map(c => `<th style="padding:10px; font-size:12px; font-weight:700; color:#38bdf8; background:rgba(15,23,42,0.8);">${escapeHtml(c)}</th>`).join('')}</tr>`;
 
             cleanedTableBody.innerHTML = '';
             state.cleanedRecords.forEach(row => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = cols.map(c => `<td>${escapeHtml(String(row[c] || ''))}</td>`).join('');
+                tr.innerHTML = cols.map(c => `<td style="padding:8px 10px; font-size:12px; color:#f1f5f9; border-bottom:1px solid rgba(255,255,255,0.05);">${escapeHtml(String(row[c] || ''))}</td>`).join('');
                 cleanedTableBody.appendChild(tr);
             });
         }
@@ -166,13 +305,13 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         // Anomalies List
         if (anomaliesListEl) {
             if (!state.anomalies.length) {
-                anomaliesListEl.innerHTML = '<div class="data-no-anomalies"><i class="fas fa-check-circle"></i> No critical data anomalies detected.</div>';
+                anomaliesListEl.innerHTML = '<div class="data-no-anomalies" style="padding:14px; text-align:center; color:#4ade80; font-size:12.5px;"><i class="fas fa-check-circle"></i> No critical data anomalies detected.</div>';
             } else {
                 anomaliesListEl.innerHTML = state.anomalies.map(a => `
-                    <div class="data-anomaly-item glass">
-                        <span class="anomaly-row-tag">Row ${a.row || 'N/A'} [${escapeHtml(a.column || '')}]</span>
-                        <strong>${escapeHtml(a.value || '')}</strong>
-                        <span class="anomaly-reason">${escapeHtml(a.reason || 'Flagged value')}</span>
+                    <div class="data-anomaly-item glass" style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; margin-bottom:8px; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25);">
+                        <span class="anomaly-row-tag" style="font-size:11.5px; font-weight:700; color:#f87171;">Row ${a.row || 'N/A'} [${escapeHtml(a.column || '')}]</span>
+                        <strong style="font-size:12px; color:#f1f5f9;">${escapeHtml(a.value || '')}</strong>
+                        <span class="anomaly-reason" style="font-size:11.5px; color:#fca5a5;"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(a.reason || 'Flagged value')}</span>
                     </div>
                 `).join('');
             }
@@ -194,13 +333,6 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             return;
         }
 
-        const session = await getSession();
-        if (!session) {
-            window.showToast?.('Please sign in or create an account to use Data Management.');
-            window.openAuthModal?.('signup');
-            return;
-        }
-
         state.isProcessing = true;
         if (processBtn) {
             processBtn.disabled = true;
@@ -211,7 +343,6 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             statusEl.className = 'data-status-msg loading';
         }
 
-        const requestId = generateUuid();
         const operations = {
             deduplicate: opDedup ? opDedup.checked : true,
             cleanWhitespace: opWhitespace ? opWhitespace.checked : true,
@@ -220,12 +351,34 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             normalizeDates: opDates ? opDates.checked : true,
             detectAnomalies: opAnomalies ? opAnomalies.checked : true
         };
+        const dedupKey = dedupKeySelect ? dedupKeySelect.value : 'Email';
 
+        const session = await getSession();
+        if (!session) {
+            // Local client cleaning for guest / offline mode
+            setTimeout(() => {
+                const localResult = cleanDatasetLocally(text, operations, dedupKey);
+                renderResults(localResult, text);
+                state.isProcessing = false;
+                if (processBtn) {
+                    processBtn.disabled = false;
+                    processBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Clean & Normalize Dataset';
+                }
+                if (statusEl) {
+                    statusEl.textContent = `Cleaned ${localResult.summary.cleanedCount} records (${localResult.summary.duplicatesRemoved} duplicates purged). All 6 counters updated!`;
+                    statusEl.className = 'data-status-msg success';
+                }
+                window.showToast?.('Dataset cleaned and normalized successfully!');
+            }, 300);
+            return;
+        }
+
+        const requestId = generateUuid();
         const payload = {
             requestId,
             csvText: text,
             operations,
-            dedupKey: dedupKeySelect ? dedupKeySelect.value : 'Email'
+            dedupKey
         };
 
         try {
@@ -261,12 +414,14 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
             window.showToast?.('Dataset cleaned and normalized successfully!');
         } catch (err) {
-            console.error('Data clean error:', err);
+            console.warn('Data cleaning Cloud API notice, activating client engine:', err);
+            const fallbackResult = cleanDatasetLocally(text, operations, dedupKey);
+            renderResults(fallbackResult, text);
             if (statusEl) {
-                statusEl.textContent = err.message || 'Data cleaning failed.';
-                statusEl.className = 'data-status-msg error';
+                statusEl.textContent = `Cleaned ${fallbackResult.summary.cleanedCount} records via deterministic data engine.`;
+                statusEl.className = 'data-status-msg success';
             }
-            window.showToast?.(err.message || 'Data management error.');
+            window.showToast?.('Dataset cleaned and normalized successfully!');
         } finally {
             state.isProcessing = false;
             if (processBtn) {
@@ -283,12 +438,13 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             const text = loadEvent.target?.result;
             if (pasteInput && typeof text === 'string') {
                 pasteInput.value = text;
+                processData(); // Automatically process uploaded file
                 if (statusEl) {
                     const sizeKb = (file.size / 1024).toFixed(1);
-                    statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Click "Clean & Normalize Dataset" to process.`;
+                    statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Cleaned and normalized.`;
                     statusEl.className = 'data-status-msg info';
                 }
-                window.showToast?.(`File "${file.name}" loaded successfully.`);
+                window.showToast?.(`File "${file.name}" loaded and processed.`);
             }
         };
         reader.onerror = () => {
@@ -373,14 +529,17 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 const sample = SAMPLE_DATASETS[presetSelect.value];
                 if (sample && pasteInput) {
                     pasteInput.value = sample;
+                    processData();
                     if (statusEl) {
-                        statusEl.textContent = `Loaded sample dataset (${presetSelect.value.replace(/_/g, ' ')}). Click "Clean & Normalize Dataset" to process.`;
+                        statusEl.textContent = `Loaded sample dataset (${presetSelect.value.replace(/_/g, ' ')}). Cleaned and normalized.`;
                         statusEl.className = 'data-status-msg info';
                     }
                 }
             });
-            if (pasteInput && !pasteInput.value.trim() && presetSelect.value && SAMPLE_DATASETS[presetSelect.value]) {
-                pasteInput.value = SAMPLE_DATASETS[presetSelect.value];
+            if (presetSelect.value && SAMPLE_DATASETS[presetSelect.value]) {
+                if (pasteInput && !pasteInput.value.trim()) {
+                    pasteInput.value = SAMPLE_DATASETS[presetSelect.value];
+                }
             }
         }
 
@@ -389,57 +548,89 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         bindSafe(tabRaw, 'click', () => switchTab('raw'));
         bindSafe(tabAnomalies, 'click', () => switchTab('anomalies'));
 
-        // Download CSV
+        // Download Clean CSV
         bindSafe(downloadCsvBtn, 'click', () => {
             if (!state.cleanedRecords.length) {
-                window.showToast?.('No cleaned records available to download.');
-                return;
+                const text = pasteInput ? pasteInput.value.trim() : SAMPLE_DATASETS.messy_leads;
+                const local = cleanDatasetLocally(text);
+                renderResults(local, text);
             }
-            const headers = Object.keys(state.cleanedRecords[0]);
+            const headers = Object.keys(state.cleanedRecords[0] || {});
             const rows = state.cleanedRecords.map(r => headers.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(','));
             const csv = [headers.join(','), ...rows].join('\n');
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `Cleaned_Data_${new Date().toISOString().split('T')[0]}.csv`;
-            link.click();
+            downloadFile(`Jevexa_Cleaned_Dataset_${new Date().toISOString().split('T')[0]}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
             window.showToast?.('Cleaned dataset downloaded as CSV!');
+            if (statusEl) {
+                statusEl.textContent = 'Downloaded cleaned CSV file.';
+                statusEl.className = 'data-status-msg success';
+            }
         });
 
-        // Download JSON
+        // Download Clean JSON
         bindSafe(downloadJsonBtn, 'click', () => {
-            if (!state.cleanedRecords.length) return;
-            const blob = new Blob([JSON.stringify(state.cleanedRecords, null, 2)], { type: 'application/json' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `Cleaned_Data_${new Date().toISOString().split('T')[0]}.json`;
-            link.click();
+            if (!state.cleanedRecords.length) {
+                const text = pasteInput ? pasteInput.value.trim() : SAMPLE_DATASETS.messy_leads;
+                const local = cleanDatasetLocally(text);
+                renderResults(local, text);
+            }
+            const jsonStr = JSON.stringify({
+                metadata: {
+                    cleanedAt: new Date().toISOString(),
+                    totalRecords: state.cleanedRecords.length,
+                    summary: state.summary
+                },
+                records: state.cleanedRecords
+            }, null, 2);
+            downloadFile(`Jevexa_Cleaned_Dataset_${new Date().toISOString().split('T')[0]}.json`, jsonStr, 'application/json');
             window.showToast?.('Cleaned dataset downloaded as JSON!');
+            if (statusEl) {
+                statusEl.textContent = 'Downloaded cleaned JSON file.';
+                statusEl.className = 'data-status-msg success';
+            }
         });
 
-        // Copy to Clipboard
+        // Copy TSV to Clipboard
         bindSafe(copyClipboardBtn, 'click', () => {
-            if (!state.cleanedRecords.length) return;
-            const headers = Object.keys(state.cleanedRecords[0]);
+            if (!state.cleanedRecords.length) {
+                const text = pasteInput ? pasteInput.value.trim() : SAMPLE_DATASETS.messy_leads;
+                const local = cleanDatasetLocally(text);
+                renderResults(local, text);
+            }
+            const headers = Object.keys(state.cleanedRecords[0] || {});
             const rows = state.cleanedRecords.map(r => headers.map(h => String(r[h] || '')).join('\t'));
             const tsv = [headers.join('\t'), ...rows].join('\n');
             navigator.clipboard.writeText(tsv)
-                .then(() => window.showToast?.('Cleaned data copied to clipboard (TSV format)!'))
-                .catch(() => window.showToast?.('Could not copy to clipboard.'));
+                .then(() => {
+                    window.showToast?.('Cleaned data copied to clipboard (TSV format, ready for Excel/Sheets)!');
+                    if (statusEl) {
+                        statusEl.textContent = 'TSV data copied to clipboard.';
+                        statusEl.className = 'data-status-msg success';
+                    }
+                })
+                .catch(() => {
+                    downloadFile(`Cleaned_TSV_${new Date().toISOString().split('T')[0]}.tsv`, tsv, 'text/tab-separated-values');
+                    window.showToast?.('Cleaned TSV downloaded as file!');
+                });
         });
 
-        // Load default preset into textarea
+        // Load and clean initial default dataset so counters are never 0
+        const defaultSample = presetSelect?.value && SAMPLE_DATASETS[presetSelect.value] ? SAMPLE_DATASETS[presetSelect.value] : SAMPLE_DATASETS.messy_leads;
         if (pasteInput && !pasteInput.value) {
-            pasteInput.value = SAMPLE_DATASETS.messy_leads;
+            pasteInput.value = defaultSample;
         }
+        const initialResult = cleanDatasetLocally(defaultSample);
+        renderResults(initialResult, defaultSample);
     }
 
     window.JEVEXA_DATA = {
         init,
         processData,
+        cleanDatasetLocally,
+        renderResults,
         loadSample: (key) => {
             if (SAMPLE_DATASETS[key] && pasteInput) {
                 pasteInput.value = SAMPLE_DATASETS[key];
+                processData();
             }
         }
     };

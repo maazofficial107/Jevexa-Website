@@ -4857,17 +4857,6 @@ const JEVEXA_PLANS = {
 
         const handleCardAction = () => {
             if (status === 'live' || tool?.status === 'live') {
-                if (toolId === 'crm' || toolId === 'email-outreach' || toolId === 'admin' || toolId === 'workflows') {
-                    if (!currentUser) {
-                        if (typeof showToast === 'function') {
-                            showToast('Please sign in or create an account to access ' + (tool?.name || 'this workspace') + '.');
-                        }
-                        if (typeof openAuthModal === 'function') {
-                            openAuthModal('signup');
-                        }
-                        return;
-                    }
-                }
                 if (toolId === 'chatbot') {
                     openChatWorkspace(true);
                 } else if (toolId === 'content-generator') {

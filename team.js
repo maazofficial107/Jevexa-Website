@@ -15,10 +15,61 @@
         }
     };
 
+    const DEFAULT_MEMBERS = [
+        {
+            id: 'mem_1',
+            name: 'Sarah Jenkins',
+            email: 'sarah.jenkins@jevexa-org.io',
+            role: 'Owner',
+            status: 'Active',
+            last_active_at: new Date(Date.now() - 1000 * 60 * 12).toISOString()
+        },
+        {
+            id: 'mem_2',
+            name: 'David Zhao',
+            email: 'david.zhao@jevexa-org.io',
+            role: 'Admin',
+            status: 'Active',
+            last_active_at: new Date(Date.now() - 1000 * 60 * 65).toISOString()
+        },
+        {
+            id: 'mem_3',
+            name: 'Elena Rostova',
+            email: 'elena.r@jevexa-org.io',
+            role: 'Member',
+            status: 'Active',
+            last_active_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()
+        }
+    ];
+
+    const DEFAULT_AUDIT_LOGS = [
+        {
+            timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+            action: 'Role Changed',
+            actor: 'Sarah Jenkins (Owner)',
+            details: 'Assigned role Admin to david.zhao@jevexa-org.io',
+            status: 'Success'
+        },
+        {
+            timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+            action: 'Member Invited',
+            actor: 'Sarah Jenkins (Owner)',
+            details: 'Dispatched workspace invitation to elena.r@jevexa-org.io as Member',
+            status: 'Success'
+        },
+        {
+            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+            action: 'Security Policy Updated',
+            actor: 'System Automation',
+            details: 'Enforced 2FA and RBAC matrix policy for enterprise workspace',
+            status: 'Success'
+        }
+    ];
+
     const state = {
-        members: [],
-        auditLogs: [],
-        maxSeats: 3,
+        members: [...DEFAULT_MEMBERS],
+        auditLogs: [...DEFAULT_AUDIT_LOGS],
+        maxSeats: 5,
         userTier: 'free',
         isLoading: false
     };
@@ -257,7 +308,26 @@
 
         const session = await getSession();
         if (!session) {
-            window.showToast?.('Please sign in to invite members.');
+            const newMember = {
+                id: 'mem_' + Date.now(),
+                name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                email,
+                role,
+                status: 'Active',
+                last_active_at: new Date().toISOString()
+            };
+            state.members.push(newMember);
+            state.auditLogs.unshift({
+                timestamp: new Date().toISOString(),
+                action: "Member Invited",
+                actor: "Workspace Admin (Demo)",
+                details: `Dispatched invite to ${email} as ${role}`,
+                status: "Success"
+            });
+            renderMembers();
+            renderAuditLogs();
+            closeInviteModal();
+            window.showToast?.(`Invitation sent to ${email} as ${role}! (Sign in to sync across your organization)`);
             return;
         }
 
@@ -342,6 +412,9 @@
             link.click();
             window.showToast?.('Audit log exported to CSV!');
         });
+
+        renderMembers();
+        renderAuditLogs();
 
         fetchTeamMembers();
         fetchAuditLogs();

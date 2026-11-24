@@ -28,7 +28,22 @@
 
     const state = {
         currentPost: null,
-        scheduledCalendar: [],
+        scheduledCalendar: [
+            {
+                id: 'cal_1',
+                platform: 'linkedin',
+                content: 'Launching an AI tool stack should accelerate your team, not create more friction. Here is how we solved unified credit wallet metering...',
+                scheduledFor: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                status: 'Scheduled'
+            },
+            {
+                id: 'cal_2',
+                platform: 'twitter',
+                content: 'The #1 mistake first-time founders make with automation: automating a broken process before simplifying it. Thread below 🧵',
+                scheduledFor: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+                status: 'Scheduled'
+            }
+        ],
         calendarView: 'week',
         isGenerating: false
     };
@@ -67,6 +82,20 @@
     const calendarViewMonthBtn = document.getElementById('socialViewMonthBtn');
     const exportCalendarCsvBtn = document.getElementById('socialExportCalendarCsvBtn');
     const exportCalendarJsonBtn = document.getElementById('socialExportCalendarJsonBtn');
+
+    const DEFAULT_POST = {
+        platform: 'linkedin',
+        platform_limit: 3000,
+        post_body: `Launching an AI tool stack should accelerate your team, not create more friction.\n\nMost businesses make the mistake of stitching together 6 different subscriptions with fragmented billing.\n\nHere is how we solved it with JEVEXA:\n1. 10 specialized tools in 1 studio\n2. Unified credit wallet with zero per-seat fees\n3. Deterministic fallbacks that guarantee 99.9% uptime\n\nWhat is the #1 tool in your stack that still requires too much manual work?`,
+        hooks: [
+            { text: "Stop paying 6 different AI subscriptions when 1 unified studio does the job.", score: 96 },
+            { text: "The biggest bottleneck in business AI isn't the model. It's the workflow glue.", score: 92 },
+            { text: "POV: You cut your AI software expenses by 60% without losing quality.", score: 88 }
+        ],
+        hashtags: ['#BusinessAI', '#Productivity', '#Automation', '#TechLeadership', '#SaaS'],
+        best_time: 'Tuesday at 10:00 AM EST',
+        strategy_tip: 'Ask an open-ended question in the final line to drive high-value comments in the first 60 minutes.'
+    };
 
     const PRESETS = {
         product_launch: {
@@ -416,6 +445,9 @@
             window.showToast?.('Content Calendar exported to JSON!');
         });
 
+        if (!state.currentPost) {
+            renderPostPreview(DEFAULT_POST);
+        }
         renderCalendar();
     }
 

@@ -818,10 +818,36 @@
         getCurrentSequence: () => state.currentSequence
     };
 
+    const DEFAULT_SEQUENCE = {
+        initial: {
+            subject: 'Scaling CloudScale Inc with autonomous AI workflows',
+            alternative_subject: 'Quick question regarding CloudScale Inc operations',
+            body: `Hi Alex,\n\nI noticed CloudScale Inc is scaling its infrastructure offerings. When rapidly growing B2B teams expand, outbound personalization and document workflows often create operational bottlenecks.\n\nAt JEVEXA, we built an integrated 10-tool AI studio that automates customer outreach, lead scoring, and contract extraction with high reliability.\n\nWould you be open to a 10-minute chat this Thursday at 2 PM to explore how this fits into your current workflow?\n\nBest regards,\nYour Name\nJEVEXA AI Studio`
+        },
+        followup_1: {
+            day: 'Day 3',
+            subject: 'Re: Scaling CloudScale Inc with autonomous AI workflows',
+            body: `Hi Alex,\n\nFollowing up on my note from Tuesday. We recently helped a similar B2B tech company automate 80% of their routine lead qualification and follow-up sequences, cutting response times from 4 hours to under 3 minutes.\n\nHappy to share the 1-page architecture breakdown if you are interested.\n\nBest,\nYour Name`
+        },
+        followup_2: {
+            day: 'Day 7',
+            subject: 'Final note: CloudScale Inc & AI automation',
+            body: `Hi Alex,\n\nI realize you are likely heads-down scaling the business, so I will pause my outreach here.\n\nIf you ever look to streamline customer data extraction and automated outreach without managing multiple disjointed tools, feel free to reach out anytime at jevexa.net.\n\nWishing you and CloudScale Inc continued growth!\n\nBest,\nYour Name`
+        }
+    };
+
     function checkAutoMount() {
         loadCachedSequences();
         initEvents();
         loadCrmLeads();
+        if (!state.currentSequence) {
+            state.currentSequence = JSON.parse(JSON.stringify(DEFAULT_SEQUENCE));
+            if (recipientNameInput && !recipientNameInput.value) recipientNameInput.value = 'Alex Rivera';
+            if (companyInput && !companyInput.value) companyInput.value = 'CloudScale Inc';
+            if (roleInput && !roleInput.value) roleInput.value = 'VP of Operations';
+            if (valuePropInput && !valuePropInput.value) valuePropInput.value = 'Scale operational productivity and qualification speed with AI automation.';
+            switchStep(1);
+        }
         if (workspace && (!workspace.hidden || workspace.classList.contains('open') || window.location.pathname === '/tools/outreach')) {
             loadSavedSequences();
         }

@@ -70,6 +70,9 @@
                     <span>Back to Studio</span>
                     <i class="fas fa-arrow-right"></i>
                 </a>
+                <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Open navigation menu" aria-controls="navLinks" aria-expanded="false">
+                    <span></span><span></span><span></span>
+                </button>
             </div>
         </div>
     </nav>
@@ -195,5 +198,44 @@
             </div>
         </div>
     </footer>
+
+    <script>
+        (function() {
+            const toggle = document.getElementById('mobileToggle');
+            const navLinks = document.getElementById('navLinks');
+            if (!toggle || !navLinks) return;
+
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = navLinks.classList.toggle('open');
+                toggle.classList.toggle('active', isOpen);
+                toggle.setAttribute('aria-expanded', String(isOpen));
+            });
+
+            document.addEventListener('click', (e) => {
+                if (navLinks.classList.contains('open') && !navLinks.contains(e.target) && !toggle.contains(e.target)) {
+                    navLinks.classList.remove('open');
+                    toggle.classList.remove('active');
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && navLinks.classList.contains('open')) {
+                    navLinks.classList.remove('open');
+                    toggle.classList.remove('active');
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            navLinks.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', () => {
+                    navLinks.classList.remove('open');
+                    toggle.classList.remove('active');
+                    toggle.setAttribute('aria-expanded', 'false');
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

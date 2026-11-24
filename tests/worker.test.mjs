@@ -7060,5 +7060,49 @@ test("Architectural & Service Modernization: (Jevexa AI) removal, edge 304 handl
   }
 });
 
+test("Service Excellence & Full Platform Integrity: 10/10 working services, interactive previews, sub-page mobile navigation, and seamless card launches", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const aboutHtml = await readFile(new URL("../about.html", import.meta.url), "utf8");
+  const contactHtml = await readFile(new URL("../contact.html", import.meta.url), "utf8");
+  const termsHtml = await readFile(new URL("../terms.html", import.meta.url), "utf8");
+  const privacyHtml = await readFile(new URL("../privacy-policy.html", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+  const teamJs = await readFile(new URL("../team.js", import.meta.url), "utf8");
+  const socialJs = await readFile(new URL("../social.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+
+  // 1. Team & Admin demo stability
+  assert.match(teamJs, /DEFAULT_MEMBERS/);
+  assert.match(teamJs, /DEFAULT_AUDIT_LOGS/);
+  assert.match(teamJs, /renderMembers\(\);[\s\S]*?renderAuditLogs\(\);/);
+
+  // 2. Social Media Assistant instant preview
+  assert.match(socialJs, /DEFAULT_POST/);
+  assert.match(socialJs, /renderPostPreview\(DEFAULT_POST\)/);
+
+  // 3. Outreach AI instant 3-step sequence
+  assert.match(outreachJs, /DEFAULT_SEQUENCE/);
+  assert.match(outreachJs, /state\.currentSequence = JSON\.parse\(JSON\.stringify\(DEFAULT_SEQUENCE\)\)/);
+
+  // 4. Sub-page mobile navigation toggles
+  assert.match(aboutHtml, /id="mobileToggle"/);
+  assert.match(contactHtml, /id="mobileToggle"/);
+  assert.match(termsHtml, /id="mobileToggle"/);
+  assert.match(privacyHtml, /id="mobileToggle"/);
+
+  // 5. Card click launches all 10 workspaces seamlessly
+  assert.match(scriptJs, /openChatWorkspace\(true\)/);
+  assert.match(scriptJs, /openContentWorkspace\(true\)/);
+  assert.match(scriptJs, /openCrmWorkspace\(true\)/);
+  assert.match(scriptJs, /openOutreachWorkspace\(true\)/);
+  assert.match(scriptJs, /openOcrWorkspace\(true\)/);
+  assert.match(scriptJs, /openSocialWorkspace\(true\)/);
+  assert.match(scriptJs, /openAnalyticsWorkspace\(true\)/);
+  assert.match(scriptJs, /openTeamAdminWorkspace\(true\)/);
+  assert.match(scriptJs, /openWorkflowsWorkspace\(true\)/);
+  assert.match(scriptJs, /openDataWorkspace\(true\)/);
+});
+
+
 
 

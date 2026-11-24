@@ -10376,6 +10376,7 @@ body.chat-is-resizing {
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -11114,6 +11115,7 @@ body.coming-soon-open {
     font-size: 13px;
     background: linear-gradient(135deg, #a78bfa, #38bdf8);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: liveIconPulse 2.4s ease-in-out infinite;
 }

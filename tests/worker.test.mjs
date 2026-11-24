@@ -463,6 +463,34 @@ test("browser Supabase configuration fails closed if staging settings are missin
   assert.match(await response.text(), /Supabase browser configuration/i);
 });
 
+test("browser Supabase configuration supports HEAD requests without body", async () => {
+  const headRequest = new Request("https://jevexa.test/config.js", { method: "HEAD" });
+  const response = await worker.fetch(headRequest, {
+    SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
+    SUPABASE_ANON_KEY: "production-publishable-key",
+    JEVEXA_ENVIRONMENT: "production"
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/javascript; charset=utf-8");
+  const body = await response.text();
+  assert.equal(body, "");
+});
+
+test("health endpoint supports HEAD requests without body", async () => {
+  const headRequest = new Request("https://jevexa.test/api/health", { method: "HEAD" });
+  const response = await worker.fetch(headRequest, {});
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+  const body = await response.text();
+  assert.equal(body, "");
+});
+
+test("pricing endpoint supports HEAD requests rejecting unauthenticated caller", async () => {
+  const headRequest = new Request("https://jevexa.test/api/credits/pricing", { method: "HEAD" });
+  const response = await worker.fetch(headRequest, {});
+  assert.equal(response.status, 503);
+});
+
 test("Wrangler project explicitly targets the production Worker", async () => {
   const config = JSON.parse(await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
   assert.equal(config.name, "jevexa-website");

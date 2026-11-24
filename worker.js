@@ -1999,7 +1999,7 @@ async function handleCreditQuote(request, env) {
 }
 
 async function handleCreditPricing(request, env) {
-  if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+  if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "Method not allowed." }, 405);
 
   let cfg;
   try {
@@ -5974,31 +5974,33 @@ function getSupabaseConfig(env) {
 }
 
 function handleClientConfig(request, env) {
-  if (request.method !== "GET") return new Response("Method not allowed.", { status: 405 });
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed.", { status: 405 });
 
   let cfg;
   try {
     cfg = getPublicSupabaseConfig(env);
   } catch {
-    return new Response("Supabase browser configuration is missing. Configure this Worker with its environment-specific HTTPS Supabase URL and publishable anon key.", {
+    return new Response(request.method === "HEAD" ? null : "Supabase browser configuration is missing. Configure this Worker with its environment-specific HTTPS Supabase URL and publishable anon key.", {
       status: 503,
       headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }
     });
   }
 
+  const body = `window.JEVEXA_SUPABASE_CONFIG=${JSON.stringify({
+    url: cfg.url,
+    anonKey: cfg.anon,
+    safepaySandboxEnabled: isStagingSandboxEnabled(env, cfg)
+      && [
+        env.SUPABASE_SERVICE_ROLE_KEY,
+        env.SAFEPAY_API_KEY,
+        env.SAFEPAY_SECRET_KEY,
+        env.SAFEPAY_WEBHOOK_SECRET
+      ]
+        .every(value => String(value || "").trim().length > 0)
+  })};`;
+
   return new Response(
-    `window.JEVEXA_SUPABASE_CONFIG=${JSON.stringify({
-      url: cfg.url,
-      anonKey: cfg.anon,
-      safepaySandboxEnabled: isStagingSandboxEnabled(env, cfg)
-        && [
-          env.SUPABASE_SERVICE_ROLE_KEY,
-          env.SAFEPAY_API_KEY,
-          env.SAFEPAY_SECRET_KEY,
-          env.SAFEPAY_WEBHOOK_SECRET
-        ]
-          .every(value => String(value || "").trim().length > 0)
-    })};`,
+    request.method === "HEAD" ? null : body,
     {
       headers: {
         "Cache-Control": "no-store",
@@ -6252,7 +6254,7 @@ async function handleSafepayWebhook(request, env) {
 }
 
 async function billingStatus(request, env) {
-  if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+  if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "Method not allowed." }, 405);
   let cfg;
   try { cfg = getSupabaseConfig(env); } catch { return json({ error: "Billing backend is not configured." }, 503); }
   const user = await getAuthenticatedUser(request, cfg);
@@ -6266,7 +6268,7 @@ async function billingStatus(request, env) {
 }
 
 async function handleAdminContacts(request, env) {
-  if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+  if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "Method not allowed." }, 405);
 
   const adminEmail = String(env.JEVEXA_ADMIN_EMAIL || "").trim().toLowerCase();
   if (!adminEmail) return json({ error: "Admin access is not configured." }, 503);
@@ -6593,15 +6595,22 @@ function secureAssetResponse(assetResponse, options = {}) {
   }
   secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  secured.headers.set("Accept-Ranges", "bytes");
 
-  if (options.mime) {
-    const currentType = secured.headers.get("Content-Type") || "";
-    if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
-      secured.headers.set("Content-Type", options.mime);
+  if (assetResponse.status === 304) {
+    secured.headers.delete("content-type");
+    secured.headers.delete("content-length");
+    secured.headers.delete("accept-ranges");
+  } else {
+    secured.headers.set("Accept-Ranges", "bytes");
+
+    if (options.mime) {
+      const currentType = secured.headers.get("Content-Type") || "";
+      if (!currentType || currentType === "application/octet-stream" || currentType.startsWith("text/plain")) {
+        secured.headers.set("Content-Type", options.mime);
+      }
+    } else if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
+      secured.headers.set("Content-Type", options.isHtml ? "text/html; charset=utf-8" : "text/plain; charset=utf-8");
     }
-  } else if (!secured.headers.has("Content-Type") || secured.headers.get("Content-Type") === "application/octet-stream") {
-    secured.headers.set("Content-Type", options.isHtml ? "text/html; charset=utf-8" : "text/plain; charset=utf-8");
   }
 
   if (options.cacheControl) {
@@ -6727,6 +6736,9 @@ export default {
       return handleAdminContacts(request, env, ctx);
     }
     if (url.pathname === "/api/health") {
+      if (request.method === "HEAD") {
+        return new Response(null, { status: 200, headers: JSON_HEADERS });
+      }
       let pricingStatus = "active";
       try {
         const cfg = getSupabaseConfig(env);

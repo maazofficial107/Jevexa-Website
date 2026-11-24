@@ -42,42 +42,111 @@ const urls = [
   'https://jevexa.net/api/health'
 ];
 
-async function checkUrl(url, maxRedirects = 3) {
+async function checkUrl(url, options = {}, maxRedirects = 3) {
+  const method = options.method || 'GET';
+  const customHeaders = options.headers || {};
   return new Promise((resolve) => {
-    https.get(url, { headers: { 'User-Agent': 'JevexaLiveVerification/2.0' } }, (res) => {
-      // Follow redirect if 301, 302, 307, 308
+    const req = https.request(url, {
+      method,
+      headers: {
+        'User-Agent': 'JevexaLiveVerification/2.0',
+        ...customHeaders
+      }
+    }, (res) => {
       if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
         const nextUrl = new URL(res.headers.location, url).toString();
-        return resolve(checkUrl(nextUrl, maxRedirects - 1));
+        return resolve(checkUrl(nextUrl, options, maxRedirects - 1));
       }
 
       let data = '';
-      res.on('data', chunk => { if (data.length < 500) data += chunk; });
+      res.on('data', chunk => { if (data.length < 5000) data += chunk; });
       res.on('end', () => {
         resolve({
           url,
+          method,
           status: res.statusCode,
           contentType: res.headers['content-type'] || 'none',
+          etag: res.headers['etag'] || null,
+          data,
           bytes: data.length
         });
       });
-    }).on('error', (err) => {
-      resolve({ url, status: 'ERROR', error: err.message });
     });
+    req.on('error', (err) => {
+      resolve({ url, method, status: 'ERROR', error: err.message, data: '' });
+    });
+    req.end();
   });
 }
 
 async function verifyLive() {
   console.log('=== Checking Live Status of jevexa.net across All 10 Services & Assets ===');
   let allOk = true;
+
+  // 1. GET Requests across all endpoints and assets
+  console.log('\n--- 1. GET Requests: Core Routes, 10 Workspaces & Client Scripts ---');
+  let stylesEtag = null;
   for (const url of urls) {
     const res = await checkUrl(url);
     const pass = res.status === 200 || res.status === 304;
     if (!pass) allOk = false;
+    if (url.endsWith('styles.css') && res.etag) {
+      stylesEtag = res.etag;
+    }
     console.log(`${pass ? '✅' : '❌'} ${res.status} [${res.contentType}] ${url}`);
   }
-  console.log('==========================================================================');
-  console.log(allOk ? 'ALL LIVE ENDPOINTS, WORKSPACES, AND ASSETS VERIFIED (200 OK)!' : 'SOME CHECKS RETURNED NON-200');
+
+  // 2. HEAD Requests
+  console.log('\n--- 2. HEAD Requests: Verification Probes ---');
+  const headUrls = [
+    'https://jevexa.net/',
+    'https://jevexa.net/config.js',
+    'https://jevexa.net/api/health',
+    'https://jevexa.net/tools/chatbot',
+    'https://jevexa.net/about',
+    'https://jevexa.net/styles.css'
+  ];
+  for (const hUrl of headUrls) {
+    const res = await checkUrl(hUrl, { method: 'HEAD' });
+    const pass = res.status === 200 && res.bytes === 0;
+    if (!pass) allOk = false;
+    console.log(`${pass ? '✅' : '❌'} HEAD ${res.status} [${res.contentType}] ${hUrl} (Body: ${res.bytes}b)`);
+  }
+
+  // 3. CORS Preflight OPTIONS
+  console.log('\n--- 3. CORS Preflight & Health Payload Integrity ---');
+  const optRes = await checkUrl('https://jevexa.net/api/health', { method: 'OPTIONS' });
+  const optPass = optRes.status === 204 || optRes.status === 200;
+  if (!optPass) allOk = false;
+  console.log(`${optPass ? '✅' : '❌'} OPTIONS ${optRes.status} https://jevexa.net/api/health`);
+
+  // 4. Conditional Request 304
+  if (stylesEtag) {
+    const condRes = await checkUrl('https://jevexa.net/styles.css', {
+      headers: { 'If-None-Match': stylesEtag }
+    });
+    const condPass = condRes.status === 304 || condRes.status === 200;
+    if (!condPass) allOk = false;
+    console.log(`${condPass ? '✅' : '❌'} CONDITIONAL ${condRes.status} https://jevexa.net/styles.css`);
+  }
+
+  // 5. Payload Validation
+  const healthRes = await checkUrl('https://jevexa.net/api/health');
+  let healthOk = false;
+  try {
+    const parsed = JSON.parse(healthRes.data);
+    healthOk = parsed.ok === true && parsed.service === 'jevexa-worker';
+  } catch (_) {}
+  if (!healthOk) allOk = false;
+  console.log(`${healthOk ? '✅' : '❌'} Health Payload Integrity: ${healthOk ? 'Valid' : 'Invalid'}`);
+
+  const configRes = await checkUrl('https://jevexa.net/config.js');
+  const configOk = configRes.data.includes('window.JEVEXA_SUPABASE_CONFIG');
+  if (!configOk) allOk = false;
+  console.log(`${configOk ? '✅' : '❌'} Config Script Content: ${configOk ? 'Valid' : 'Invalid'}`);
+
+  console.log('\n==========================================================================');
+  console.log(allOk ? 'ALL LIVE ENDPOINTS, WORKSPACES, HEAD & ASSETS VERIFIED (200 OK)!' : 'SOME CHECKS RETURNED NON-200');
   process.exit(allOk ? 0 : 1);
 }
 

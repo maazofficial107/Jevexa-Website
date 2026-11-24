@@ -7131,6 +7131,36 @@ test("Service Excellence & Full Platform Integrity: 10/10 working services, inte
   assert.match(scriptJs, /openDataWorkspace\(true\)/);
 });
 
+test("Enterprise Resilience & Export Suite: HEAD request probes, Gemini 2.5 cascade, and Workflow & Outreach exports", async () => {
+  const workerJs = await readFile(new URL("../worker.js", import.meta.url), "utf8");
+  const workflowsJs = await readFile(new URL("../workflows.js", import.meta.url), "utf8");
+  const outreachJs = await readFile(new URL("../outreach.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+
+  // 1. Gemini multi-model fallback includes production gemini-2.5-flash
+  assert.match(workerJs, /gemini-2\.5-flash/);
+  assert.match(workerJs, /getGeminiModelsForTier/);
+
+  // 2. HEAD method handling across endpoints
+  assert.match(workerJs, /request\.method === "HEAD"/);
+  assert.match(workerJs, /handleTeamMembers/);
+  assert.match(workerJs, /handleTeamAudit/);
+  assert.match(workerJs, /handleCrmLeads/);
+  assert.match(workerJs, /handleOutreachSequences/);
+
+  // 3. Workflow Automation exports (.json pipeline, .csv history runs)
+  assert.match(html, /id="workflowExportBtn"/);
+  assert.match(html, /id="workflowExportHistoryBtn"/);
+  assert.match(workflowsJs, /exportWorkflowJson/);
+  assert.match(workflowsJs, /exportRunsCsv/);
+
+  // 4. Outreach AI sequence export (.md format)
+  assert.match(html, /id="outreachExportBtn"/);
+  assert.match(outreachJs, /exportSequenceMarkdown/);
+  assert.match(outreachJs, /exportSequence:\s*exportSequenceMarkdown/);
+});
+
+
 
 
 

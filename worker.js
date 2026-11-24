@@ -719,11 +719,11 @@ function buildGroqMessages(history, userText) {
 
 function getGeminiModelsForTier(tier, env = {}) {
   const custom = typeof env?.GEMINI_MODEL === "string" ? env.GEMINI_MODEL.trim() : "";
-  if (custom) return [custom, GEMINI_FALLBACK_MODEL];
+  if (custom) return [custom, GEMINI_FALLBACK_MODEL, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
   if (tier === "pro" || tier === "max" || tier === "ultra") {
-    return ["gemini-3.5-flash", "gemini-3.5-flash-lite"];
+    return ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
   }
-  return [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL];
+  return [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 }
 
 function buildGeminiUserParts(message, attachments) {
@@ -821,7 +821,7 @@ async function executeGeminiWithFallback({
   generationConfig,
   requestId,
   serviceName = "AI",
-  models = [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL]
+  models = [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 }) {
   let lastStatus = 0;
   let lastData = null;
@@ -2024,6 +2024,9 @@ async function handleCreditPricing(request, env) {
     if (!response.ok || !Array.isArray(services)) {
       console.error("Credit pricing lookup failed:", response.status);
       return json({ error: "Service pricing is temporarily unavailable." }, 503);
+    }
+    if (request.method === "HEAD") {
+      return new Response(null, { status: 200, headers: JSON_HEADERS });
     }
     return json({ services });
   } catch (error) {
@@ -4141,7 +4144,10 @@ async function handleCrmLeads(request, env) {
 
   const url = new URL(request.url);
 
-  if (request.method === "GET") {
+  if (request.method === "GET" || request.method === "HEAD") {
+    if (request.method === "HEAD") {
+      return new Response(null, { status: 200, headers: JSON_HEADERS });
+    }
     try {
       const res = await sbRequest(
         cfg,
@@ -4311,7 +4317,10 @@ async function handleOutreachSequences(request, env) {
 
   const url = new URL(request.url);
 
-  if (request.method === "GET") {
+  if (request.method === "GET" || request.method === "HEAD") {
+    if (request.method === "HEAD") {
+      return new Response(null, { status: 200, headers: JSON_HEADERS });
+    }
     try {
       const res = await sbRequest(
         cfg,
@@ -5179,7 +5188,10 @@ async function handleTeamMembers(request, env) {
     last_active_at: new Date().toISOString()
   };
 
-  if (request.method === "GET") {
+  if (request.method === "GET" || request.method === "HEAD") {
+    if (request.method === "HEAD") {
+      return new Response(null, { status: 200, headers: JSON_HEADERS });
+    }
     try {
       const res = await sbRequest(cfg, `/rest/v1/team_members?workspace_user_id=eq.${encodeURIComponent(user.id)}&order=created_at.asc`);
       const rows = await readJsonResponse(res);
@@ -5274,6 +5286,7 @@ async function handleTeamAudit(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
   }
+  if (request.method !== "GET" && request.method !== "HEAD") return json({ error: "Method not allowed." }, 405);
 
   let cfg;
   try {
@@ -5289,6 +5302,10 @@ async function handleTeamAudit(request, env) {
     return json({ error: "Could not verify your session. Please sign in again." }, 503);
   }
   if (!user) return json({ error: "Please sign in to view audit logs." }, 401);
+
+  if (request.method === "HEAD") {
+    return new Response(null, { status: 200, headers: JSON_HEADERS });
+  }
 
   const userTier = await getUserAccountTier(user.id, cfg);
   const planCaps = TIER_PLAN_LIMITS[userTier] || TIER_PLAN_LIMITS.free;
@@ -6264,6 +6281,9 @@ async function billingStatus(request, env) {
   const response = await sbRequest(cfg, `/rest/v1/billing_orders?select=status,plan,billing_cycle,credits&user_id=eq.${encodeURIComponent(user.id)}&provider_order_id=eq.${encodeURIComponent(tracker)}&limit=1`);
   const rows = await response.json().catch(() => []);
   if (!response.ok) return json({ error: "Could not read order status." }, 502);
+  if (request.method === "HEAD") {
+    return new Response(null, { status: 200, headers: JSON_HEADERS });
+  }
   return json({ status: rows?.[0]?.status || "not_found", plan: rows?.[0]?.plan || null, credits: rows?.[0]?.credits || 0 });
 }
 
@@ -6309,6 +6329,9 @@ async function handleAdminContacts(request, env) {
   if (!response.ok || !Array.isArray(contacts)) {
     console.error("Admin contacts query rejected:", response.status);
     return json({ error: "Contact submissions are temporarily unavailable." }, 502);
+  }
+  if (request.method === "HEAD") {
+    return new Response(null, { status: 200, headers: JSON_HEADERS });
   }
   return json({ contacts });
 }

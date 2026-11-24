@@ -103,8 +103,22 @@ async function verifyLive() {
     'https://jevexa.net/config.js',
     'https://jevexa.net/api/health',
     'https://jevexa.net/tools/chatbot',
+    'https://jevexa.net/tools/content',
+    'https://jevexa.net/tools/ocr',
+    'https://jevexa.net/tools/social',
+    'https://jevexa.net/tools/analytics',
+    'https://jevexa.net/tools/admin',
+    'https://jevexa.net/tools/workflows',
+    'https://jevexa.net/tools/data',
+    'https://jevexa.net/tools/crm',
+    'https://jevexa.net/tools/outreach',
     'https://jevexa.net/about',
-    'https://jevexa.net/styles.css'
+    'https://jevexa.net/contact',
+    'https://jevexa.net/privacy-policy',
+    'https://jevexa.net/terms',
+    'https://jevexa.net/admin',
+    'https://jevexa.net/styles.css',
+    'https://jevexa.net/premium.css'
   ];
   for (const hUrl of headUrls) {
     const res = await checkUrl(hUrl, { method: 'HEAD' });

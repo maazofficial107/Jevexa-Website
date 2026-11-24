@@ -77,6 +77,7 @@
     const openGmailBtn = document.getElementById('outreachOpenGmailBtn');
     const copyEmailBtn = document.getElementById('outreachCopyEmailBtn');
     const syncCrmBtn = document.getElementById('outreachSyncCrmBtn');
+    const exportSeqBtn = document.getElementById('outreachExportBtn');
     const sequenceStatusPill = document.getElementById('outreachSequenceStatusPill');
 
     // Saved sequences history drawer
@@ -849,6 +850,7 @@
         bindSafe(openGmailBtn, 'click', handleOpenInGmail);
         bindSafe(copyEmailBtn, 'click', handleCopyEmail);
         bindSafe(syncCrmBtn, 'click', handleSyncCrm);
+        if (exportSeqBtn) bindSafe(exportSeqBtn, 'click', exportSequenceMarkdown);
 
         // History Drawer
         bindSafe(historyBtn, 'click', openHistoryDrawer);
@@ -886,6 +888,27 @@
         }
     }
 
+    function exportSequenceMarkdown() {
+        if (!state.currentSequence) {
+            window.showToast?.('Please generate a sequence first.');
+            return;
+        }
+        const pName = recipientNameInput?.value?.trim() || 'Prospect';
+        const pComp = companyInput?.value?.trim() || 'Company';
+        const seq = state.currentSequence;
+        const md = `# JEVEXA OUTREACH SEQUENCE\nProspect: ${pName} (${pComp})\nExported: ${new Date().toISOString()}\n\n---\n\n## Step 1: Initial Cold Email\n**Subject:** ${seq.initial?.subject || ''}\n${seq.initial?.alternative_subject ? `**Alternative Subject (A/B Test):** ${seq.initial.alternative_subject}\n` : ''}\n${seq.initial?.body || ''}\n\n---\n\n## Step 2: Day 3 Follow-up\n**Subject:** ${seq.followup_1?.subject || `Re: ${seq.initial?.subject || ''}`}\n\n${seq.followup_1?.body || ''}\n\n---\n\n## Step 3: Day 7 Breakup Email\n**Subject:** ${seq.followup_2?.subject || 'Final Check-In'}\n\n${seq.followup_2?.body || ''}\n`;
+        const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Jevexa_Outreach_Sequence_${pName.replace(/\s+/g, '_')}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        window.showToast?.('3-step sequence exported as Markdown file!');
+    }
+
     // Public API
     window.JEVEXA_OUTREACH = {
         init: () => {
@@ -897,6 +920,7 @@
         prefillLead: prefillLead,
         openWithLead: prefillLead,
         switchStep,
+        exportSequence: exportSequenceMarkdown,
         openHistoryDrawer,
         closeHistoryDrawer,
         getSequences: () => state.savedSequences,

@@ -477,6 +477,51 @@
         return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[s]);
     }
 
+    function exportWorkflowJson() {
+        const wf = {
+            name: state.currentWorkflow?.name || "Custom Pipeline",
+            template: templateSelect ? templateSelect.value : 'custom',
+            exportedAt: new Date().toISOString(),
+            steps: state.steps
+        };
+        const blob = new Blob([JSON.stringify(wf, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Jevexa_Workflow_${(state.currentWorkflow?.name || 'Pipeline').replace(/\s+/g, '_')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        window.showToast?.('Workflow exported as JSON file!');
+    }
+
+    function exportRunsCsv() {
+        if (!state.runs.length) {
+            window.showToast?.('No execution runs to export.');
+            return;
+        }
+        const headers = ['Workflow Name', 'Steps Count', 'Duration (ms)', 'Status', 'Timestamp'];
+        const rows = state.runs.map(r => [
+            `"${String(r.name).replace(/"/g, '""')}"`,
+            r.stepsCount,
+            r.durationMs,
+            `"${r.status}"`,
+            `"${r.timestamp}"`
+        ].join(','));
+        const csv = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Jevexa_Workflow_Runs_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        window.showToast?.('Workflow run history exported to CSV!');
+    }
+
     function init() {
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
@@ -487,6 +532,11 @@
 
         bindSafe(addStepBtn, 'click', addCustomStep);
         bindSafe(runWorkflowBtn, 'click', runWorkflow);
+
+        const exportBtn = document.getElementById('workflowExportBtn');
+        const exportHistoryBtn = document.getElementById('workflowExportHistoryBtn');
+        if (exportBtn) bindSafe(exportBtn, 'click', exportWorkflowJson);
+        if (exportHistoryBtn) bindSafe(exportHistoryBtn, 'click', exportRunsCsv);
 
         if (execModalClose) {
             bindSafe(execModalClose, 'click', () => {
@@ -525,7 +575,9 @@
         runWorkflow,
         addStep: addCustomStep,
         renderSteps,
-        renderHistory
+        renderHistory,
+        exportWorkflowJson,
+        exportRunsCsv
     };
 
     if (document.readyState === 'loading') {

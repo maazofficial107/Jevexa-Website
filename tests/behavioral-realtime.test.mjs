@@ -570,3 +570,20 @@ test('14. Full-Stack Behavioral: Event wiring, reactive counters, modal manageme
     assert.ok(!premiumCode.includes("SUPABASE_URL + '/rest/v1/Contacts'"), 'premium.js must not crash on raw SUPABASE_URL');
     assert.ok(premiumCode.includes("!window.JEVEXA_SAFE_INTERACTION"), 'premium.js yields newsletter handling to script.js');
 });
+
+test('15. Workflows & Outreach Exports: JSON pipeline export, run history CSV export, and sequence Markdown export', () => {
+    const workflowsCode = fs.readFileSync('workflows.js', 'utf8');
+    const outreachCode = fs.readFileSync('outreach.js', 'utf8');
+
+    // 1. Workflows JSON & CSV export handlers
+    assert.ok(workflowsCode.includes('exportWorkflowJson'), 'workflows.js defines exportWorkflowJson');
+    assert.ok(workflowsCode.includes('exportRunsCsv'), 'workflows.js defines exportRunsCsv');
+    assert.ok(workflowsCode.includes("download = `Jevexa_Workflow_"), 'workflows.js names workflow JSON download correctly');
+    assert.ok(workflowsCode.includes("download = `Jevexa_Workflow_Runs_"), 'workflows.js names run history CSV download correctly');
+
+    // 2. Outreach Markdown export handler
+    assert.ok(outreachCode.includes('exportSequenceMarkdown'), 'outreach.js defines exportSequenceMarkdown');
+    assert.ok(outreachCode.includes("download = `Jevexa_Outreach_Sequence_"), 'outreach.js names sequence Markdown download correctly');
+    assert.ok(outreachCode.includes('# JEVEXA OUTREACH SEQUENCE'), 'outreach.js formats Markdown output with clean headings');
+});
+

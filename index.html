@@ -1394,6 +1394,9 @@
                                     <button type="button" class="btn btn-outline btn-sync" id="outreachSyncCrmBtn">
                                         <i class="fas fa-sync-alt"></i> <span>Mark as Sent &amp; Sync CRM</span>
                                     </button>
+                                    <button type="button" class="btn btn-outline" id="outreachExportBtn">
+                                        <i class="fas fa-download"></i> <span>Export Sequence (.md)</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -2100,6 +2103,7 @@
                                 </select>
                                 <button type="button" class="btn btn-outline btn-sm" id="workflowAddStepBtn"><i class="fas fa-plus"></i> Add Step</button>
                                 <button type="button" class="btn btn-primary btn-sm" id="workflowRunBtn"><i class="fas fa-play"></i> Run Workflow</button>
+                                <button type="button" class="btn btn-outline btn-sm" id="workflowExportBtn"><i class="fas fa-download"></i> Export JSON</button>
                             </div>
                         </div>
 
@@ -2110,9 +2114,12 @@
 
                     <!-- Workflow Run History -->
                     <div class="workflow-history-card glass">
-                        <div class="pane-head">
-                            <h3>Workflow Execution History</h3>
-                            <span class="pane-sub">Live runs and execution durations</span>
+                        <div class="pane-head" style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <h3>Workflow Execution History</h3>
+                                <span class="pane-sub">Live runs and execution durations</span>
+                            </div>
+                            <button type="button" class="btn btn-outline btn-xs" id="workflowExportHistoryBtn"><i class="fas fa-file-csv"></i> Export Runs CSV</button>
                         </div>
                         <div class="table-responsive">
                             <table class="crm-table">

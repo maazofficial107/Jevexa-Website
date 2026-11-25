@@ -238,6 +238,15 @@ function closeAllWorkspacesAndModals() {
             window.history.pushState(null, '', '/');
         } catch (_) {}
     }
+    if (typeof window.__jevexaSavedStudioScrollY === 'number') {
+        const y = window.__jevexaSavedStudioScrollY;
+        window.__jevexaSavedStudioScrollY = null;
+        try {
+            window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+        } catch (_) {
+            window.scrollTo(0, y);
+        }
+    }
 }
 window.JEVEXA_CLOSE_ALL_WORKSPACES = closeAllWorkspacesAndModals;
 
@@ -3401,7 +3410,7 @@ function closeChatbot() {
     chatbotToggle?.setAttribute('aria-expanded', 'false');
     chatbotToggle?.setAttribute('aria-label', 'Open Jevexa AI');
     document.body.classList.remove('chat-modal-open');
-    chatbotToggle?.focus();
+    chatbotToggle?.focus({ preventScroll: true });
 }
 
 window.JEVEXA_SAFE_INTERACTION.bind(chatbotToggle, 'click', () => {
@@ -3429,7 +3438,7 @@ window.JEVEXA_SAFE_INTERACTION.bind(chatbotToggle, 'click', () => {
             localStorage.removeItem('jevexa_last_workspace');
             sessionStorage.removeItem('jevexa_last_workspace');
         } catch (_) {}
-        chatbotToggle.focus();
+        chatbotToggle.focus({ preventScroll: true });
     }
 });
 
@@ -4488,6 +4497,20 @@ const JEVEXA_PLANS = {
     const topicTextarea = document.getElementById('contentTopic');
     const charCountDisplay = document.getElementById('contentCharCount');
 
+    // Helper: Capture landing-page scroll position before entering a workspace
+    let lastReturnHandledAt = 0;
+    function captureStudioScroll(pushState = true) {
+        if (!pushState) return;
+        const alreadyInWorkspace = document.body.classList.contains('workspace-open')
+            || document.body.classList.contains('chat-modal-open');
+        if (!alreadyInWorkspace && typeof window.__jevexaSavedStudioScrollY !== 'number') {
+            const currentY = Number.isFinite(window.__jevexaScrollY) && document.body.classList.contains('login-open')
+                ? window.__jevexaScrollY
+                : (window.scrollY || window.pageYOffset || 0);
+            window.__jevexaSavedStudioScrollY = Math.max(0, Math.round(currentY));
+        }
+    }
+
     // Helper: Safely bind interactions using JEVEXA_SAFE_INTERACTION
     function bindAction(element, eventType, handler) {
         if (!element) return;
@@ -4586,6 +4609,7 @@ const JEVEXA_PLANS = {
     window.closeAllWorkspaces = closeAllWorkspaces;
 
     function openChatWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         closeAllWorkspaces('chat');
         try {
             localStorage.setItem('jevexa_last_workspace', 'chatbot');
@@ -4632,6 +4656,7 @@ const JEVEXA_PLANS = {
     }
 
     function openContentWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('content');
         if (contentWorkspace) {
@@ -4666,6 +4691,7 @@ const JEVEXA_PLANS = {
     }
 
     function openCrmWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('crm');
         if (crmWorkspace) {
@@ -4705,6 +4731,7 @@ const JEVEXA_PLANS = {
     }
 
     function openOutreachWorkspace(pushState = true, lead = null) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('outreach');
         if (outreachWorkspace) {
@@ -4753,6 +4780,7 @@ const JEVEXA_PLANS = {
     }
 
     function openOcrWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('ocr');
         if (ocrWorkspace) {
@@ -4785,6 +4813,7 @@ const JEVEXA_PLANS = {
     }
 
     function openSocialWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('social');
         if (socialWorkspace) {
@@ -4817,6 +4846,7 @@ const JEVEXA_PLANS = {
     }
 
     function openAnalyticsWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('analytics');
         if (analyticsWorkspace) {
@@ -4849,6 +4879,7 @@ const JEVEXA_PLANS = {
     }
 
     function openTeamAdminWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('admin');
         if (teamAdminWorkspace) {
@@ -4882,6 +4913,7 @@ const JEVEXA_PLANS = {
     }
 
     function openWorkflowsWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('workflows');
         if (workflowsWorkspace) {
@@ -4916,6 +4948,7 @@ const JEVEXA_PLANS = {
     }
 
     function openDataWorkspace(pushState = true) {
+        captureStudioScroll(pushState);
         finishLoading();
         closeAllWorkspaces('data');
         if (dataWorkspace) {
@@ -4948,6 +4981,15 @@ const JEVEXA_PLANS = {
     }
 
     function returnToStudio(scrollToFeatures = false) {
+        const now = Date.now();
+        const hasOpenWorkspace = document.body.classList.contains('workspace-open')
+            || document.body.classList.contains('chat-modal-open')
+            || Boolean(document.querySelector('.tool-workspace.open, #chatbotWindow.open'));
+        if (!hasOpenWorkspace && now - lastReturnHandledAt < 250) {
+            return;
+        }
+        lastReturnHandledAt = now;
+
         closeAllWorkspaces();
         try {
             localStorage.removeItem('jevexa_last_workspace');
@@ -4963,11 +5005,31 @@ const JEVEXA_PLANS = {
             }
         }
         document.body.classList.remove('workspace-open', 'chat-modal-open', 'modal-open', 'drawer-open');
+        document.body.style.removeProperty('top');
+
+        if (typeof window.__jevexaSavedStudioScrollY === 'number') {
+            const restoreY = window.__jevexaSavedStudioScrollY;
+            window.__jevexaSavedStudioScrollY = null;
+            const jumpToSaved = () => {
+                try {
+                    window.scrollTo({ top: restoreY, left: 0, behavior: 'instant' });
+                } catch (_) {
+                    window.scrollTo(0, restoreY);
+                }
+            };
+            try {
+                jumpToSaved();
+                requestAnimationFrame(jumpToSaved);
+            } catch (_) {}
+            return;
+        }
+
         if (scrollToFeatures) {
             const featuresSec = document.getElementById('features') || document.querySelector('.hero-tools-launcher');
             if (featuresSec) {
                 try {
-                    featuresSec.scrollIntoView({ behavior: 'smooth' });
+                    const targetTop = Math.max(0, Math.round(featuresSec.getBoundingClientRect().top + window.scrollY - 88));
+                    window.scrollTo({ top: targetTop, left: 0, behavior: 'smooth' });
                 } catch (_) {}
             }
         }

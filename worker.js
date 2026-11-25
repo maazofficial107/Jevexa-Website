@@ -5872,6 +5872,58 @@ async function handleAnalyticsFetchUrl(request, env) {
 // ----------------------------------------------------------------------------
 // HANDLER: User & Admin Management (/api/team/*)
 // ----------------------------------------------------------------------------
+const TEAM_MEMBER_ID_PATTERN = /^[A-Za-z0-9_-]{3,80}$/;
+
+function buildDefaultTeamOwner(user) {
+  return {
+    id: user.id,
+    name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Workspace Owner",
+    email: (user.email || "owner@workspace.com").toLowerCase(),
+    role: "Owner",
+    status: "Active",
+    joined_at: user.created_at || new Date(Date.now() - 30 * 86400000).toISOString(),
+    last_active_at: new Date().toISOString()
+  };
+}
+
+function getMetadataTeamStore(user) {
+  const raw = user?.user_metadata?.jevexa_team;
+  const members = Array.isArray(raw?.members) ? raw.members : [];
+  const auditLogs = Array.isArray(raw?.auditLogs) ? raw.auditLogs : [];
+  return { members, auditLogs };
+}
+
+async function saveMetadataTeamStore(user, cfg, store) {
+  const existingMeta = (user?.user_metadata && typeof user.user_metadata === "object")
+    ? user.user_metadata
+    : {};
+  const nextStore = {
+    members: Array.isArray(store.members) ? store.members.slice(0, 250) : [],
+    auditLogs: Array.isArray(store.auditLogs) ? store.auditLogs.slice(0, 200) : []
+  };
+  const res = await sbRequest(cfg, `/auth/v1/admin/users/${encodeURIComponent(user.id)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      user_metadata: {
+        ...existingMeta,
+        jevexa_team: nextStore
+      }
+    })
+  });
+  return res.ok;
+}
+
+function appendTeamAuditEntry(store, entry) {
+  const logs = Array.isArray(store.auditLogs) ? [...store.auditLogs] : [];
+  logs.unshift({
+    id: "aud_" + Math.random().toString(36).slice(2, 10),
+    timestamp: new Date().toISOString(),
+    status: "Success",
+    ...entry
+  });
+  return logs.slice(0, 200);
+}
+
 async function handleTeamMembers(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
@@ -5892,19 +5944,12 @@ async function handleTeamMembers(request, env) {
   }
   if (!user) return json({ error: "Please sign in to manage team members." }, 401);
 
+  const url = new URL(request.url);
   const userTier = await getUserAccountTier(user.id, cfg);
   const planCaps = TIER_PLAN_LIMITS[userTier] || TIER_PLAN_LIMITS.free;
-
-  // Build standard team roster (Owner + standard team members)
-  const defaultOwner = {
-    id: user.id,
-    name: user.email?.split("@")[0] || "Workspace Owner",
-    email: user.email || "owner@workspace.com",
-    role: "Owner",
-    status: "Active",
-    joined_at: new Date(Date.now() - 30 * 86400000).toISOString(),
-    last_active_at: new Date().toISOString()
-  };
+  const maxSeats = planCaps.teamMaxSeats || 3;
+  const defaultOwner = buildDefaultTeamOwner(user);
+  const metaStore = getMetadataTeamStore(user);
 
   if (request.method === "GET" || request.method === "HEAD") {
     if (request.method === "HEAD") {
@@ -5912,21 +5957,23 @@ async function handleTeamMembers(request, env) {
     }
     try {
       const res = await sbRequest(cfg, `/rest/v1/team_members?workspace_user_id=eq.${encodeURIComponent(user.id)}&order=created_at.asc`);
-      const rows = await readJsonResponse(res);
-      if (res.ok && Array.isArray(rows) && rows.length > 0) {
-        return json({
-          ok: true,
-          members: [defaultOwner, ...rows],
-          maxSeats: planCaps.teamMaxSeats || 3,
-          tier: userTier
-        });
+      if (res.ok) {
+        const rows = await readJsonResponse(res);
+        if (Array.isArray(rows) && rows.length > 0) {
+          return json({
+            ok: true,
+            members: [defaultOwner, ...rows],
+            maxSeats,
+            tier: userTier
+          });
+        }
       }
     } catch (_) {}
 
     return json({
       ok: true,
-      members: [defaultOwner],
-      maxSeats: planCaps.teamMaxSeats || 3,
+      members: [defaultOwner, ...metaStore.members],
+      maxSeats,
       tier: userTier
     });
   }
@@ -5935,10 +5982,13 @@ async function handleTeamMembers(request, env) {
     const parsedBody = await readRequestJson(request, 8192);
     if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
     const body = parsedBody.body || {};
-    const targetId = typeof body.id === "string" && REQUEST_ID_PATTERN.test(body.id) ? body.id : null;
+    const targetId = typeof body.id === "string" && TEAM_MEMBER_ID_PATTERN.test(body.id.trim()) ? body.id.trim() : null;
     const targetEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!targetId && !targetEmail) {
       return json({ error: "Member id or email is required." }, 400);
+    }
+    if ((targetId && targetId === user.id) || (targetEmail && targetEmail === defaultOwner.email)) {
+      return json({ error: "Primary Workspace Owner role and status cannot be modified." }, 400);
     }
 
     const updates = {};
@@ -5952,8 +6002,9 @@ async function handleTeamMembers(request, env) {
       return json({ error: "No valid member updates supplied." }, 400);
     }
 
+    let tableHandled = false;
     try {
-      const filter = targetId
+      const filter = targetId && REQUEST_ID_PATTERN.test(targetId)
         ? `workspace_user_id=eq.${encodeURIComponent(user.id)}&id=eq.${encodeURIComponent(targetId)}`
         : `workspace_user_id=eq.${encodeURIComponent(user.id)}&email=eq.${encodeURIComponent(targetEmail)}`;
       const res = await sbRequest(cfg, `/rest/v1/team_members?${filter}`, {
@@ -5963,34 +6014,103 @@ async function handleTeamMembers(request, env) {
       });
       if (res.ok) {
         const rows = await readJsonResponse(res);
-        return json({ ok: true, member: Array.isArray(rows) ? rows[0] : null, message: "Member updated successfully." });
-      }
-      if (res.status === 404) {
-        return json({ ok: true, message: "Member updated successfully." });
+        if (Array.isArray(rows) && rows.length > 0) {
+          tableHandled = true;
+          const nextLogs = appendTeamAuditEntry(metaStore, {
+            action: updates.role ? "Role Changed" : "Status Changed",
+            actor: defaultOwner.email,
+            details: updates.role
+              ? `Assigned role ${updates.role} to ${rows[0].email || targetEmail}`
+              : `Set ${rows[0].email || targetEmail} status to ${updates.status}`
+          });
+          await saveMetadataTeamStore(user, cfg, { members: metaStore.members, auditLogs: nextLogs }).catch(() => {});
+          return json({ ok: true, member: rows[0], message: "Member updated successfully." });
+        }
       }
     } catch (_) {}
-    return json({ ok: true, message: "Member updated successfully." });
+
+    if (!tableHandled) {
+      const idx = metaStore.members.findIndex(m =>
+        (targetId && String(m.id) === String(targetId))
+        || (targetEmail && String(m.email || "").toLowerCase() === targetEmail)
+      );
+      if (idx === -1) {
+        return json({ error: "Team member not found." }, 404);
+      }
+      const updatedMember = { ...metaStore.members[idx], ...updates, last_active_at: new Date().toISOString() };
+      const nextMembers = [...metaStore.members];
+      nextMembers[idx] = updatedMember;
+      const nextLogs = appendTeamAuditEntry(metaStore, {
+        action: updates.role ? "Role Changed" : "Status Changed",
+        actor: defaultOwner.email,
+        details: updates.role
+          ? `Assigned role ${updates.role} to ${updatedMember.email}`
+          : `Set ${updatedMember.email} status to ${updatedMember.status}`
+      });
+      const saved = await saveMetadataTeamStore(user, cfg, { members: nextMembers, auditLogs: nextLogs });
+      if (!saved) {
+        return json({ error: "Could not persist team member update." }, 503);
+      }
+      return json({ ok: true, member: updatedMember, message: "Member updated successfully." });
+    }
   }
 
   if (request.method === "DELETE") {
     const targetId = url.searchParams.get("id");
     const targetEmail = (url.searchParams.get("email") || "").trim().toLowerCase();
-    const validId = targetId && REQUEST_ID_PATTERN.test(targetId) ? targetId : null;
+    const validId = targetId && TEAM_MEMBER_ID_PATTERN.test(targetId.trim()) ? targetId.trim() : null;
     if (!validId && !targetEmail) {
       return json({ error: "Member id or email is required." }, 400);
     }
+    if ((validId && validId === user.id) || (targetEmail && targetEmail === defaultOwner.email)) {
+      return json({ error: "Primary Workspace Owner cannot be removed." }, 400);
+    }
+
+    let tableDeleted = false;
     try {
-      const filter = validId
+      const filter = validId && REQUEST_ID_PATTERN.test(validId)
         ? `workspace_user_id=eq.${encodeURIComponent(user.id)}&id=eq.${encodeURIComponent(validId)}`
         : `workspace_user_id=eq.${encodeURIComponent(user.id)}&email=eq.${encodeURIComponent(targetEmail)}`;
       const res = await sbRequest(cfg, `/rest/v1/team_members?${filter}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: { Prefer: "return=representation" }
       });
-      if (res.ok || res.status === 404) {
-        return json({ ok: true, message: "Member removed successfully." });
+      if (res.ok) {
+        const rows = await readJsonResponse(res);
+        if (Array.isArray(rows) && rows.length > 0) {
+          tableDeleted = true;
+          const nextLogs = appendTeamAuditEntry(metaStore, {
+            action: "Member Removed",
+            actor: defaultOwner.email,
+            details: `Revoked workspace access for ${rows[0].email || targetEmail}`
+          });
+          await saveMetadataTeamStore(user, cfg, { members: metaStore.members, auditLogs: nextLogs }).catch(() => {});
+          return json({ ok: true, message: "Member removed successfully." });
+        }
       }
     } catch (_) {}
-    return json({ ok: true, message: "Member removed successfully." });
+
+    if (!tableDeleted) {
+      const idx = metaStore.members.findIndex(m =>
+        (validId && String(m.id) === String(validId))
+        || (targetEmail && String(m.email || "").toLowerCase() === targetEmail)
+      );
+      if (idx === -1) {
+        return json({ error: "Team member not found." }, 404);
+      }
+      const removed = metaStore.members[idx];
+      const nextMembers = metaStore.members.filter((_, i) => i !== idx);
+      const nextLogs = appendTeamAuditEntry(metaStore, {
+        action: "Member Removed",
+        actor: defaultOwner.email,
+        details: `Revoked workspace access for ${removed.email || targetEmail}`
+      });
+      const saved = await saveMetadataTeamStore(user, cfg, { members: nextMembers, auditLogs: nextLogs });
+      if (!saved) {
+        return json({ error: "Could not persist member removal." }, 503);
+      }
+      return json({ ok: true, message: "Member removed successfully." });
+    }
   }
 
   return json({ error: "Method not allowed." }, 405);
@@ -6020,17 +6140,26 @@ async function handleTeamInvite(request, env) {
   const parsedBody = await readRequestJson(request, 8192);
   if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
   const email = typeof parsedBody.body?.email === "string" ? parsedBody.body.email.trim().toLowerCase() : "";
-  const role = typeof parsedBody.body?.role === "string" ? parsedBody.body.role.trim() : "Member";
+  const rawRole = typeof parsedBody.body?.role === "string" ? parsedBody.body.role.trim() : "Member";
+  const role = ["Admin", "Member", "Viewer"].includes(rawRole) ? rawRole : null;
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
     return json({ error: "A valid member email address is required." }, 400);
+  }
+  if (!role) {
+    return json({ error: "Role must be Admin, Member, or Viewer." }, 400);
   }
 
   const userTier = await getUserAccountTier(user.id, cfg);
   const planCaps = TIER_PLAN_LIMITS[userTier] || TIER_PLAN_LIMITS.free;
   const maxSeats = planCaps.teamMaxSeats || 3;
-  const currentMemberCount = Number(parsedBody.body?.currentMemberCount);
-  if (Number.isInteger(currentMemberCount) && currentMemberCount >= maxSeats) {
+  const metaStore = getMetadataTeamStore(user);
+  const defaultOwner = buildDefaultTeamOwner(user);
+  const effectiveCount = Math.max(
+    Number.isInteger(Number(parsedBody.body?.currentMemberCount)) ? Number(parsedBody.body?.currentMemberCount) : 0,
+    1 + metaStore.members.length
+  );
+  if (effectiveCount >= maxSeats) {
     return json({
       error: `You have reached the maximum seat limit (${maxSeats}) for your ${userTier.toUpperCase()} plan. Upgrade your plan to invite more team members.`,
       code: "seat_limit_reached",
@@ -6039,16 +6168,21 @@ async function handleTeamInvite(request, env) {
     }, 402);
   }
 
+  if (email === defaultOwner.email || metaStore.members.some(m => (m.email || "").toLowerCase() === email)) {
+    return json({ error: `Member with email ${email} is already in the workspace.` }, 409);
+  }
+
   let newMember = {
     id: "mem_" + Math.random().toString(36).slice(2, 10),
-    name: email.split("@")[0],
+    name: email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
     email,
     role,
     status: "Pending Invite",
     invited_at: new Date().toISOString(),
-    last_active_at: "Never"
+    last_active_at: new Date().toISOString()
   };
 
+  let persisted = false;
   try {
     const insertRes = await sbRequest(cfg, "/rest/v1/team_members", {
       method: "POST",
@@ -6066,9 +6200,21 @@ async function handleTeamInvite(request, env) {
       const rows = await readJsonResponse(insertRes);
       if (Array.isArray(rows) && rows[0]) {
         newMember = rows[0];
+        persisted = true;
       }
     }
   } catch (_) {}
+
+  const nextLogs = appendTeamAuditEntry(metaStore, {
+    action: "Member Invited",
+    actor: defaultOwner.email,
+    details: `Dispatched workspace invitation to ${email} as ${role}`
+  });
+  const nextMembers = persisted ? metaStore.members : [...metaStore.members, newMember];
+  const metaSaved = await saveMetadataTeamStore(user, cfg, { members: nextMembers, auditLogs: nextLogs });
+  if (!persisted && !metaSaved) {
+    return json({ error: "Could not persist team invitation. Please try again." }, 503);
+  }
 
   return json({
     ok: true,
@@ -6107,19 +6253,24 @@ async function handleTeamAudit(request, env) {
   const userTier = await getUserAccountTier(user.id, cfg);
   const planCaps = TIER_PLAN_LIMITS[userTier] || TIER_PLAN_LIMITS.free;
   const maxEvents = planCaps.teamAuditEvents || 10;
+  const metaStore = getMetadataTeamStore(user);
 
-  const now = Date.now();
-  const sampleAuditEvents = [
-    { id: "aud_1", action: "User Login", actor: user.email || "owner@workspace.com", timestamp: new Date(now - 120000).toISOString(), ip: "192.168.1.1", status: "Success", details: "Signed in via Supabase Auth session" },
-    { id: "aud_2", action: "Credit Reservation", actor: user.email || "owner@workspace.com", timestamp: new Date(now - 450000).toISOString(), ip: "192.168.1.1", status: "Success", details: "Reserved credits for Document OCR" },
-    { id: "aud_3", action: "Lead Created", actor: user.email || "owner@workspace.com", timestamp: new Date(now - 1200000).toISOString(), ip: "192.168.1.1", status: "Success", details: "Added lead Alex Rivera ($15,000)" },
-    { id: "aud_4", action: "Outreach Dispatched", actor: user.email || "owner@workspace.com", timestamp: new Date(now - 3600000).toISOString(), ip: "192.168.1.1", status: "Success", details: "Generated 3-step cold sequence" },
-    { id: "aud_5", action: "Settings Updated", actor: user.email || "owner@workspace.com", timestamp: new Date(now - 86400000).toISOString(), ip: "192.168.1.1", status: "Success", details: "Changed default AI reasoning model" }
-  ];
+  const logs = metaStore.auditLogs.length > 0
+    ? metaStore.auditLogs
+    : [
+        {
+          id: "aud_init_1",
+          action: "Workspace Initialized",
+          actor: user.email || "owner@workspace.com",
+          timestamp: user.last_sign_in_at || new Date().toISOString(),
+          status: "Success",
+          details: "Verified workspace owner session and RBAC policy"
+        }
+      ];
 
   return json({
     ok: true,
-    logs: sampleAuditEvents.slice(0, maxEvents),
+    logs: logs.slice(0, maxEvents),
     maxEvents,
     tier: userTier
   });

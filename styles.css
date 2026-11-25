@@ -15794,9 +15794,91 @@ body.is-offline .toast.show {
 }
 
 .ocr-browse-text {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    font-weight: 700;
     color: #38bdf8;
     text-decoration: underline;
     text-underline-offset: 3px;
+    cursor: pointer;
+    display: inline;
+}
+
+.ocr-browse-text:hover {
+    color: #7dd3fc;
+}
+
+.ocr-file-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    border-radius: 10px;
+    background: rgba(34, 211, 238, 0.08);
+    border: 1px solid rgba(34, 211, 238, 0.28);
+}
+
+.ocr-file-badge[hidden] {
+    display: none !important;
+}
+
+.ocr-file-badge-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: #e2e8f0;
+    font-size: 12.5px;
+}
+
+.ocr-file-badge-info i {
+    color: #38bdf8;
+    flex-shrink: 0;
+}
+
+.ocr-file-badge-info span {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ocr-file-badge-info small {
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.team-status-msg {
+    font-size: 12.5px;
+    margin: 0 0 12px 0;
+    min-height: 0;
+}
+
+.team-status-msg:empty {
+    display: none;
+}
+
+.team-status-msg.success { color: #4ade80; }
+.team-status-msg.error { color: #f87171; }
+.team-status-msg.info { color: #38bdf8; }
+
+.team-invite-error {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    margin: 0;
+}
+
+.team-invite-error[hidden] {
+    display: none !important;
 }
 
 .ocr-dropzone-sub,

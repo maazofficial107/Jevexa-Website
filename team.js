@@ -42,14 +42,6 @@
             role: 'Admin',
             status: 'Active',
             last_active_at: new Date(Date.now() - 1000 * 60 * 65).toISOString()
-        },
-        {
-            id: 'mem_3',
-            name: 'Elena Rostova',
-            email: 'elena.r@jevexa-org.io',
-            role: 'Member',
-            status: 'Active',
-            last_active_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()
         }
     ];
 
@@ -124,6 +116,8 @@
 
     const seatCounterEl = document.getElementById('teamSeatCounter');
     const planBadgeEl = document.getElementById('teamPlanBadge');
+    const roleSummaryEl = document.getElementById('teamRoleSummary');
+    const statusEl = document.getElementById('teamAdminStatus');
     const inviteBtn = document.getElementById('teamInviteModalBtn');
 
     // Members Table
@@ -137,11 +131,31 @@
     const inviteForm = document.getElementById('teamInviteForm');
     const inviteEmailInput = document.getElementById('teamInviteEmail');
     const inviteRoleSelect = document.getElementById('teamInviteRole');
+    const inviteErrorEl = document.getElementById('teamInviteError');
 
     // Audit Log Section
     const auditTableBody = document.getElementById('teamAuditTableBody');
     const exportAuditCsvBtn = document.getElementById('teamExportAuditCsvBtn');
     const refreshAuditBtn = document.getElementById('teamRefreshAuditBtn');
+
+    function setAdminStatus(message, type = 'info') {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.className = message ? `team-status-msg ${type}` : 'team-status-msg';
+    }
+
+    function setInviteError(message) {
+        if (!inviteErrorEl) return;
+        if (!message) {
+            inviteErrorEl.textContent = '';
+            inviteErrorEl.hidden = true;
+            inviteErrorEl.setAttribute('hidden', '');
+        } else {
+            inviteErrorEl.textContent = message;
+            inviteErrorEl.hidden = false;
+            inviteErrorEl.removeAttribute('hidden');
+        }
+    }
 
     async function getSession() {
         if (typeof window.supabaseClient === 'undefined' || !window.supabaseClient?.auth?.getSession) {
@@ -163,12 +177,15 @@
             const res = await fetch('/api/team/members', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (res.ok && Array.isArray(data.members)) {
                 state.members = data.members;
-                state.maxSeats = data.maxSeats || 5;
+                state.maxSeats = data.maxSeats || 3;
                 state.userTier = data.tier || 'free';
+                saveCachedTeam();
                 renderMembers();
+            } else if (!res.ok) {
+                setAdminStatus(data.error || 'Could not load team members from server.', 'error');
             }
         } catch (err) {
             console.warn('Failed to load team members from API:', err);
@@ -183,14 +200,47 @@
             const res = await fetch('/api/team/audit', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            const data = await res.json();
-            if (res.ok && Array.isArray(data.logs)) {
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && Array.isArray(data.logs) && data.logs.length > 0) {
                 state.auditLogs = data.logs;
+                saveCachedTeam();
                 renderAuditLogs();
             }
         } catch (err) {
             console.warn('Failed to load audit logs from API:', err);
         }
+    }
+
+    // Helper to sync member changes when authenticated
+    async function syncTeamMemberMutation(method, payload, query = '') {
+        const session = await getSession();
+        if (!session) return { localOnly: true };
+        try {
+            const res = await fetch(`/api/team/members${query}`, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: payload ? JSON.stringify(payload) : undefined
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                return { error: data.error || 'Could not update team member on server.', status: res.status };
+            }
+            return { ok: true, data };
+        } catch (err) {
+            return { offlineFallback: true, error: err?.message };
+        }
+    }
+
+    function findMemberByButton(el) {
+        const targetId = el?.dataset?.memberId || '';
+        const targetEmail = (el?.dataset?.email || '').toLowerCase();
+        return state.members.find(m =>
+            (targetId && String(m.id) === String(targetId))
+            || (targetEmail && String(m.email || '').toLowerCase() === targetEmail)
+        );
     }
 
     function renderMembers() {
@@ -203,6 +253,19 @@
         if (memberCountEl) {
             memberCountEl.textContent = `${state.members.length} ${state.members.length === 1 ? 'Member' : 'Members'}`;
         }
+        if (roleSummaryEl) {
+            const counts = { Owner: 0, Admin: 0, Member: 0, Viewer: 0 };
+            state.members.forEach(m => {
+                if (counts[m.role] !== undefined) counts[m.role] += 1;
+            });
+            const openSeats = Math.max(0, state.maxSeats - state.members.length);
+            roleSummaryEl.textContent = `${counts.Owner} Owner · ${counts.Admin} Admin · ${counts.Member} Member · ${counts.Viewer} Viewer · ${openSeats} open ${openSeats === 1 ? 'seat' : 'seats'} (${state.userTier.toUpperCase()})`;
+        }
+        if (inviteBtn) {
+            inviteBtn.title = state.members.length >= state.maxSeats
+                ? `Seat limit reached (${state.members.length}/${state.maxSeats})`
+                : 'Invite a new team member';
+        }
 
         if (!memberTableBody) return;
         memberTableBody.innerHTML = '';
@@ -210,6 +273,22 @@
         state.members.forEach(member => {
             const tr = document.createElement('tr');
             const isOwner = member.role === 'Owner';
+            const statusText = member.status || 'Active';
+            const isSuspended = statusText === 'Suspended';
+            const isPending = statusText === 'Pending Invite';
+            const statusClass = isSuspended ? 'suspended' : (isPending ? 'pending' : 'active');
+            const statusBg = isSuspended
+                ? 'rgba(239,68,68,0.15)'
+                : (isPending ? 'rgba(250,204,21,0.15)' : 'rgba(34,197,94,0.15)');
+            const statusColor = isSuspended ? '#f87171' : (isPending ? '#facc15' : '#4ade80');
+            const statusBorder = isSuspended
+                ? 'rgba(239,68,68,0.3)'
+                : (isPending ? 'rgba(250,204,21,0.3)' : 'rgba(34,197,94,0.3)');
+            const statusIcon = isSuspended ? 'ban' : (isPending ? 'clock' : 'check-circle');
+            const lastActiveLabel = member.last_active_at && !Number.isNaN(Date.parse(member.last_active_at))
+                ? new Date(member.last_active_at).toLocaleDateString()
+                : (member.last_active_at || 'Active now');
+
             tr.innerHTML = `
                 <td>
                     <div class="team-member-cell" style="display:flex; align-items:center; gap:10px;">
@@ -222,7 +301,7 @@
                 </td>
                 <td>
                     ${isOwner ? '<span class="team-role-pill role-owner" style="padding:3px 8px; border-radius:6px; font-size:11.5px; font-weight:700; background:rgba(234,179,8,0.15); color:#facc15; border:1px solid rgba(234,179,8,0.3);">Owner</span>' : `
-                        <select class="team-role-select crm-select" data-email="${escapeHtml(member.email)}" aria-label="Change role" style="padding:4px 8px; font-size:12px;">
+                        <select class="team-role-select crm-select" data-member-id="${escapeHtml(member.id || '')}" data-email="${escapeHtml(member.email)}" aria-label="Change role for ${escapeHtml(member.email)}" style="padding:4px 8px; font-size:12px;">
                             <option value="Admin"${member.role === 'Admin' ? ' selected' : ''}>Admin</option>
                             <option value="Member"${member.role === 'Member' ? ' selected' : ''}>Member</option>
                             <option value="Viewer"${member.role === 'Viewer' ? ' selected' : ''}>Viewer</option>
@@ -231,55 +310,36 @@
                 </td>
                 <td>
                     ${isOwner ? '<span class="team-status-pill status-active" style="padding:3px 8px; border-radius:6px; font-size:11.5px; font-weight:700; background:rgba(34,197,94,0.15); color:#4ade80; border:1px solid rgba(34,197,94,0.3);">Active</span>' : `
-                        <button type="button" class="team-status-toggle status-${(member.status || 'Active').toLowerCase()}" data-email="${escapeHtml(member.email)}" title="Click to toggle status" style="cursor:pointer; padding:3px 8px; border-radius:6px; font-size:11.5px; font-weight:700; background:${member.status === 'Suspended' ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; color:${member.status === 'Suspended' ? '#f87171' : '#4ade80'}; border:1px solid ${member.status === 'Suspended' ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'};">
-                            <i class="fas fa-${member.status === 'Suspended' ? 'ban' : 'check-circle'}"></i> ${escapeHtml(member.status || 'Active')}
+                        <button type="button" class="team-status-toggle status-${statusClass}" data-member-id="${escapeHtml(member.id || '')}" data-email="${escapeHtml(member.email)}" title="Click to toggle status" style="cursor:pointer; padding:3px 8px; border-radius:6px; font-size:11.5px; font-weight:700; background:${statusBg}; color:${statusColor}; border:1px solid ${statusBorder};">
+                            <i class="fas fa-${statusIcon}"></i> ${escapeHtml(statusText)}
                         </button>
                     `}
                 </td>
-                <td><span class="team-last-active" style="font-size:12px; color:#cbd5e1;">${member.last_active_at ? new Date(member.last_active_at).toLocaleDateString() : 'Active now'}</span></td>
+                <td><span class="team-last-active" style="font-size:12px; color:#cbd5e1;">${escapeHtml(lastActiveLabel)}</span></td>
                 <td>
                     ${isOwner ? '<span class="team-action-locked" style="font-size:11.5px; color:#64748b; font-style:italic;">Primary Owner</span>' : `
-                        <button type="button" class="btn btn-xs btn-outline team-remove-btn" data-email="${escapeHtml(member.email)}" style="font-size:11px; padding:3px 8px;">Remove</button>
+                        <button type="button" class="btn btn-xs btn-outline team-remove-btn" data-member-id="${escapeHtml(member.id || '')}" data-email="${escapeHtml(member.email)}" style="font-size:11px; padding:3px 8px;">Remove</button>
                     `}
                 </td>
             `;
             memberTableBody.appendChild(tr);
         });
 
-        // Helper to sync member changes when authenticated
-        async function syncTeamMemberMutation(method, payload, query = '') {
-            const session = await getSession();
-            if (!session) return { localOnly: true };
-            try {
-                const res = await fetch(`/api/team/members${query}`, {
-                    method,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
-                    },
-                    body: payload ? JSON.stringify(payload) : undefined
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                    return { error: data.error || 'Could not update team member on server.', status: res.status };
-                }
-                return { ok: true, data };
-            } catch (err) {
-                return { offlineFallback: true, error: err?.message };
-            }
-        }
-
         // Event listeners for role change, status toggle, remove
         memberTableBody.querySelectorAll('.team-role-select').forEach(sel => {
             sel.addEventListener('change', async (e) => {
-                const targetEmail = e.currentTarget.dataset.email;
-                const newRole = e.currentTarget.value;
-                const targetMember = state.members.find(m => m.email === targetEmail);
+                const selectEl = e.currentTarget;
+                const targetMember = findMemberByButton(selectEl);
                 if (!targetMember) return;
+                const newRole = selectEl.value;
                 const prevRole = targetMember.role;
-                const res = await syncTeamMemberMutation('PATCH', { id: targetMember.id, email: targetEmail, role: newRole });
-                if (res.error && res.status && res.status >= 400 && res.status < 500) {
-                    e.currentTarget.value = prevRole;
+                if (newRole === prevRole) return;
+                selectEl.disabled = true;
+                const res = await syncTeamMemberMutation('PATCH', { id: targetMember.id, email: targetMember.email, role: newRole });
+                selectEl.disabled = false;
+                if (res.error && res.status && res.status >= 400) {
+                    selectEl.value = prevRole;
+                    setAdminStatus(res.error, 'error');
                     window.showToast?.(res.error);
                     return;
                 }
@@ -288,23 +348,27 @@
                     timestamp: new Date().toISOString(),
                     action: "Role Changed",
                     actor: "Workspace Admin",
-                    details: `Assigned role ${newRole} to ${targetEmail}`,
+                    details: `Assigned role ${newRole} to ${targetMember.email}`,
                     status: "Success"
                 });
-                saveCachedTeam();
+                renderMembers();
                 renderAuditLogs();
-                window.showToast?.(`Updated role of ${targetEmail} to ${newRole}.`);
+                setAdminStatus(`Updated role of ${targetMember.email} to ${newRole}.`, 'success');
+                window.showToast?.(`Updated role of ${targetMember.email} to ${newRole}.`);
             });
         });
 
         memberTableBody.querySelectorAll('.team-status-toggle').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const targetEmail = e.currentTarget.dataset.email;
-                const targetMember = state.members.find(m => m.email === targetEmail);
+                const btnEl = e.currentTarget;
+                const targetMember = findMemberByButton(btnEl);
                 if (!targetMember) return;
-                const nextStatus = targetMember.status === 'Suspended' ? 'Active' : 'Suspended';
-                const res = await syncTeamMemberMutation('PATCH', { id: targetMember.id, email: targetEmail, status: nextStatus });
-                if (res.error && res.status && res.status >= 400 && res.status < 500) {
+                const nextStatus = targetMember.status === 'Active' ? 'Suspended' : 'Active';
+                btnEl.disabled = true;
+                const res = await syncTeamMemberMutation('PATCH', { id: targetMember.id, email: targetMember.email, status: nextStatus });
+                btnEl.disabled = false;
+                if (res.error && res.status && res.status >= 400) {
+                    setAdminStatus(res.error, 'error');
                     window.showToast?.(res.error);
                     return;
                 }
@@ -313,28 +377,36 @@
                     timestamp: new Date().toISOString(),
                     action: "Status Changed",
                     actor: "Workspace Admin",
-                    details: `Set ${targetEmail} status to ${targetMember.status}`,
+                    details: `Set ${targetMember.email} status to ${targetMember.status}`,
                     status: "Success"
                 });
                 renderMembers();
                 renderAuditLogs();
-                window.showToast?.(`Member ${targetEmail} is now ${targetMember.status}.`);
+                setAdminStatus(`Member ${targetMember.email} is now ${targetMember.status}.`, 'success');
+                window.showToast?.(`Member ${targetMember.email} is now ${targetMember.status}.`);
             });
         });
 
         memberTableBody.querySelectorAll('.team-remove-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const targetEmail = e.currentTarget.dataset.email;
-                const targetMember = state.members.find(m => m.email === targetEmail);
-                const query = targetMember?.id
+                const btnEl = e.currentTarget;
+                const targetMember = findMemberByButton(btnEl);
+                if (!targetMember) return;
+                const targetEmail = targetMember.email;
+                const query = targetMember.id
                     ? `?id=${encodeURIComponent(targetMember.id)}&email=${encodeURIComponent(targetEmail)}`
                     : `?email=${encodeURIComponent(targetEmail)}`;
+                btnEl.disabled = true;
                 const res = await syncTeamMemberMutation('DELETE', null, query);
-                if (res.error && res.status && res.status >= 400 && res.status < 500) {
+                btnEl.disabled = false;
+                if (res.error && res.status && res.status >= 400) {
+                    setAdminStatus(res.error, 'error');
                     window.showToast?.(res.error);
                     return;
                 }
-                state.members = state.members.filter(m => m.email !== targetEmail);
+                state.members = state.members.filter(m =>
+                    targetMember.id ? String(m.id) !== String(targetMember.id) : m.email.toLowerCase() !== targetEmail.toLowerCase()
+                );
                 state.auditLogs.unshift({
                     timestamp: new Date().toISOString(),
                     action: "Member Removed",
@@ -344,6 +416,7 @@
                 });
                 renderMembers();
                 renderAuditLogs();
+                setAdminStatus(`Removed member ${targetEmail}. Seats used: ${state.members.length} / ${state.maxSeats}.`, 'info');
                 window.showToast?.(`Removed member ${targetEmail}.`);
             });
         });
@@ -369,8 +442,11 @@
     }
 
     function openInviteModal() {
+        setInviteError('');
         if (state.members.length >= state.maxSeats) {
-            window.showToast?.(`Seat limit reached (${state.members.length}/${state.maxSeats}) for ${state.userTier.toUpperCase()} plan. Upgrade plan to expand team seats.`);
+            const msg = `Seat limit reached (${state.members.length}/${state.maxSeats}) for ${state.userTier.toUpperCase()} plan. Remove a member or upgrade your plan to invite more.`;
+            setAdminStatus(msg, 'error');
+            window.showToast?.(msg);
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                 window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'Additional workspace seats');
             }
@@ -388,6 +464,7 @@
     }
 
     function closeInviteModal() {
+        setInviteError('');
         if (inviteModal) {
             inviteModal.hidden = true;
             inviteModal.setAttribute('hidden', '');
@@ -398,22 +475,38 @@
 
     async function handleInviteSubmit(e) {
         if (e) e.preventDefault();
-        const email = inviteEmailInput ? inviteEmailInput.value.trim() : '';
-        const role = inviteRoleSelect ? inviteRoleSelect.value : 'Member';
+        setInviteError('');
+        const email = inviteEmailInput ? inviteEmailInput.value.trim().toLowerCase() : '';
+        const rawRole = inviteRoleSelect ? inviteRoleSelect.value : 'Member';
+        const role = ['Admin', 'Member', 'Viewer'].includes(rawRole) ? rawRole : 'Member';
         const submitBtn = document.getElementById('teamInviteSubmitBtn');
 
         if (!email) {
+            setInviteError('Please enter a colleague email address.');
             window.showToast?.('Please enter an email address.');
+            inviteEmailInput?.focus();
             return;
         }
 
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+            setInviteError('Please enter a valid work email address (e.g. alex@company.com).');
             window.showToast?.('Please enter a valid email address.');
+            inviteEmailInput?.focus();
             return;
         }
 
-        if (state.members.some(m => m.email.toLowerCase() === email.toLowerCase())) {
-            window.showToast?.(`Member with email ${email} is already in the workspace.`);
+        if (state.members.some(m => (m.email || '').toLowerCase() === email)) {
+            const dupMsg = `Member with email ${email} is already in the workspace.`;
+            setInviteError(dupMsg);
+            window.showToast?.(dupMsg);
+            inviteEmailInput?.focus();
+            return;
+        }
+
+        if (state.members.length >= state.maxSeats) {
+            const capMsg = `Seat limit reached (${state.members.length}/${state.maxSeats}) for ${state.userTier.toUpperCase()} plan.`;
+            setInviteError(capMsg);
+            window.showToast?.(capMsg);
             return;
         }
 
@@ -425,10 +518,10 @@
                 // Local client provisioning for guest / demo mode
                 const newMember = {
                     id: 'mem_' + Date.now(),
-                    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    name: email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
                     email,
                     role,
-                    status: 'Active',
+                    status: 'Pending Invite',
                     last_active_at: new Date().toISOString()
                 };
                 state.members.push(newMember);
@@ -442,6 +535,7 @@
                 renderMembers();
                 renderAuditLogs();
                 closeInviteModal();
+                setAdminStatus(`Invitation dispatched to ${email} as ${role} (${state.members.length}/${state.maxSeats} seats used).`, 'success');
                 window.showToast?.(`Invitation dispatched to ${email} as ${role}!`);
                 return;
             }
@@ -467,10 +561,10 @@
 
                 state.members.push(data.member || {
                     id: 'mem_' + Date.now(),
-                    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    name: email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
                     email,
                     role,
-                    status: 'Active',
+                    status: 'Pending Invite',
                     last_active_at: new Date().toISOString()
                 });
                 state.auditLogs.unshift({
@@ -484,19 +578,21 @@
                 renderMembers();
                 renderAuditLogs();
                 closeInviteModal();
+                setAdminStatus(`Invitation sent to ${email} as ${role} (${state.members.length}/${state.maxSeats} seats used).`, 'success');
                 window.showToast?.(`Invitation sent to ${email} as ${role}!`);
             } catch (err) {
-                if (err?.status && err.status >= 400 && err.status < 500) {
+                if (err?.status && err.status >= 400) {
+                    setInviteError(err.message || 'Could not invite team member.');
                     window.showToast?.(err.message || 'Could not invite team member.');
                     return;
                 }
                 console.warn('API invite failed, using local member addition:', err);
                 const fallbackMember = {
                     id: 'mem_' + Date.now(),
-                    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                    name: email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
                     email,
                     role,
-                    status: 'Active',
+                    status: 'Pending Invite',
                     last_active_at: new Date().toISOString()
                 };
                 state.members.push(fallbackMember);
@@ -511,6 +607,7 @@
                 renderMembers();
                 renderAuditLogs();
                 closeInviteModal();
+                setAdminStatus(`Invitation saved locally for ${email} as ${role}.`, 'info');
                 window.showToast?.(`Invitation sent to ${email} as ${role}!`);
             }
         } finally {

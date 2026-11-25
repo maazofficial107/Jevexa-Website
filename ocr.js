@@ -44,7 +44,9 @@
         userPlan: 'free',
         uploadedFileData: null,
         uploadedFileName: null,
-        uploadedFileSize: null
+        uploadedFileSize: null,
+        uploadedFileType: null,
+        textIsAutoLoaded: true
     };
 
     // DOM Elements
@@ -54,6 +56,11 @@
 
     const fileInput = document.getElementById('ocrFileInput');
     const dropzone = document.getElementById('ocrDropzone');
+    const browseBtn = document.getElementById('ocrBrowseBtn');
+    const fileBadge = document.getElementById('ocrFileBadge');
+    const fileBadgeName = document.getElementById('ocrFileBadgeName');
+    const fileBadgeMeta = document.getElementById('ocrFileBadgeMeta');
+    const clearFileBtn = document.getElementById('ocrClearFileBtn');
     const sampleSelect = document.getElementById('ocrSampleSelect');
     const textInput = document.getElementById('ocrTextInput');
     const docTypeSelect = document.getElementById('ocrDocType');
@@ -200,6 +207,30 @@ Terms: Net 30`
         }
     };
 
+    function parseDelimitedRow(line, delimiter = ',') {
+        const out = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    cur += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch === delimiter && !inQuotes) {
+                out.push(cur.trim());
+                cur = '';
+            } else {
+                cur += ch;
+            }
+        }
+        out.push(cur.trim());
+        return out;
+    }
+
     function deterministicClientOcr(text, docType, currency) {
         const trimmed = (text || '').trim();
         for (const [key, sampleText] of Object.entries(SAMPLE_DOCS)) {
@@ -211,7 +242,90 @@ Terms: Net 30`
                 }
             }
         }
-        const lines = (text || '').split('\n').map(l => l.trim()).filter(Boolean);
+
+        // Structured JSON document parsing
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try {
+                const rawJson = JSON.parse(trimmed);
+                const obj = Array.isArray(rawJson) ? (rawJson[0] || {}) : rawJson;
+                const rawItems = Array.isArray(obj.line_items || obj.items) ? (obj.line_items || obj.items) : [];
+                const lineItems = rawItems.map((it, idx) => {
+                    const qty = Number(it.quantity ?? it.qty ?? 1) || 1;
+                    const price = Number(it.unit_price ?? it.price ?? it.rate ?? 0) || 0;
+                    const rowTotal = Number(it.total ?? it.amount ?? (qty * price)) || 0;
+                    return {
+                        description: String(it.description || it.name || it.item || `Line Item ${idx + 1}`),
+                        quantity: qty,
+                        unit_price: price || (qty ? rowTotal / qty : 0),
+                        total: rowTotal
+                    };
+                });
+                const sumItems = lineItems.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
+                const subtotal = Number(obj.subtotal ?? sumItems) || 0;
+                const taxAmount = Number(obj.tax_amount ?? obj.tax ?? 0) || 0;
+                const totalAmount = Number(obj.total_amount ?? obj.total ?? (subtotal + taxAmount)) || 0;
+                return {
+                    vendor_name: String(obj.vendor_name || obj.vendor || obj.company || obj.merchant || 'JSON Document'),
+                    document_type: docType === 'auto' ? String(obj.document_type || obj.type || 'Invoice') : docType,
+                    invoice_number: String(obj.invoice_number || obj.invoice_id || obj.id || 'JSON-' + Math.floor(1000 + Math.random() * 9000)),
+                    date: String(obj.date || obj.issued_at || new Date().toISOString().split('T')[0]),
+                    due_date: String(obj.due_date || obj.terms || 'Net 30'),
+                    payment_status: String(obj.payment_status || obj.status || 'Paid'),
+                    currency: currency || String(obj.currency || 'USD'),
+                    line_items: lineItems.length ? lineItems : [{ description: 'JSON Document Payload', quantity: 1, unit_price: totalAmount || 0, total: totalAmount || 0 }],
+                    subtotal,
+                    tax_amount: taxAmount,
+                    tax_rate: subtotal ? Math.round((taxAmount / subtotal) * 10000) / 100 : 0,
+                    total_amount: totalAmount,
+                    confidence_score: 97
+                };
+            } catch (_) {}
+        }
+
+        // Structured CSV document parsing
+        const rawLines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (rawLines.length >= 2 && rawLines[0].includes(',') && !/^INVOICE|^RECEIPT/i.test(rawLines[0])) {
+            const headers = parseDelimitedRow(rawLines[0]).map(h => h.toLowerCase());
+            const descIdx = headers.findIndex(h => /desc|item|service|product|name/.test(h));
+            const qtyIdx = headers.findIndex(h => /qty|quantity|hours|count/.test(h));
+            const priceIdx = headers.findIndex(h => /unit|price|rate/.test(h));
+            const totalIdx = headers.findIndex(h => /total|amount|subtotal/.test(h));
+            const vendorIdx = headers.findIndex(h => /vendor|merchant|company|supplier/.test(h));
+            if (descIdx !== -1 || totalIdx !== -1 || priceIdx !== -1) {
+                const csvItems = [];
+                let detectedVendor = '';
+                for (let i = 1; i < rawLines.length; i++) {
+                    const cols = parseDelimitedRow(rawLines[i]);
+                    if (!cols.length) continue;
+                    if (!detectedVendor && vendorIdx !== -1 && cols[vendorIdx]) detectedVendor = cols[vendorIdx];
+                    const desc = (descIdx !== -1 ? cols[descIdx] : cols[0]) || `Row ${i}`;
+                    const qty = qtyIdx !== -1 ? (parseFloat(String(cols[qtyIdx] || '1').replace(/[^0-9.-]/g, '')) || 1) : 1;
+                    const unit = priceIdx !== -1 ? (parseFloat(String(cols[priceIdx] || '0').replace(/[^0-9.-]/g, '')) || 0) : 0;
+                    const rowTot = totalIdx !== -1 ? (parseFloat(String(cols[totalIdx] || '0').replace(/[^0-9.-]/g, '')) || (qty * unit)) : (qty * unit);
+                    csvItems.push({ description: desc, quantity: qty, unit_price: unit || (qty ? rowTot / qty : 0), total: rowTot });
+                }
+                if (csvItems.length > 0) {
+                    const subtotal = csvItems.reduce((sum, it) => sum + (Number(it.total) || 0), 0);
+                    return {
+                        vendor_name: detectedVendor || (state.uploadedFileName ? state.uploadedFileName.replace(/\.[^.]+$/, '') : 'CSV Document'),
+                        document_type: docType === 'auto' ? 'Invoice' : docType,
+                        invoice_number: 'CSV-' + Math.floor(1000 + Math.random() * 9000),
+                        date: new Date().toISOString().split('T')[0],
+                        due_date: 'Net 30',
+                        payment_status: 'Pending',
+                        currency: currency || 'USD',
+                        line_items: csvItems,
+                        subtotal: +subtotal.toFixed(2),
+                        tax_amount: 0,
+                        tax_rate: 0,
+                        total_amount: +subtotal.toFixed(2),
+                        confidence_score: 96
+                    };
+                }
+            }
+        }
+
+        const lines = rawLines;
         const vendor = lines[0] ? lines[0].replace(/^[#\*\s]+/, '') : 'Detected Vendor';
 
         let invoiceNumber = 'INV-' + Math.floor(1000 + Math.random() * 9000);
@@ -506,8 +620,54 @@ Terms: Net 30`
         }
     }
 
+    function updateFileBadge() {
+        if (!fileBadge) return;
+        if (!state.uploadedFileName) {
+            fileBadge.hidden = true;
+            fileBadge.setAttribute('hidden', '');
+            if (dropzone) dropzone.classList.remove('has-file');
+            return;
+        }
+        const sizeBytes = Number(state.uploadedFileSize) || 0;
+        const sizeLabel = sizeBytes >= 1024 * 1024
+            ? `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`
+            : `${Math.max(0.1, sizeBytes / 1024).toFixed(1)} KB`;
+        const ext = (state.uploadedFileName.split('.').pop() || 'FILE').toUpperCase();
+        if (fileBadgeName) fileBadgeName.textContent = state.uploadedFileName;
+        if (fileBadgeMeta) fileBadgeMeta.textContent = `${ext} · ${sizeLabel}`;
+        fileBadge.hidden = false;
+        fileBadge.removeAttribute('hidden');
+        if (dropzone) dropzone.classList.add('has-file');
+    }
+
+    function clearUploadedFile() {
+        state.uploadedFileData = null;
+        state.uploadedFileName = null;
+        state.uploadedFileSize = null;
+        state.uploadedFileType = null;
+        if (fileInput) fileInput.value = '';
+        updateFileBadge();
+        if (statusEl) {
+            statusEl.textContent = 'Attached file cleared. Drop a new file or paste text below.';
+            statusEl.className = 'ocr-status-msg info';
+        }
+    }
+
+    const SUPPORTED_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.csv', '.json', '.md'];
+
     function handleOcrFile(file) {
         if (!file) return;
+        const nameLower = (file.name || '').toLowerCase();
+        const hasSupportedExt = SUPPORTED_EXTENSIONS.some(ext => nameLower.endsWith(ext));
+        const allowedMime = /^(image\/(png|jpe?g|webp|gif)|application\/pdf|text\/|application\/(json|csv))/i;
+        if (!hasSupportedExt && !(file.type && allowedMime.test(file.type))) {
+            if (statusEl) {
+                statusEl.textContent = `Unsupported file "${file.name}". Please upload PDF, PNG, JPG, WebP, TXT, CSV, JSON, or MD.`;
+                statusEl.className = 'ocr-status-msg error';
+            }
+            window.showToast?.('Unsupported file format.');
+            return;
+        }
         if (file.size === 0) {
             if (statusEl) {
                 statusEl.textContent = `File "${file.name}" is empty (0 bytes). Please upload a valid document.`;
@@ -525,8 +685,9 @@ Terms: Net 30`
             window.showToast?.('File too large (max 10 MB).');
             return;
         }
-        const nameLower = file.name.toLowerCase();
-        const isBinary = file.type.startsWith('image/') || file.type === 'application/pdf' || nameLower.endsWith('.pdf');
+        const isBinary = file.type.startsWith('image/')
+            || file.type === 'application/pdf'
+            || /\.(pdf|png|jpe?g|webp|gif)$/i.test(nameLower);
         if (isBinary && file.size > 3.5 * 1024 * 1024) {
             if (statusEl) {
                 statusEl.textContent = 'Images & PDFs must be under 3.5 MB for cloud Vision OCR. Compress the file or paste text below.';
@@ -537,6 +698,9 @@ Terms: Net 30`
         }
         state.uploadedFileName = file.name;
         state.uploadedFileSize = file.size;
+        state.uploadedFileType = file.type || (isBinary ? 'application/octet-stream' : 'text/plain');
+        updateFileBadge();
+
         const reader = new FileReader();
         reader.onerror = () => {
             if (statusEl) {
@@ -549,6 +713,9 @@ Terms: Net 30`
         if (isBinary) {
             reader.onload = (e) => {
                 state.uploadedFileData = e.target?.result || null;
+                if (textInput && state.textIsAutoLoaded) {
+                    textInput.value = '';
+                }
                 if (statusEl) {
                     statusEl.textContent = `Document "${file.name}" attached (${(file.size / 1024).toFixed(1)} KB). Analyzing with OCR...`;
                     statusEl.className = 'ocr-status-msg info';
@@ -569,9 +736,12 @@ Terms: Net 30`
                     window.showToast?.('Uploaded text file is empty.');
                     return;
                 }
-                if (textInput) textInput.value = fileContent;
+                if (textInput) {
+                    textInput.value = fileContent;
+                    state.textIsAutoLoaded = true;
+                }
                 if (statusEl) {
-                    statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
+                    statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Extracting structured data...`;
                     statusEl.className = 'ocr-status-msg info';
                 }
                 // Automatically run extraction on file load
@@ -597,8 +767,11 @@ Terms: Net 30`
                 state.uploadedFileData = null;
                 state.uploadedFileName = null;
                 state.uploadedFileSize = null;
+                state.uploadedFileType = null;
+                updateFileBadge();
                 if (SAMPLE_DOCS[val] && textInput) {
                     textInput.value = SAMPLE_DOCS[val];
+                    state.textIsAutoLoaded = true;
                     if (SAMPLE_PARSED[val]) {
                         renderExtraction(SAMPLE_PARSED[val], SAMPLE_DOCS[val]);
                     }
@@ -611,17 +784,56 @@ Terms: Net 30`
             if (sampleSelect.value && SAMPLE_DOCS[sampleSelect.value]) {
                 if (textInput && !textInput.value.trim()) {
                     textInput.value = SAMPLE_DOCS[sampleSelect.value];
+                    state.textIsAutoLoaded = true;
                 }
             }
         }
 
-        // File dropzone & real drag-and-drop file upload
+        if (textInput) {
+            textInput.addEventListener('input', () => {
+                state.textIsAutoLoaded = false;
+            });
+        }
+
+        if (clearFileBtn) {
+            clearFileBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                clearUploadedFile();
+            });
+        }
+
+        // File dropzone & real drag-and-drop file upload (direct native activation without preventDefault interference)
         if (dropzone && fileInput) {
-            bindSafe(dropzone, 'click', () => fileInput.click());
-            bindSafe(dropzone, 'keydown', (e) => {
+            let lastPickerOpenAt = 0;
+            const openFilePicker = () => {
+                const now = Date.now();
+                if (now - lastPickerOpenAt < 250) return;
+                lastPickerOpenAt = now;
+                fileInput.click();
+            };
+
+            fileInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            if (browseBtn) {
+                browseBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openFilePicker();
+                });
+            }
+
+            dropzone.addEventListener('click', (e) => {
+                if (e.target === fileInput || e.target.closest?.('#ocrBrowseBtn, #ocrClearFileBtn')) return;
+                openFilePicker();
+            });
+
+            dropzone.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    fileInput.click();
+                    openFilePicker();
                 }
             });
 
@@ -648,7 +860,7 @@ Terms: Net 30`
                 }
             }, false);
 
-            bindSafe(fileInput, 'change', () => {
+            fileInput.addEventListener('change', () => {
                 const file = fileInput.files?.[0];
                 fileInput.value = '';
                 if (file) handleOcrFile(file);
@@ -804,7 +1016,10 @@ Terms: Net 30`
             state.uploadedFileData = null;
             state.uploadedFileName = null;
             state.uploadedFileSize = null;
+            state.uploadedFileType = null;
+            state.textIsAutoLoaded = true;
             if (fileInput) fileInput.value = '';
+            updateFileBadge();
             if (sampleSelect) sampleSelect.value = 'saas_invoice';
             if (textInput) textInput.value = SAMPLE_DOCS.saas_invoice;
             if (statusEl) { statusEl.textContent = ''; statusEl.className = 'ocr-status-msg'; }

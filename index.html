@@ -1472,10 +1472,20 @@
                             <div class="ocr-dropzone glass" id="ocrDropzone" role="button" tabindex="0" aria-label="Upload document file or drag and drop">
                                 <i class="fas fa-cloud-arrow-up drop-icon" aria-hidden="true"></i>
                                 <div class="ocr-dropzone-copy">
-                                    <span class="ocr-dropzone-main">Drag &amp; drop document, or <strong class="ocr-browse-text">browse files</strong></span>
+                                    <span class="ocr-dropzone-main">Drag &amp; drop document, or <button type="button" class="ocr-browse-text" id="ocrBrowseBtn">browse files</button></span>
                                     <span class="ocr-dropzone-sub">Supports PDF, PNG, JPG, WebP, TXT, CSV, JSON, MD</span>
                                 </div>
-                                <input type="file" id="ocrFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.json,.md" hidden>
+                            </div>
+                            <input type="file" id="ocrFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.json,.md,application/pdf,image/png,image/jpeg,image/webp,text/plain,text/csv,application/json,text/markdown" hidden>
+                            <div id="ocrFileBadge" class="ocr-file-badge" hidden>
+                                <div class="ocr-file-badge-info">
+                                    <i class="fas fa-file-circle-check" aria-hidden="true"></i>
+                                    <span id="ocrFileBadgeName"></span>
+                                    <small id="ocrFileBadgeMeta"></small>
+                                </div>
+                                <button type="button" class="btn btn-xs btn-outline ocr-clear-file-btn" id="ocrClearFileBtn" aria-label="Remove attached file">
+                                    <i class="fas fa-xmark" aria-hidden="true"></i> Clear
+                                </button>
                             </div>
                             <div class="ocr-form-group">
                                 <label for="ocrTextInput">Document Text / OCR Content *</label>
@@ -2226,18 +2236,19 @@
                     <!-- Seat Counter Bar -->
                     <div class="team-seat-bar glass">
                         <div class="team-seat-info">
-                            <span id="teamSeatCounter"><strong>1 / 3</strong> Seats Used</span>
+                            <span id="teamSeatCounter"><strong>2 / 3</strong> Seats Used</span>
                             <span class="team-plan-pill" id="teamPlanBadge">FREE PLAN</span>
                         </div>
-                        <div class="team-seat-hint">All paid plans (Lite, Pro, Max, Ultra) unlock up to 250 workspace seats.</div>
+                        <div class="team-seat-hint" id="teamRoleSummary">All paid plans (Lite, Pro, Max, Ultra) unlock up to 250 workspace seats.</div>
                     </div>
+                    <p id="teamAdminStatus" class="team-status-msg" role="status" aria-live="polite"></p>
 
                     <!-- Member Roster Table -->
                     <div class="team-roster-card glass">
                         <div class="pane-head">
                             <div>
                                 <h3>Team Members</h3>
-                                <span class="pane-sub" id="teamMemberCount">1 Member</span>
+                                <span class="pane-sub" id="teamMemberCount">2 Members</span>
                             </div>
                         </div>
                         <div class="table-responsive">
@@ -2323,7 +2334,7 @@
                     <h3 id="teamInviteTitle"><i class="fas fa-user-plus"></i> Invite Team Member</h3>
                     <button type="button" class="crm-modal-close" id="teamInviteClose" aria-label="Close modal">×</button>
                 </div>
-                <form id="teamInviteForm" class="crm-modal-form">
+                <form id="teamInviteForm" class="crm-modal-form" novalidate>
                     <div class="crm-form-group">
                         <label for="teamInviteEmail">Colleague Work Email *</label>
                         <input type="email" id="teamInviteEmail" required placeholder="colleague@company.com">
@@ -2336,6 +2347,7 @@
                             <option value="Viewer">Viewer (Read-only observation)</option>
                         </select>
                     </div>
+                    <p id="teamInviteError" class="team-invite-error" role="alert" hidden></p>
                     <div class="crm-modal-actions">
                         <button type="button" class="btn btn-outline" id="teamInviteCancel">Cancel</button>
                         <button type="submit" class="btn btn-primary" id="teamInviteSubmitBtn">Send Invitation</button>

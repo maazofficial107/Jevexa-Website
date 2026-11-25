@@ -26,14 +26,22 @@
         });
     }
 
+    const STEP_ACTION_LABELS = {
+        score_lead: 'AI Score / Analyze',
+        generate_outreach: 'Draft Email / Outreach',
+        social_draft: 'Draft Social Post',
+        analytics_log: 'Log Analytics / KPIs',
+        webhook: 'Webhook / Alert',
+        custom: 'Custom Action'
+    };
+
     const TEMPLATES = {
         lead_conversion: {
             name: "Inbound Lead Conversion Pipeline",
             trigger: { type: "crm_lead", name: "When New Inbound Lead is Added" },
             steps: [
                 { id: "step_1", type: "score_lead", name: "AI Lead Scoring & Qualification", desc: "Calculates conversion likelihood and identifies top pain points." },
-                { id: "step_2", type: "generate_outreach", name: "Draft Personalized 3-Step Sequence", desc: "Generates custom initial email and Day 3/Day 7 follow-ups." },
-                { id: "step_3", type: "analytics_log", name: "Record Pipeline Value & Log KPIs", desc: "Updates Business Analytics conversion funnel and revenue forecast." }
+                { id: "step_2", type: "generate_outreach", name: "Draft Personalized 3-Step Sequence", desc: "Generates custom initial email and Day 3/Day 7 follow-ups." }
             ]
         },
         content_repurposing: {
@@ -56,6 +64,7 @@
     };
 
     const WORKFLOW_RUNS_STORAGE_KEY = 'jevexa_workflow_runs_cache';
+    const WORKFLOW_STATE_STORAGE_KEY = 'jevexa_workflow_state_cache';
 
     function loadCachedWorkflowRuns() {
         try {
@@ -74,15 +83,39 @@
         } catch (_) {}
     }
 
+    function loadCachedWorkflowState() {
+        try {
+            const raw = localStorage.getItem(WORKFLOW_STATE_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+                    return parsed;
+                }
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    function saveCachedWorkflowState() {
+        try {
+            localStorage.setItem(WORKFLOW_STATE_STORAGE_KEY, JSON.stringify({
+                templateKey: state.templateKey,
+                currentWorkflow: state.currentWorkflow,
+                steps: state.steps
+            }));
+        } catch (_) {}
+    }
+
     const state = {
+        templateKey: 'lead_conversion',
         currentWorkflow: null,
         steps: [],
         runs: loadCachedWorkflowRuns() || [
             {
                 id: 'run_init_1',
                 name: 'Inbound Lead Conversion Pipeline',
-                stepsCount: 3,
-                durationMs: 135,
+                stepsCount: 2,
+                durationMs: 115,
                 status: 'Success',
                 timestamp: new Date(Date.now() - 3600000).toISOString()
             }
@@ -127,13 +160,34 @@
         }
     }
 
-    function loadTemplate(key) {
-        const tmpl = TEMPLATES[key] || TEMPLATES.lead_conversion;
-        state.currentWorkflow = tmpl;
+    function commitPendingStepEdit() {
+        if (state.editingStepIndex === null || !stepListEl) return false;
+        const idx = state.editingStepIndex;
+        const editingCard = stepListEl.querySelector('.workflow-step-card.is-editing-step');
+        if (editingCard && state.steps[idx]) {
+            const nameInput = editingCard.querySelector('.edit-step-name');
+            const descInput = editingCard.querySelector('.edit-step-desc');
+            const actionSelect = editingCard.querySelector('.edit-step-action');
+            if (nameInput && nameInput.value.trim()) state.steps[idx].name = nameInput.value.trim();
+            if (descInput && descInput.value !== undefined) state.steps[idx].desc = descInput.value.trim();
+            if (actionSelect && STEP_ACTION_LABELS[actionSelect.value]) state.steps[idx].type = actionSelect.value;
+            saveCachedWorkflowState();
+        }
+        state.editingStepIndex = null;
+        return true;
+    }
+
+    function loadTemplate(key, persist = true) {
+        const resolvedKey = TEMPLATES[key] ? key : 'lead_conversion';
+        const tmpl = TEMPLATES[resolvedKey];
+        state.templateKey = resolvedKey;
+        state.currentWorkflow = { name: tmpl.name, trigger: tmpl.trigger ? { ...tmpl.trigger } : { type: 'manual' } };
         state.steps = tmpl.steps ? JSON.parse(JSON.stringify(tmpl.steps)) : [];
         state.editingStepIndex = null;
+        if (templateSelect && templateSelect.value !== resolvedKey) templateSelect.value = resolvedKey;
         if (workflowTitleEl) workflowTitleEl.textContent = tmpl.name;
         renderSteps();
+        if (persist) saveCachedWorkflowState();
         if (statusEl) {
             statusEl.textContent = `Loaded template: ${tmpl.name} (${state.steps.length} steps). Click "Run Workflow" to execute.`;
             statusEl.className = 'workflow-status-msg info';
@@ -146,17 +200,29 @@
 
         state.steps.forEach((step, index) => {
             const isEditing = state.editingStepIndex === index;
+            const actionType = STEP_ACTION_LABELS[step.type] ? step.type : 'custom';
+            const actionLabel = STEP_ACTION_LABELS[actionType];
             const card = document.createElement('div');
             card.className = `workflow-step-card glass${isEditing ? ' is-editing-step' : ''}`;
+            card.dataset.stepId = step.id || `step_${index + 1}`;
             card.style.position = 'relative';
 
             if (isEditing) {
+                const actionOptionsHtml = Object.entries(STEP_ACTION_LABELS).map(([val, label]) =>
+                    `<option value="${val}"${actionType === val ? ' selected' : ''}>${escapeHtml(label)}</option>`
+                ).join('');
                 card.innerHTML = `
                     <div class="workflow-step-badge">Step ${index + 1} (Editing)</div>
                     <div class="workflow-step-edit-form" style="width:100%; display:flex; flex-direction:column; gap:8px; margin:10px 0;">
-                        <div>
-                            <label style="font-size:11.5px; color:#94a3b8; display:block; margin-bottom:4px;">Step Action Name</label>
-                            <input type="text" class="crm-input edit-step-name" value="${escapeHtml(step.name)}" style="width:100%; font-size:12.5px;">
+                        <div style="display:grid; grid-template-columns:minmax(0,1.4fr) minmax(160px,1fr); gap:8px;">
+                            <div>
+                                <label style="font-size:11.5px; color:#94a3b8; display:block; margin-bottom:4px;">Step Title</label>
+                                <input type="text" class="crm-input edit-step-name" value="${escapeHtml(step.name)}" style="width:100%; font-size:12.5px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11.5px; color:#94a3b8; display:block; margin-bottom:4px;">Action Type</label>
+                                <select class="crm-select edit-step-action" style="width:100%; font-size:12.5px;">${actionOptionsHtml}</select>
+                            </div>
                         </div>
                         <div>
                             <label style="font-size:11.5px; color:#94a3b8; display:block; margin-bottom:4px;">Step Description</label>
@@ -174,18 +240,19 @@
                     <div class="workflow-step-info" style="flex:1;">
                         <strong style="color:#f1f5f9; display:block; font-size:13px;">${escapeHtml(step.name)}</strong>
                         <p style="color:#cbd5e1; font-size:12px; margin:4px 0 0;">${escapeHtml(step.desc || 'Automated action step')}</p>
+                        <span class="workflow-step-action-tag" style="display:inline-block; margin-top:6px; font-size:10.5px; font-weight:700; color:#a5b4fc; background:rgba(99,102,241,0.14); border:1px solid rgba(99,102,241,0.3); border-radius:999px; padding:2px 8px;">${escapeHtml(actionLabel)}</span>
                     </div>
                     <div class="workflow-step-actions" style="display:flex; gap:6px;">
-                        <button type="button" class="btn btn-xs btn-outline workflow-move-up-btn" data-step-index="${index}" title="Move Up" ${index === 0 ? 'disabled' : ''}>
+                        <button type="button" class="btn btn-xs btn-outline workflow-move-up-btn" data-step-index="${index}" title="Move Up" aria-label="Move Step ${index + 1} Up" ${index === 0 ? 'disabled' : ''}>
                             <i class="fas fa-arrow-up"></i>
                         </button>
-                        <button type="button" class="btn btn-xs btn-outline workflow-move-down-btn" data-step-index="${index}" title="Move Down" ${index === state.steps.length - 1 ? 'disabled' : ''}>
+                        <button type="button" class="btn btn-xs btn-outline workflow-move-down-btn" data-step-index="${index}" title="Move Down" aria-label="Move Step ${index + 1} Down" ${index === state.steps.length - 1 ? 'disabled' : ''}>
                             <i class="fas fa-arrow-down"></i>
                         </button>
-                        <button type="button" class="btn btn-xs btn-outline workflow-configure-btn" data-step-index="${index}" title="Configure Step">
+                        <button type="button" class="btn btn-xs btn-outline workflow-configure-btn" data-step-index="${index}" title="Configure Step" aria-label="Configure Step ${index + 1}">
                             <i class="fas fa-sliders"></i>
                         </button>
-                        <button type="button" class="btn btn-xs btn-outline workflow-del-step-btn" data-step-index="${index}" title="Remove Step">
+                        <button type="button" class="btn btn-xs btn-outline workflow-del-step-btn" data-step-index="${index}" title="Remove Step" aria-label="Remove Step ${index + 1}">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -198,13 +265,18 @@
         // Step reordering event listeners
         stepListEl.querySelectorAll('.workflow-move-up-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                commitPendingStepEdit();
                 const idx = Number(e.currentTarget.dataset.stepIndex);
                 if (idx > 0) {
                     const temp = state.steps[idx];
                     state.steps[idx] = state.steps[idx - 1];
                     state.steps[idx - 1] = temp;
-                    state.editingStepIndex = null;
+                    saveCachedWorkflowState();
                     renderSteps();
+                    if (statusEl) {
+                        statusEl.textContent = `Moved "${temp.name}" to Step ${idx}. (${state.steps.length} active steps)`;
+                        statusEl.className = 'workflow-status-msg info';
+                    }
                     window.showToast?.(`Moved Step ${idx + 1} up.`);
                 }
             });
@@ -212,13 +284,18 @@
 
         stepListEl.querySelectorAll('.workflow-move-down-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                commitPendingStepEdit();
                 const idx = Number(e.currentTarget.dataset.stepIndex);
                 if (idx < state.steps.length - 1) {
                     const temp = state.steps[idx];
                     state.steps[idx] = state.steps[idx + 1];
                     state.steps[idx + 1] = temp;
-                    state.editingStepIndex = null;
+                    saveCachedWorkflowState();
                     renderSteps();
+                    if (statusEl) {
+                        statusEl.textContent = `Moved "${temp.name}" to Step ${idx + 2}. (${state.steps.length} active steps)`;
+                        statusEl.className = 'workflow-status-msg info';
+                    }
                     window.showToast?.(`Moved Step ${idx + 1} down.`);
                 }
             });
@@ -227,6 +304,7 @@
         // Step configure event listeners (clean inline editor)
         stepListEl.querySelectorAll('.workflow-configure-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                commitPendingStepEdit();
                 const idx = Number(e.currentTarget.dataset.stepIndex);
                 state.editingStepIndex = idx;
                 renderSteps();
@@ -240,12 +318,19 @@
                 const card = e.currentTarget.closest('.workflow-step-card');
                 const nameInput = card?.querySelector('.edit-step-name');
                 const descInput = card?.querySelector('.edit-step-desc');
+                const actionSelect = card?.querySelector('.edit-step-action');
                 if (state.steps[idx]) {
                     if (nameInput?.value.trim()) state.steps[idx].name = nameInput.value.trim();
                     if (descInput?.value !== undefined) state.steps[idx].desc = descInput.value.trim();
+                    if (actionSelect && STEP_ACTION_LABELS[actionSelect.value]) state.steps[idx].type = actionSelect.value;
                 }
                 state.editingStepIndex = null;
+                saveCachedWorkflowState();
                 renderSteps();
+                if (statusEl) {
+                    statusEl.textContent = `Updated Step ${idx + 1}: "${state.steps[idx]?.name || ''}".`;
+                    statusEl.className = 'workflow-status-msg success';
+                }
                 window.showToast?.(`Step ${idx + 1} configuration updated!`);
             });
         });
@@ -257,23 +342,43 @@
             });
         });
 
+        stepListEl.querySelectorAll('.edit-step-name, .edit-step-desc').forEach(inp => {
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    inp.closest('.workflow-step-card')?.querySelector('.save-step-btn')?.click();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    state.editingStepIndex = null;
+                    renderSteps();
+                }
+            });
+        });
+
         // Step remove event listeners
         stepListEl.querySelectorAll('.workflow-del-step-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                commitPendingStepEdit();
                 const idx = Number(e.currentTarget.dataset.stepIndex);
                 if (state.steps.length <= 1) {
                     window.showToast?.('A workflow pipeline must have at least one step.');
                     return;
                 }
-                state.steps.splice(idx, 1);
-                state.editingStepIndex = null;
+                const removed = state.steps.splice(idx, 1)[0];
+                saveCachedWorkflowState();
                 renderSteps();
+                if (statusEl) {
+                    statusEl.textContent = `Removed "${removed?.name || 'step'}". ${state.steps.length} active steps remaining.`;
+                    statusEl.className = 'workflow-status-msg info';
+                }
                 window.showToast?.('Step removed from pipeline.');
             });
         });
     }
 
     function addCustomStep() {
+        commitPendingStepEdit();
         if (state.steps.length >= state.maxSteps) {
             window.showToast?.(`Pipeline step limit (${state.maxSteps}) reached. Upgrade plan to build deeper pipelines.`);
             return;
@@ -281,21 +386,26 @@
 
         const newIndex = state.steps.length + 1;
         const catalog = [
-            { name: "Filter & Validate Inbound Data", desc: "Applies schema rules, checks for missing attributes, and filters spam." },
-            { name: "AI Context Enrichment & Tagging", desc: "Enriches payload with historical CRM context, intent scoring, and tags." },
-            { name: "Real-Time Webhook & Slack Alert", desc: "Dispatches formatted JSON alert to webhooks, Slack channels, and Discord." },
-            { name: "Executive Metric Log & KPI Update", desc: "Records pipeline conversion event into Business Analytics dashboard." }
+            { type: "analytics_log", name: "Record Pipeline Value & Log KPIs", desc: "Records pipeline conversion event into Business Analytics dashboard." },
+            { type: "score_lead", name: "AI Context Enrichment & Tagging", desc: "Enriches payload with historical CRM context, intent scoring, and tags." },
+            { type: "webhook", name: "Real-Time Webhook & Slack Alert", desc: "Dispatches formatted JSON alert to webhooks, Slack channels, and Discord." },
+            { type: "generate_outreach", name: "Automated Follow-Up Dispatch", desc: "Generates and queues personalized follow-up email messaging." }
         ];
 
         const choice = catalog[(newIndex - 1) % catalog.length];
         state.steps.push({
             id: `step_${newIndex}_${Date.now()}`,
-            type: "custom",
+            type: choice.type,
             name: choice.name,
             desc: choice.desc
         });
         state.editingStepIndex = null;
+        saveCachedWorkflowState();
         renderSteps();
+        const addedCard = stepListEl?.lastElementChild;
+        if (addedCard && typeof addedCard.scrollIntoView === 'function') {
+            try { addedCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
+        }
         window.showToast?.(`Added Step ${newIndex}: "${choice.name}"!`);
         if (statusEl) {
             statusEl.textContent = `Pipeline updated: ${state.steps.length} active steps. Ready to execute.`;
@@ -305,6 +415,7 @@
 
     async function runWorkflow() {
         if (state.isRunning) return;
+        if (commitPendingStepEdit()) renderSteps();
         if (!state.steps.length) {
             window.showToast?.('Add at least one step before running the workflow.');
             return;
@@ -495,9 +606,11 @@
     }
 
     function exportWorkflowJson() {
+        if (commitPendingStepEdit()) renderSteps();
         const wf = {
             name: state.currentWorkflow?.name || "Custom Pipeline",
-            template: templateSelect ? templateSelect.value : 'custom',
+            template: state.templateKey || (templateSelect ? templateSelect.value : 'custom'),
+            trigger: state.currentWorkflow?.trigger || { type: 'manual' },
             exportedAt: new Date().toISOString(),
             steps: state.steps
         };
@@ -583,7 +696,23 @@
             });
         }
 
-        loadTemplate('lead_conversion');
+        const savedState = loadCachedWorkflowState();
+        if (savedState) {
+            state.templateKey = savedState.templateKey || 'lead_conversion';
+            state.currentWorkflow = savedState.currentWorkflow || TEMPLATES[state.templateKey] || TEMPLATES.lead_conversion;
+            state.steps = savedState.steps;
+            if (templateSelect && TEMPLATES[state.templateKey]) {
+                templateSelect.value = state.templateKey;
+            }
+            if (workflowTitleEl) workflowTitleEl.textContent = state.currentWorkflow?.name || 'Custom Pipeline';
+            renderSteps();
+            if (statusEl) {
+                statusEl.textContent = `Restored saved pipeline: ${state.currentWorkflow?.name || 'Pipeline'} (${state.steps.length} steps).`;
+                statusEl.className = 'workflow-status-msg info';
+            }
+        } else {
+            loadTemplate('lead_conversion', false);
+        }
         renderHistory();
     }
 
@@ -599,10 +728,13 @@
         resetOnLogout: () => {
             state.isRunning = false;
             state.runs = [];
-            try { localStorage.removeItem(WORKFLOW_RUNS_STORAGE_KEY); } catch (_) {}
+            try {
+                localStorage.removeItem(WORKFLOW_RUNS_STORAGE_KEY);
+                localStorage.removeItem(WORKFLOW_STATE_STORAGE_KEY);
+            } catch (_) {}
             window.JEVEXA_WORKFLOWS.closeExecModal();
             if (templateSelect) templateSelect.value = 'lead_conversion';
-            loadTemplate('lead_conversion');
+            loadTemplate('lead_conversion', false);
             renderHistory();
         },
         closeExecModal: () => {

@@ -1503,7 +1503,8 @@
     }
 
     function getActiveCustomSettings() {
-        return {
+        const activeSess = chatSessions.find(item => item.id === activeChatId);
+        const settings = {
             aboutUser: chatCustomSettings.aboutUser || '',
             responseStyle: chatCustomSettings.responseStyle || '',
             language: chatCustomSettings.language || 'auto',
@@ -1511,6 +1512,10 @@
             behavior: chatCustomSettings.behavior || 'standard',
             codeDepth: chatCustomSettings.codeDepth || 'full'
         };
+        if (activeSess && activeSess.languageOverride) {
+            settings.language = activeSess.languageOverride;
+        }
+        return settings;
     }
 
     function initChatSidebarResizer() {
@@ -1858,13 +1863,18 @@
         }
 
         const syncSettingsFromInputs = () => {
+            const prevLang = chatCustomSettings.language;
             chatCustomSettings.aboutUser = document.getElementById('chatCustomAbout')?.value.trim() || '';
             chatCustomSettings.responseStyle = document.getElementById('chatCustomResponse')?.value.trim() || '';
             chatCustomSettings.language = document.getElementById('chatLanguageSelect')?.value || 'auto';
+            if (chatCustomSettings.language !== prevLang) {
+                const activeSess = chatSessions.find(item => item.id === activeChatId);
+                if (activeSess) delete activeSess.languageOverride;
+            }
             chatCustomSettings.tone = document.getElementById('chatToneSelect')?.value || 'default';
             chatCustomSettings.behavior = document.getElementById('chatBehaviorSelect')?.value || 'standard';
             chatCustomSettings.codeDepth = document.getElementById('chatCodeDepthSelect')?.value || 'full';
-            chatCustomSettings.theme = document.getElementById('chatModalThemeSelect')?.value || 'dark';
+            chatCustomSettings.theme = document.getElementById('chatModalThemeSelect')?.value || chatCustomSettings.theme || 'dark';
             chatCustomSettings.density = document.getElementById('chatModalDensitySelect')?.value || 'comfortable';
             chatCustomSettings.reducedMotion = Boolean(document.getElementById('chatModalReducedMotion')?.checked);
 
@@ -1981,8 +1991,13 @@
             void reconcilePendingRequest(session);
             try {
                 const savedTheme = localStorage.getItem(`jevexa_${session.user.id}_chat_theme`);
-                const theme = ['dark', 'light', 'system'].includes(savedTheme) ? savedTheme : 'dark';
+                const theme = ['dark', 'light', 'system'].includes(savedTheme)
+                    ? savedTheme
+                    : (['dark', 'light', 'system'].includes(chatCustomSettings.theme) ? chatCustomSettings.theme : 'dark');
+                chatCustomSettings.theme = theme;
                 setSelectorValue('theme', theme);
+                const modalThemeEl = document.getElementById('chatModalThemeSelect');
+                if (modalThemeEl) modalThemeEl.value = theme;
                 document.getElementById('chatbotWindow')?.setAttribute('data-chat-theme', theme);
                 const reducedMotionEl = document.getElementById('chatReducedMotion') || document.getElementById('chatModalReducedMotion');
                 if (reducedMotionEl) {
@@ -2081,6 +2096,8 @@
             return;
         }
         const prepared = [];
+        let runningBatchBytes = pendingAttachments.reduce((sum, item) => sum + (item.size || 0), 0);
+        const maxTransportRawBytes = Math.min(planConfig.maxBatchSize || (25 * 1024 * 1024), 75 * 1024 * 1024);
         const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         const paidFileTypes = ['application/pdf', 'application/zip', 'application/x-zip-compressed'];
         const extensionTypes = {
@@ -2122,10 +2139,16 @@
                 }
                 if (file.size > planConfig.maxFileSize) {
                     const mbLimit = Math.round(planConfig.maxFileSize / (1024 * 1024));
-                    setStatus(`${file.name} is too large. Your ${planConfig.name} plan allows files up to ${mbLimit} MB each.`);
+                    setStatus(`${file.name} (${formatFileSize(file.size)}) exceeds your ${planConfig.name} plan limit of ${mbLimit} MB per file.`);
                     return;
                 }
             }
+            if (runningBatchBytes + file.size > maxTransportRawBytes) {
+                const batchMb = Math.round(maxTransportRawBytes / (1024 * 1024));
+                setStatus(`Total attachment batch size exceeds the ${batchMb} MB per-message upload limit. Remove a file or split into multiple messages.`);
+                return;
+            }
+            runningBatchBytes += file.size;
 
             if (isImage || (isPaid && (paidFileTypes.includes(type) || ['pdf', 'zip'].includes(extension)))) {
                 const normalizedType = (type === 'application/x-zip-compressed' || extension === 'zip')
@@ -2174,45 +2197,141 @@
         }
     }
 
-    function isScrolledNearBottom(threshold = 140) {
+    let userScrolledUpDuringStream = false;
+
+    function isScrolledNearBottom(threshold = 120) {
         if (!messages) return true;
         return (messages.scrollHeight - messages.scrollTop - messages.clientHeight) <= threshold;
     }
 
-    function scrollChatToBottom(force = false) {
-        if (!messages) return;
-        if (force || isScrolledNearBottom(140)) {
-            messages.scrollTo({
-                top: messages.scrollHeight,
-                behavior: force ? 'auto' : 'smooth'
-            });
+    function updateScrollBottomButton() {
+        const scrollBottomBtn = document.getElementById('chatScrollBottom');
+        if (!messages || !scrollBottomBtn) return;
+        const distance = messages.scrollHeight - messages.scrollTop - messages.clientHeight;
+        if (distance > 140) {
+            scrollBottomBtn.hidden = false;
+            scrollBottomBtn.classList.add('visible');
+        } else {
+            scrollBottomBtn.hidden = true;
+            scrollBottomBtn.classList.remove('visible');
         }
     }
 
-    function renderMarkdown(text) {
+    function scrollChatToBottom(force = false) {
+        if (!messages) return;
+        if (force) {
+            userScrolledUpDuringStream = false;
+            messages.scrollTo({
+                top: messages.scrollHeight,
+                behavior: 'auto'
+            });
+            updateScrollBottomButton();
+            return;
+        }
+        if (!userScrolledUpDuringStream && isScrolledNearBottom(140)) {
+            messages.scrollTop = messages.scrollHeight;
+            updateScrollBottomButton();
+        }
+    }
+
+    function escapeMarkdownHtml(str) {
+        return String(str).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
+
+    function applyInlineMarkdown(escapedText) {
+        if (!escapedText) return '';
+        const inlineCodes = [];
+        let out = escapedText.replace(/`([^`\n]+)`/g, (_m, code) => {
+            const idx = inlineCodes.length;
+            inlineCodes.push(`<code>${code}</code>`);
+            return `@@JEVEXA_INLINE_CODE_${idx}@@`;
+        });
+        out = out
+            .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
+            .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+)\)/g, '<a href="$2">$1</a>')
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        return out.replace(/@@JEVEXA_INLINE_CODE_(\d+)@@/g, (_m, idx) => inlineCodes[Number(idx)] || '');
+    }
+
+    function splitTableRow(line) {
+        const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+        return trimmed.split('|').map(cell => cell.trim());
+    }
+
+    function isTableSeparatorLine(line) {
+        const trimmed = line.trim();
+        if (!trimmed.includes('|') && !trimmed.includes('-')) return false;
+        const cells = splitTableRow(trimmed);
+        return cells.length >= 1 && cells.every(c => /^:?-{3,}:?$/.test(c));
+    }
+
+    function getTableAlignments(sepLine) {
+        return splitTableRow(sepLine).map(cell => {
+            if (cell.startsWith(':') && cell.endsWith(':')) return 'center';
+            if (cell.endsWith(':')) return 'right';
+            return 'left';
+        });
+    }
+
+    function renderMarkdown(text, { streaming = false } = {}) {
         if (!text) return '';
-        // 1. Extract fenced code blocks first so inner backticks/formatting aren't mangled
         const codeBlocks = [];
-        const placeholderText = String(text).replace(/```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```/g, (match, lang, code) => {
+        let sourceText = String(text);
+
+        // 1. Extract closed fenced code blocks first so inner formatting isn't mangled
+        let placeholderText = sourceText.replace(/```([a-zA-Z0-9_+-]*)\r?\n([\s\S]*?)```/g, (_match, lang, code) => {
             const index = codeBlocks.length;
-            codeBlocks.push({ lang: lang ? lang.trim() : 'text', code });
-            return `@@JEVEXA_CODE_BLOCK_${index}@@`;
+            codeBlocks.push({ lang: lang ? lang.trim() : 'text', code, unclosed: false });
+            return `\n@@JEVEXA_CODE_BLOCK_${index}@@\n`;
         });
 
-        // 2. Escape HTML special characters to prevent injection
-        const escaped = placeholderText.replace(/[&<>"]/g, character => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
-        })[character]);
+        // Support trailing unclosed code fence smoothly during live SSE streaming
+        if (streaming) {
+            placeholderText = placeholderText.replace(/```([a-zA-Z0-9_+-]*)\r?\n([\s\S]*)$/, (_match, lang, code) => {
+                const index = codeBlocks.length;
+                codeBlocks.push({ lang: lang ? lang.trim() : 'text', code, unclosed: true });
+                return `\n@@JEVEXA_CODE_BLOCK_${index}@@\n`;
+            });
+        }
 
-        // 3. Process line-by-line blocks (headings, lists, blockquotes, horizontal rules)
+        // 2. Escape HTML special characters to prevent XSS
+        const escaped = escapeMarkdownHtml(placeholderText);
+
+        // 3. Block-level parsing (headings, tables, lists, blockquotes, hr, grouped paragraphs)
         const lines = escaped.split(/\r?\n/);
         const output = [];
         let inUl = false;
         let inOl = false;
+        let paragraphLines = [];
+        let blockquoteLines = [];
+
+        const flushParagraph = () => {
+            if (paragraphLines.length > 0) {
+                output.push(`<p>${paragraphLines.map(l => applyInlineMarkdown(l)).join('<br>')}</p>`);
+                paragraphLines = [];
+            }
+        };
+
+        const flushBlockquote = () => {
+            if (blockquoteLines.length > 0) {
+                output.push(`<blockquote>${blockquoteLines.map(l => applyInlineMarkdown(l)).join('<br>')}</blockquote>`);
+                blockquoteLines = [];
+            }
+        };
 
         const closeLists = () => {
             if (inUl) { output.push('</ul>'); inUl = false; }
             if (inOl) { output.push('</ol>'); inOl = false; }
+        };
+
+        const flushAllBlocks = () => {
+            flushParagraph();
+            flushBlockquote();
+            closeLists();
         };
 
         for (let i = 0; i < lines.length; i++) {
@@ -2220,43 +2339,81 @@
             const trimmed = line.trim();
 
             if (!trimmed) {
-                closeLists();
-                output.push('<br>');
+                flushAllBlocks();
+                continue;
+            }
+
+            if (/^@@JEVEXA_CODE_BLOCK_(\d+)@@$/.test(trimmed)) {
+                flushAllBlocks();
+                output.push(trimmed);
+                continue;
+            }
+
+            // Markdown Tables: header row followed by | --- | separator row
+            if (trimmed.includes('|') && i + 1 < lines.length && isTableSeparatorLine(lines[i + 1])) {
+                flushAllBlocks();
+                const headers = splitTableRow(trimmed);
+                const alignments = getTableAlignments(lines[i + 1]);
+                const bodyRows = [];
+                i += 2;
+                while (i < lines.length) {
+                    const rowTrimmed = lines[i].trim();
+                    if (!rowTrimmed || !rowTrimmed.includes('|') || /^@@JEVEXA_CODE_BLOCK_\d+@@$/.test(rowTrimmed)) {
+                        i -= 1;
+                        break;
+                    }
+                    bodyRows.push(splitTableRow(rowTrimmed));
+                    i += 1;
+                }
+                const colCount = Math.max(headers.length, alignments.length);
+                const thHtml = Array.from({ length: colCount }, (_, colIdx) => {
+                    const align = alignments[colIdx] || 'left';
+                    return `<th style="text-align:${align}">${applyInlineMarkdown(headers[colIdx] || '')}</th>`;
+                }).join('');
+                const trHtml = bodyRows.map(cells => {
+                    const tds = Array.from({ length: colCount }, (_, colIdx) => {
+                        const align = alignments[colIdx] || 'left';
+                        return `<td style="text-align:${align}">${applyInlineMarkdown(cells[colIdx] || '')}</td>`;
+                    }).join('');
+                    return `<tr>${tds}</tr>`;
+                }).join('');
+                output.push(`<div class="chat-table-wrap"><table class="chat-md-table"><thead><tr>${thHtml}</tr></thead>${trHtml ? `<tbody>${trHtml}</tbody>` : ''}</table></div>`);
                 continue;
             }
 
             // Headings
             if (/^####\s+(.+)$/.test(trimmed)) {
-                closeLists();
-                output.push(`<h5 class="chat-h4">${trimmed.replace(/^####\s+/, '')}</h5>`);
+                flushAllBlocks();
+                output.push(`<h5 class="chat-h4">${applyInlineMarkdown(trimmed.replace(/^####\s+/, ''))}</h5>`);
                 continue;
             }
             if (/^###\s+(.+)$/.test(trimmed)) {
-                closeLists();
-                output.push(`<h4 class="chat-h3">${trimmed.replace(/^###\s+/, '')}</h4>`);
+                flushAllBlocks();
+                output.push(`<h4 class="chat-h3">${applyInlineMarkdown(trimmed.replace(/^###\s+/, ''))}</h4>`);
                 continue;
             }
             if (/^##\s+(.+)$/.test(trimmed)) {
-                closeLists();
-                output.push(`<h3 class="chat-h2">${trimmed.replace(/^##\s+/, '')}</h3>`);
+                flushAllBlocks();
+                output.push(`<h3 class="chat-h2">${applyInlineMarkdown(trimmed.replace(/^##\s+/, ''))}</h3>`);
                 continue;
             }
             if (/^#\s+(.+)$/.test(trimmed)) {
-                closeLists();
-                output.push(`<h2 class="chat-h1">${trimmed.replace(/^#\s+/, '')}</h2>`);
+                flushAllBlocks();
+                output.push(`<h2 class="chat-h1">${applyInlineMarkdown(trimmed.replace(/^#\s+/, ''))}</h2>`);
                 continue;
             }
 
-            // Blockquotes
-            if (/^&gt;\s*(.+)$/.test(trimmed)) {
+            // Blockquotes (grouped consecutive > lines)
+            if (/^&gt;\s*(.*)$/.test(trimmed)) {
+                flushParagraph();
                 closeLists();
-                output.push(`<blockquote>${trimmed.replace(/^&gt;\s*/, '')}</blockquote>`);
+                blockquoteLines.push(trimmed.replace(/^&gt;\s*/, ''));
                 continue;
             }
 
             // Horizontal rule
             if (/^(?:---|\*\*\*|___)$/.test(trimmed)) {
-                closeLists();
+                flushAllBlocks();
                 output.push('<hr class="chat-divider">');
                 continue;
             }
@@ -2264,49 +2421,125 @@
             // Unordered list item
             const ulMatch = trimmed.match(/^[-*•]\s+(.+)$/);
             if (ulMatch) {
+                flushParagraph();
+                flushBlockquote();
                 if (inOl) { output.push('</ol>'); inOl = false; }
                 if (!inUl) { output.push('<ul>'); inUl = true; }
-                output.push(`<li>${ulMatch[1]}</li>`);
+                output.push(`<li>${applyInlineMarkdown(ulMatch[1])}</li>`);
                 continue;
             }
 
             // Ordered list item
             const olMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
             if (olMatch) {
+                flushParagraph();
+                flushBlockquote();
                 if (inUl) { output.push('</ul>'); inUl = false; }
                 if (!inOl) { output.push('<ol>'); inOl = true; }
-                output.push(`<li>${olMatch[1]}</li>`);
+                output.push(`<li>${applyInlineMarkdown(olMatch[1])}</li>`);
                 continue;
             }
 
-            // Regular paragraph line
+            // Regular paragraph line (grouped cleanly)
+            flushBlockquote();
             closeLists();
-            output.push(`<p>${line}</p>`);
+            paragraphLines.push(line);
         }
-        closeLists();
+        flushAllBlocks();
 
         let rendered = output.join('');
 
-        // 4. Process inline formatting (code, bold, italic, links)
-        rendered = rendered
-            .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-            .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
-            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+)\)/g, '<a href="$2">$1</a>')
-            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-        // 5. Reinsert code blocks with header and copy button
-        rendered = rendered.replace(/@@JEVEXA_CODE_BLOCK_(\d+)@@/g, (match, idx) => {
+        // 4. Reinsert code blocks with header and copy button
+        rendered = rendered.replace(/@@JEVEXA_CODE_BLOCK_(\d+)@@/g, (_match, idx) => {
             const block = codeBlocks[Number(idx)];
             if (!block) return '';
-            const safeCode = block.code.replace(/[&<>"]/g, c => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
-            })[c]);
-            const langLabel = block.lang || 'code';
+            const safeCode = escapeMarkdownHtml(block.code);
+            const langLabel = escapeMarkdownHtml(block.lang || 'code');
             return `<div class="chat-code-block"><div class="chat-code-header"><span class="chat-code-lang">${langLabel}</span><button type="button" class="chat-code-copy" aria-label="Copy code">Copy</button></div><pre><code class="language-${langLabel}">${safeCode}</code></pre></div>`;
         });
 
         return rendered;
+    }
+
+    function trimConversationToMax(maxMessages = 100) {
+        if (conversation.length <= maxMessages) return;
+        const dropCount = conversation.length - maxMessages;
+        conversation.splice(0, dropCount);
+        if (!messages) return;
+        const rendered = Array.from(messages.querySelectorAll('.message:not([data-chat-welcome])'));
+        rendered.forEach(node => {
+            const oldIdx = Number(node.dataset.messageIndex);
+            if (!Number.isInteger(oldIdx)) return;
+            const newIdx = oldIdx - dropCount;
+            if (newIdx < 0) {
+                node.remove();
+            } else {
+                node.dataset.messageIndex = String(newIdx);
+            }
+        });
+    }
+
+    function buildBotActionButtons() {
+        const actions = document.createElement('div');
+        actions.className = 'chat-message-actions';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.dataset.chatAction = 'copy';
+        copy.setAttribute('aria-label', 'Copy response');
+        copy.textContent = 'Copy';
+        const regenerate = document.createElement('button');
+        regenerate.type = 'button';
+        regenerate.dataset.chatAction = 'regenerate';
+        regenerate.setAttribute('aria-label', 'Regenerate response');
+        regenerate.textContent = 'Regenerate';
+        actions.append(copy, regenerate);
+        return actions;
+    }
+
+    function applyBotMetaStatus(content, meta) {
+        if (!meta) return;
+        const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
+        const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
+        const tierNameMap = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
+        const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Lite';
+        const fullModelName = activeModel.startsWith('Jevexa ') ? activeModel : `Jevexa ${activeModel}`;
+        if (used !== null && remaining !== null) {
+            setStatus(`⚡ ${fullModelName} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
+        }
+        const receipt = document.createElement('div');
+        receipt.className = 'chat-credit-receipt';
+        receipt.setAttribute('role', 'status');
+        receipt.hidden = true;
+        receipt.innerHTML = `<span class="chat-receipt-tier">${activeModel}</span> <span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
+        content.appendChild(receipt);
+    }
+
+    function createStreamingMessageRow(index = conversation.length) {
+        if (!messages) return null;
+        const row = document.createElement('div');
+        row.className = 'message bot is-streaming';
+        row.dataset.messageIndex = String(index);
+        const avatar = document.createElement('div');
+        avatar.className = 'msg-avatar';
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-wand-magic-sparkles';
+        avatar.appendChild(icon);
+        const content = document.createElement('div');
+        content.className = 'msg-content';
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+        content.appendChild(body);
+        row.append(avatar, content);
+        messages.appendChild(row);
+        const renderedMessages = messages.querySelectorAll('.message:not([data-chat-welcome])');
+        for (let i = 0; i < renderedMessages.length - maxRenderedMessages; i += 1) {
+            renderedMessages[i].remove();
+        }
+        const welcome = messages.querySelector('[data-chat-welcome]');
+        if (welcome) welcome.hidden = true;
+        const emptyState = document.getElementById('chatEmptyState');
+        if (emptyState) emptyState.hidden = true;
+        return { row, content, body };
     }
 
     function appendMessage(text, user = false, index = conversation.length, meta = null) {
@@ -2326,42 +2559,14 @@
         body.innerHTML = renderMarkdown(text);
         content.appendChild(body);
         if (!user) {
-            if (meta) {
-                const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
-                const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
-                const tierNameMap = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
-                const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Lite';
-                const fullModelName = activeModel.startsWith('Jevexa ') ? activeModel : `Jevexa ${activeModel}`;
-                if (used !== null && remaining !== null) {
-                    setStatus(`⚡ ${fullModelName} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
-                }
-                const receipt = document.createElement('div');
-                receipt.className = 'chat-credit-receipt';
-                receipt.setAttribute('role', 'status');
-                receipt.hidden = true; // Hidden to keep chat bubbles clean without clutter
-                receipt.innerHTML = `<span class="chat-receipt-tier">${activeModel}</span> <span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
-                content.appendChild(receipt);
-            }
-            const actions = document.createElement('div');
-            actions.className = 'chat-message-actions';
-            const copy = document.createElement('button');
-            copy.type = 'button';
-            copy.dataset.chatAction = 'copy';
-            copy.setAttribute('aria-label', 'Copy response');
-            copy.textContent = 'Copy';
-            const regenerate = document.createElement('button');
-            regenerate.type = 'button';
-            regenerate.dataset.chatAction = 'regenerate';
-            regenerate.setAttribute('aria-label', 'Regenerate response');
-            regenerate.textContent = 'Regenerate';
-            actions.append(copy, regenerate);
-            content.appendChild(actions);
+            applyBotMetaStatus(content, meta);
+            content.appendChild(buildBotActionButtons());
         }
         row.append(avatar, content);
         messages.appendChild(row);
         const renderedMessages = messages.querySelectorAll('.message:not([data-chat-welcome])');
-        for (let index = 0; index < renderedMessages.length - maxRenderedMessages; index += 1) {
-            renderedMessages[index].remove();
+        for (let idx = 0; idx < renderedMessages.length - maxRenderedMessages; idx += 1) {
+            renderedMessages[idx].remove();
         }
         const welcome = messages.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = true;
@@ -2372,6 +2577,7 @@
 
     let activeChatAbortController = null;
     let activeChatRequestId = null;
+    let activeStreamFinalizeFn = null;
     let typingStatusTimer = null;
     let typingPhaseTimeouts = [];
 
@@ -2387,6 +2593,10 @@
     }
 
     function abortInFlightChatRequest() {
+        if (typeof activeStreamFinalizeFn === 'function') {
+            try { activeStreamFinalizeFn(); } catch {}
+            activeStreamFinalizeFn = null;
+        }
         if (activeChatAbortController) {
             try {
                 activeChatAbortController.abort();
@@ -2421,8 +2631,8 @@
             <div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div>
             <div class="msg-content live-status-bubble">
                 <div class="live-status-indicator">
-                    <div class="live-status-icon-wrap"><i class="fas fa-globe" id="liveChatIcon"></i></div>
-                    <span class="live-status-text" id="liveChatStatusText">Searching the web...</span>
+                    <div class="live-status-icon-wrap"><i class="fas fa-brain" id="liveChatIcon"></i></div>
+                    <span class="live-status-text" id="liveChatStatusText">Thinking...</span>
                     <div class="live-status-dots" aria-hidden="true">
                         <span class="live-dot"></span>
                         <span class="live-dot"></span>
@@ -2437,7 +2647,6 @@
         clearTypingTimers();
 
         const liveStates = [
-            { text: 'Searching the web...', icon: 'fa-globe' },
             { text: 'Thinking...', icon: 'fa-brain' },
             { text: 'Generating response...', icon: 'fa-wand-magic-sparkles' }
         ];
@@ -2452,29 +2661,16 @@
                     iconEl.className = `fas ${liveStates[idx].icon}`;
                     textEl.classList.remove('fade-out');
                     textEl.classList.add('fade-in');
-                }, 160);
+                }, 140);
             }
         }
 
-        // Phase 1 is immediately visible: "Searching the web..."
-        // Phase 2: If request takes > ~1.5s, transition smoothly to "Thinking..."
+        // Phase 1 is immediately visible: "Thinking..."
+        // Phase 2: Transition smoothly to "Generating response..." before first token arrives
         const t1 = setTimeout(() => {
             setPhase(1);
-        }, 1500);
+        }, 1200);
         typingPhaseTimeouts.push(t1);
-
-        // Phase 3: If request takes > ~3.2s, transition to "Generating response..."
-        const t2 = setTimeout(() => {
-            setPhase(2);
-        }, 3200);
-        typingPhaseTimeouts.push(t2);
-
-        // Periodic cycle if model/network takes longer
-        let loopIdx = 2;
-        typingStatusTimer = setInterval(() => {
-            loopIdx = (loopIdx + 1) % liveStates.length;
-            setPhase(loopIdx);
-        }, 4500);
     }
 
     function removeTyping() {
@@ -2727,6 +2923,114 @@
     }
     // generateChatbotGuestReply(displayText) reference for offline/fallback compatibility
 
+    async function streamChatRequest(url, session, bodyObj, { signal, requestId, onStatus, onToken } = {}) {
+        const controller = new AbortController();
+        let idleTimer = null;
+        const resetIdle = () => {
+            if (idleTimer) clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => controller.abort(), 35000);
+        };
+        const onExternalAbort = () => controller.abort();
+        if (signal) {
+            if (signal.aborted) controller.abort();
+            else signal.addEventListener('abort', onExternalAbort, { once: true });
+        }
+        resetIdle();
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                signal: controller.signal,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream, application/json',
+                    'Idempotency-Key': requestId,
+                    Authorization: session?.access_token ? `Bearer ${session.access_token}` : ''
+                },
+                body: JSON.stringify({ ...bodyObj, requestId, stream: true })
+            });
+            resetIdle();
+
+            const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                const error = new Error(payload.error || 'The request could not be completed.');
+                error.status = response.status;
+                error.payload = payload;
+                throw error;
+            }
+
+            if (contentType.includes('text/event-stream') && response.body) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let currentEvent = 'message';
+                let finalResult = null;
+                let streamErrorPayload = null;
+
+                const dispatchEvent = (evtName, rawData) => {
+                    if (!rawData) return;
+                    let parsedData;
+                    try { parsedData = JSON.parse(rawData); } catch { return; }
+                    if (evtName === 'status') {
+                        onStatus?.(parsedData);
+                    } else if (evtName === 'token') {
+                        if (typeof parsedData.text === 'string' && parsedData.text.length > 0) {
+                            onToken?.(parsedData.text);
+                        }
+                    } else if (evtName === 'done') {
+                        finalResult = parsedData;
+                    } else if (evtName === 'error') {
+                        streamErrorPayload = parsedData;
+                    }
+                };
+
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        resetIdle();
+                        buffer += decoder.decode(value, { stream: true });
+                        let nlIdx;
+                        while ((nlIdx = buffer.indexOf('\n')) !== -1) {
+                            const line = buffer.slice(0, nlIdx).replace(/\r$/, '');
+                            buffer = buffer.slice(nlIdx + 1);
+                            if (line === '') {
+                                currentEvent = 'message';
+                            } else if (line.startsWith('event:')) {
+                                currentEvent = line.slice(6).trim() || 'message';
+                            } else if (line.startsWith('data:')) {
+                                dispatchEvent(currentEvent, line.slice(5).trim());
+                            }
+                        }
+                    }
+                } finally {
+                    reader.releaseLock();
+                }
+
+                if (streamErrorPayload) {
+                    const err = new Error(streamErrorPayload.error || 'Streaming error occurred.');
+                    err.status = Number.isInteger(streamErrorPayload.status) ? streamErrorPayload.status : 502;
+                    err.payload = streamErrorPayload;
+                    throw err;
+                }
+                if (finalResult) {
+                    return finalResult;
+                }
+                throw new Error('Stream ended before completion.');
+            }
+
+            const jsonPayload = await response.json().catch(() => ({}));
+            if (jsonPayload?.reply) {
+                onToken?.(String(jsonPayload.reply));
+            }
+            return jsonPayload;
+        } finally {
+            if (idleTimer) clearTimeout(idleTimer);
+            if (signal) signal.removeEventListener('abort', onExternalAbort);
+        }
+    }
+
     async function handleSend() {
         if (sending) {
             abortInFlightChatRequest();
@@ -2772,11 +3076,11 @@
         activeChatAbortController = currentAbortController;
         const requestId = createRequestId();
         activeChatRequestId = requestId;
+        userScrolledUpDuringStream = false;
 
         sending = true;
         if (sendButton) {
-            sendButton.disabled = true; // Trigger busy state
-            sendButton.disabled = false; // Enabled as Stop-abort control
+            sendButton.disabled = false;
             sendButton.classList.add('chat-stop-btn');
             sendButton.setAttribute('aria-label', 'Stop generation');
             sendButton.title = 'Stop generation';
@@ -2807,6 +3111,7 @@
 
         // Optimistically record user prompt in conversation and render user bubble immediately
         conversation.push({ role: 'user', text: displayText });
+        trimConversationToMax(100);
         const userMsgIndex = conversation.length - 1;
         appendMessage(displayText, true, userMsgIndex);
         if (input) {
@@ -2849,18 +3154,17 @@
             }
 
             const planLimits = getUserPlanMemoryLimits();
+            const historyForApi = conversation.slice(0, -1).slice(-planLimits.maxHistoryMessages);
             const chatPayload = {
                 message: text,
                 tier: selectedTier,
                 thinkingLevel: thinkingSelect?.value || 'low',
                 attachments,
-                history: conversation.slice(-planLimits.maxHistoryMessages),
+                history: historyForApi,
                 customSettings: getActiveCustomSettings(),
                 memories: getActiveMemoriesList()
             };
 
-            // Dynamic token-weighted credit calculation:
-            // Math.max(1, Math.ceil(((inputTokens + outputTokens) / 500) * modelMultiplier)) + attachmentSurcharge
             const tierMultipliers = { lite: 1.0, pro: 1.5, max: 2.0, ultra: 2.0 };
             const multiplier = tierMultipliers[selectedTier] || 1.0;
             let attachmentSurcharge = 0;
@@ -2876,11 +3180,15 @@
 
             let quote = null;
             try {
+                const quotePayload = {
+                    ...chatPayload,
+                    attachments: attachments.map(({ name, type, size }) => ({ name, type, size, quoteOnly: true }))
+                };
                 quote = await Promise.race([
                     requestJson('/api/credits/quote', session, {
                         method: 'POST',
                         signal: currentAbortController.signal,
-                        body: JSON.stringify(chatPayload)
+                        body: JSON.stringify(quotePayload)
                     }),
                     new Promise(resolve => setTimeout(resolve, 600))
                 ]);
@@ -2917,6 +3225,7 @@
                 const warningMsg = `Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ~${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`;
                 setStatus(`This ${selectedTier.toUpperCase()} message costs ~${estimatedCredits} token-weighted credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
                 conversation.push({ role: 'assistant', text: warningMsg });
+                trimConversationToMax(100);
                 appendMessage(warningMsg, false, conversation.length - 1);
                 persistConversation(session.user.id);
                 if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
@@ -2927,13 +3236,75 @@
 
             setStatus(`⚡ ${selectedTier.toUpperCase()} • Token-weighted`);
 
-            try {
-                const result = await requestJson('/api/chat', session, {
-                    method: 'POST',
-                    signal: currentAbortController.signal,
-                    headers: { 'Idempotency-Key': requestId },
-                    body: JSON.stringify({ ...chatPayload, requestId })
+            let streamedText = '';
+            let streamBubble = null;
+            let rafId = null;
+            let streamFinalized = false;
+
+            const flushStreamRender = (isFinal = false) => {
+                if (!streamBubble) return;
+                streamBubble.body.innerHTML = renderMarkdown(streamedText, { streaming: !isFinal });
+                if (!userScrolledUpDuringStream) {
+                    scrollChatToBottom(false);
+                }
+            };
+
+            const scheduleStreamRender = () => {
+                if (rafId !== null) return;
+                rafId = requestAnimationFrame(() => {
+                    rafId = null;
+                    flushStreamRender(false);
                 });
+            };
+
+            activeStreamFinalizeFn = () => {
+                if (rafId !== null) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                if (streamBubble && !streamFinalized) {
+                    streamFinalized = true;
+                    streamBubble.row.classList.remove('is-streaming');
+                    const partial = streamedText.trim();
+                    if (partial) {
+                        streamBubble.body.innerHTML = renderMarkdown(partial, { streaming: false });
+                        conversation.push({ role: 'assistant', text: partial });
+                        trimConversationToMax(100);
+                        streamBubble.row.dataset.messageIndex = String(conversation.length - 1);
+                        streamBubble.content.appendChild(buildBotActionButtons());
+                        persistConversation(session.user.id);
+                    } else {
+                        streamBubble.row.remove();
+                    }
+                }
+            };
+
+            try {
+                const result = await streamChatRequest('/api/chat', session, chatPayload, {
+                    signal: currentAbortController.signal,
+                    requestId,
+                    onStatus: (statusEvt) => {
+                        if (statusEvt?.phase === 'thinking') {
+                            const statusEl = document.getElementById('liveChatStatusText');
+                            if (statusEl) statusEl.textContent = 'Thinking...';
+                        }
+                    },
+                    onToken: (delta) => {
+                        if (currentAbortController.signal.aborted) return;
+                        if (!streamBubble) {
+                            removeTyping();
+                            streamBubble = createStreamingMessageRow(conversation.length);
+                        }
+                        streamedText += delta;
+                        scheduleStreamRender();
+                    }
+                });
+
+                if (rafId !== null) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                activeStreamFinalizeFn = null;
 
                 if (currentAbortController.signal.aborted || activeChatAbortController !== currentAbortController || (activeChatRequestId && activeChatRequestId !== requestId)) {
                     removeTyping();
@@ -2941,11 +3312,28 @@
                 }
 
                 removeTyping();
-                const replyText = String(result.reply || '').trim();
+                const replyText = String(result.reply || streamedText || '').trim();
                 conversation.push({ role: 'assistant', text: replyText });
-                appendMessage(replyText, false, conversation.length - 1, result);
-                if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
-                const historySaved = persistConversation(session.user.id);
+                trimConversationToMax(100);
+                const assistantMsgIndex = conversation.length - 1;
+
+                if (result?.switchedLanguage && activeSess) {
+                    activeSess.languageOverride = result.switchedLanguage === 'auto' ? null : result.switchedLanguage;
+                }
+
+                if (streamBubble) {
+                    streamFinalized = true;
+                    streamBubble.row.classList.remove('is-streaming');
+                    streamBubble.row.dataset.messageIndex = String(assistantMsgIndex);
+                    streamBubble.body.innerHTML = renderMarkdown(replyText, { streaming: false });
+                    applyBotMetaStatus(streamBubble.content, result);
+                    streamBubble.content.appendChild(buildBotActionButtons());
+                    if (!userScrolledUpDuringStream) scrollChatToBottom(false);
+                } else {
+                    appendMessage(replyText, false, assistantMsgIndex, result);
+                }
+
+                persistConversation(session.user.id);
                 const remaining = Number.isInteger(result.remaining_credits)
                     ? result.remaining_credits
                     : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null);
@@ -2972,17 +3360,28 @@
                 }
                 await refreshDisplayedCredits();
             } catch (error) {
+                if (rafId !== null) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                activeStreamFinalizeFn = null;
+
                 if (error?.name === 'AbortError' || currentAbortController.signal.aborted || (activeChatRequestId && activeChatRequestId !== requestId)) {
                     removeTyping();
                     return;
+                }
+                if (streamBubble && !streamFinalized) {
+                    streamFinalized = true;
+                    streamBubble.row.classList.remove('is-streaming');
+                    if (!streamedText.trim()) streamBubble.row.remove();
                 }
                 removeTyping();
                 await refreshDisplayedCredits();
                 if (error.payload?.reply) {
                     const replyText = String(error.payload.reply).trim();
                     conversation.push({ role: 'assistant', text: replyText });
+                    trimConversationToMax(100);
                     appendMessage(replyText, false, conversation.length - 1);
-                    if (conversation.length > 16) conversation.splice(0, conversation.length - 16);
                     persistConversation(session.user.id);
                     forgetPendingRequest(session);
                     setStatus('AI reply completed. (Credits will reconcile automatically).');
@@ -3080,6 +3479,7 @@
             setStatus(message, true);
             appendMessage(message);
         } finally {
+            activeStreamFinalizeFn = null;
             if (activeChatAbortController === currentAbortController) {
                 activeChatAbortController = null;
                 activeChatRequestId = null;
@@ -3200,18 +3600,20 @@
     const scrollBottomBtn = document.getElementById('chatScrollBottom');
     if (messages && scrollBottomBtn) {
         messages.addEventListener('scroll', () => {
-            const distance = messages.scrollHeight - messages.scrollTop - messages.clientHeight;
-            if (distance > 160) {
-                scrollBottomBtn.hidden = false;
-                scrollBottomBtn.classList.add('visible');
-            } else {
-                scrollBottomBtn.hidden = true;
-                scrollBottomBtn.classList.remove('visible');
+            const nearBottom = isScrolledNearBottom(120);
+            if (!nearBottom && sending) {
+                userScrolledUpDuringStream = true;
+            } else if (nearBottom) {
+                userScrolledUpDuringStream = false;
             }
+            updateScrollBottomButton();
         }, { passive: true });
 
         bindSafe(scrollBottomBtn, 'click', () => {
+            userScrolledUpDuringStream = false;
             messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+            scrollBottomBtn.hidden = true;
+            scrollBottomBtn.classList.remove('visible');
         });
     }
     function resumeChatSession(force = false) {
@@ -3396,10 +3798,15 @@
         updateSelectorDisplay('thinking');
     });
     document.getElementById('chatTheme')?.addEventListener('change', event => {
-        document.getElementById('chatbotWindow')?.setAttribute('data-chat-theme', event.target.value);
+        const themeVal = event.target.value || 'dark';
+        chatCustomSettings.theme = themeVal;
+        const modalThemeEl = document.getElementById('chatModalThemeSelect');
+        if (modalThemeEl) modalThemeEl.value = themeVal;
+        document.getElementById('chatbotWindow')?.setAttribute('data-chat-theme', themeVal);
+        saveCustomSettings(historyUserId);
         if (historyUserId) {
             try {
-                localStorage.setItem(`jevexa_${historyUserId}_chat_theme`, event.target.value);
+                localStorage.setItem(`jevexa_${historyUserId}_chat_theme`, themeVal);
             } catch (error) {
                 console.warn('Could not save chat theme:', error);
             }

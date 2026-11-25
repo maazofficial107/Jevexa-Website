@@ -272,7 +272,7 @@ test("definitive Groq rate limits release content reservations", async () => {
     const response = await worker.fetch(makeContentRequest(), groqEnv);
     assert.equal(response.status, 429);
     assert.equal(releaseCount, 1);
-    assert.equal(mock.calls.filter(call => call.url.hostname === "api.groq.com").length, 2);
+    assert.equal(mock.calls.filter(call => call.url.hostname === "api.groq.com").length, 4);
     assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_settle"), false);
   } finally {
     mock.restore();
@@ -301,7 +301,7 @@ test("definitive Groq authentication and request errors release content reservat
       assert.equal(response.status, providerStatus === 401 ? 503 : 502);
       assert.doesNotMatch(payload.error, /provider detail must stay private/);
       assert.equal(releaseCount, 1);
-      assert.equal(mock.calls.filter(call => call.url.hostname === "api.groq.com").length, 2);
+      assert.equal(mock.calls.filter(call => call.url.hostname === "api.groq.com").length, providerStatus === 401 ? 1 : 4);
       assert.equal(mock.calls.some(call => call.url.pathname === "/rest/v1/rpc/jevexa_credit_settle"), false);
     } finally {
       mock.restore();
@@ -1353,10 +1353,12 @@ test("Max tier accepts validated PDF and ZIP files with Max reasoning", async ()
     }
     if (url.hostname === "openrouter.ai") {
       const request = JSON.parse(options.body);
-      assert.equal(request.model, "meta-llama/llama-3.3-70b-instruct");
+      assert.equal(request.model, "google/gemini-2.5-flash");
       assert.deepEqual(request.reasoning, { effort: "high" });
-      assert.deepEqual(request.messages.at(-1).content.slice(1).map(part => part.type), ["file", "file"]);
-      assert.deepEqual(request.messages.at(-1).content.slice(1).map(part => part.file.filename), ["brief.pdf", "archive.zip"]);
+      assert.equal(request.messages.at(-1).content[0].type, "text");
+      assert.match(request.messages.at(-1).content[0].text, /ZIP ARCHIVE INSPECTED: archive\.zip/);
+      assert.deepEqual(request.messages.at(-1).content.slice(1).map(part => part.type), ["file"]);
+      assert.deepEqual(request.messages.at(-1).content.slice(1).map(part => part.file.filename), ["brief.pdf"]);
       return Response.json({ choices: [{ message: { content: "Files reviewed." } }], usage: { total_tokens: 80 } });
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
@@ -2262,17 +2264,17 @@ const geminiEnv = {
 };
 delete geminiEnv.OPENROUTER_API_KEY;
 
-test("chat uses Gemini primary model gemini-3.5-flash-lite and settles credits", async () => {
+test("chat uses Gemini primary model gemini-2.5-flash-lite and settles credits", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      assert.match(url.pathname, /gemini-3\.5-flash-lite:generateContent/);
+      assert.match(url.pathname, /gemini-2\.5-flash-lite:generateContent/);
       assert.equal(options.headers["x-goog-api-key"], "test-gemini-key");
       const reqBody = JSON.parse(options.body);
       assert.equal(reqBody.generationConfig.maxOutputTokens, 550);
       return Response.json({
         candidates: [{
           content: {
-            parts: [{ text: "Hello from Gemini 3.5 Flash Lite!" }],
+            parts: [{ text: "Hello from Gemini 2.5 Flash Lite!" }],
             role: "model"
           },
           finishReason: "STOP"
@@ -2309,7 +2311,7 @@ test("chat uses Gemini primary model gemini-3.5-flash-lite and settles credits",
     const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello", tier: "lite" } }), geminiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.reply, "Hello from Gemini 3.5 Flash Lite!");
+    assert.equal(data.reply, "Hello from Gemini 2.5 Flash Lite!");
     assert.equal(data.creditsCharged, 1);
     assert.equal(data.creditsRemaining, 99);
     assert.equal(data.totalTokens, 25);
@@ -2319,17 +2321,17 @@ test("chat uses Gemini primary model gemini-3.5-flash-lite and settles credits",
   }
 });
 
-test("chat automatically falls back to gemini-3.5-flash on transient 503 or 429", async () => {
+test("chat automatically falls back to gemini-2.5-flash on transient 503 or 429", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      if (url.pathname.includes("gemini-3.5-flash-lite")) {
+      if (url.pathname.includes("gemini-2.5-flash-lite")) {
         return Response.json({ error: { code: 503, message: "High demand spike" } }, { status: 503 });
       }
-      if (url.pathname.includes("gemini-3.5-flash")) {
+      if (url.pathname.includes("gemini-2.5-flash")) {
         return Response.json({
           candidates: [{
             content: {
-              parts: [{ text: "Fallback response from Gemini 3.5 Flash!" }],
+              parts: [{ text: "Fallback response from Gemini 2.5 Flash!" }],
               role: "model"
             },
             finishReason: "STOP"
@@ -2365,12 +2367,11 @@ test("chat automatically falls back to gemini-3.5-flash on transient 503 or 429"
     const response = await worker.fetch(makeRequest("/api/chat", { body: { message: "Testing fallback", tier: "lite" } }), geminiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.reply, "Fallback response from Gemini 3.5 Flash!");
-    // Both 3.5-flash-lite and 3.5-flash were called
+    assert.equal(data.reply, "Fallback response from Gemini 2.5 Flash!");
     const geminiCalls = mock.calls.filter(c => c.url.hostname === "generativelanguage.googleapis.com");
     assert.equal(geminiCalls.length, 2);
-    assert.match(geminiCalls[0].url.pathname, /gemini-3\.5-flash-lite/);
-    assert.match(geminiCalls[1].url.pathname, /gemini-3\.5-flash/);
+    assert.match(geminiCalls[0].url.pathname, /gemini-2\.5-flash-lite/);
+    assert.match(geminiCalls[1].url.pathname, /gemini-2\.5-flash/);
   } finally {
     mock.restore();
   }
@@ -2638,7 +2639,7 @@ test("chat handles Gemini safety filter by releasing reservation and returning 4
 test("content generation uses Gemini primary model and settles credits", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      assert.match(url.pathname, /gemini-3\.5-flash-lite:generateContent/);
+      assert.match(url.pathname, /gemini-2\.5-flash-lite:generateContent/);
       const reqBody = JSON.parse(options.body);
       assert.equal(reqBody.generationConfig.maxOutputTokens, 700);
       assert.equal(reqBody.generationConfig.temperature, 0.7);
@@ -2689,16 +2690,16 @@ test("content generation uses Gemini primary model and settles credits", async (
   }
 });
 
-test("content generation falls back to gemini-3.5-flash on transient failure", async () => {
+test("content generation falls back to gemini-2.5-flash on transient failure", async () => {
   const mock = mockFetch(async (url, options) => {
     if (url.hostname === "generativelanguage.googleapis.com") {
-      if (url.pathname.includes("gemini-3.5-flash-lite")) {
+      if (url.pathname.includes("gemini-2.5-flash-lite")) {
         return Response.json({ error: { code: 503, message: "Unavailable" } }, { status: 503 });
       }
       return Response.json({
         candidates: [{
           content: {
-            parts: [{ text: "Fallback generated content from Gemini 3.5 Flash" }],
+            parts: [{ text: "Fallback generated content from Gemini 2.5 Flash" }],
             role: "model"
           },
           finishReason: "STOP"
@@ -2729,7 +2730,7 @@ test("content generation falls back to gemini-3.5-flash on transient failure", a
     const response = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
     assert.equal(response.status, 200);
     const data = await response.json();
-    assert.equal(data.content, "Fallback generated content from Gemini 3.5 Flash");
+    assert.equal(data.content, "Fallback generated content from Gemini 2.5 Flash");
   } finally {
     mock.restore();
   }
@@ -4045,14 +4046,14 @@ test("upgrade 1: content generation rapid requests with Groq 429 rate limit fail
   }
 });
 
-test("upgrade 2: animated 'Searching the web...' UI states exist and clean up properly in frontend", async () => {
+test("upgrade 2: animated Thinking/Generating UI states exist and clean up properly in frontend", async () => {
   const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
   const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
   const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
-  // Chatbot live states
+  // Chatbot live states (no misleading 'Searching the web...')
   assert.match(creditsCode, /live-status-indicator/);
-  assert.match(creditsCode, /Searching the web\.\.\./);
+  assert.doesNotMatch(creditsCode, /Searching the web\.\.\./);
   assert.match(creditsCode, /Thinking\.\.\./);
   assert.match(creditsCode, /Generating response\.\.\./);
   assert.match(creditsCode, /clearInterval\(typingStatusTimer\)/);
@@ -4060,7 +4061,7 @@ test("upgrade 2: animated 'Searching the web...' UI states exist and clean up pr
   assert.match(creditsCode, /activeChatAbortController/);
   assert.match(creditsCode, /abortInFlightChatRequest/);
   assert.match(creditsCode, /window\.abortChatRequest/);
-  assert.match(creditsCode, /1500/);
+  assert.match(creditsCode, /1200/);
   assert.match(creditsCode, /createChatSession[\s\S]*?abortInFlightChatRequest/);
   assert.match(creditsCode, /selectChatSession[\s\S]*?abortInFlightChatRequest/);
   assert.match(creditsCode, /regenerate[\s\S]*?abortInFlightChatRequest/);
@@ -4619,8 +4620,8 @@ test("mobile, tablet & all-device responsiveness and UI safeguards verification"
   assert.match(creditsCode, /is-dragover/);
   assert.match(creditsCode, /clipboardData/);
 
-  // Send button disabled state during generation
-  assert.match(creditsCode, /sendButton\.disabled\s*=\s*true/);
+  // Send button switches to stop control during generation
+  assert.match(creditsCode, /sendButton\.classList\.add\('chat-stop-btn'\)/);
 
   // Meta viewport tag exists for responsive devices
   assert.match(indexHtml, /<meta\s+name="viewport"\s+content="[^"]*width=device-width/i);

@@ -129,6 +129,165 @@ const JEVEXA_MODEL_NAMES = Object.freeze({
   ultra: "Jevexa Ultra"
 });
 
+const LANGUAGE_DIRECTIVE_MAP = Object.freeze({
+  en: "ENGLISH. Always respond in fluent English.",
+  english: "ENGLISH. Always respond in fluent English.",
+  roman_urdu: "ROMAN URDU. Always reply in natural, conversational Roman Urdu (Urdu written in Latin / English alphabet, e.g. 'Bilkul, main aapko step-by-step samjhata hoon...'). You may keep technical/coding terms in English where natural. Do not switch to pure English or Urdu Arabic script.",
+  urdu: "URDU (اردو). Always reply in proper, fluent Urdu script (اردو رسم الخط).",
+  hindi: "HINDI (हिंदी). Always reply in proper, fluent Hindi script (देवनागरी लिपि).",
+  es: "SPANISH (Español). Always reply in fluent Spanish.",
+  spanish: "SPANISH (Español). Always reply in fluent Spanish.",
+  fr: "FRENCH (Français). Always reply in fluent French.",
+  french: "FRENCH (Français). Always reply in fluent French.",
+  de: "GERMAN (Deutsch). Always reply in fluent German.",
+  german: "GERMAN (Deutsch). Always reply in fluent German.",
+  ar: "ARABIC (العربية). Always reply in fluent, natural Arabic.",
+  arabic: "ARABIC (العربية). Always reply in fluent, natural Arabic."
+});
+
+function normalizeLanguageCode(raw) {
+  const val = String(raw || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!val || val === "auto") return "auto";
+  if (val === "en" || val === "english" || val === "angrezi") return "en";
+  if (val === "roman_urdu" || val === "romanurdu" || val === "roman_hindi" || val === "hinglish") return "roman_urdu";
+  if (val === "urdu" || val === "ur") return "urdu";
+  if (val === "hindi" || val === "hi") return "hindi";
+  if (val === "es" || val === "spanish" || val === "espanol") return "es";
+  if (val === "fr" || val === "french" || val === "francais") return "fr";
+  if (val === "de" || val === "german" || val === "deutsch") return "de";
+  if (val === "ar" || val === "arabic") return "ar";
+  return val;
+}
+
+function detectExplicitLanguageSwitch(text) {
+  const raw = typeof text === "string" ? text.trim() : "";
+  if (!raw) return null;
+
+  if (/(?:اردو\s*میں\s*(?:بات|جواب|سمجھا|لکھ|بول)|صرف\s*اردو|اردو\s*استعمال)/i.test(raw)) {
+    return "urdu";
+  }
+  if (/(?:تحدث\s*بالعربية|تكلم\s*بالعربية|أجب\s*بالعربية|باللغة\s*العربية)/i.test(raw)) {
+    return "ar";
+  }
+  if (/(?:हिंदी\s*में\s*(?:बात|जवाब|बता|लिख|बोल)|सिर्फ\s*हिंदी)/i.test(raw)) {
+    return "hindi";
+  }
+
+  const lower = raw.toLowerCase();
+  if (/\b(?:switch\s+back\s+to\s+auto|auto\s+language|match\s+my\s+language|mirror\s+my\s+language)\b/i.test(lower)) {
+    return "auto";
+  }
+
+  const switchTrigger = /\b(?:speak|talk|reply|respond|answer|write|explain|chat|communicate|converse|switch|change|use|stick|baat|bat|bolo|bolna|bolen|samjhao|samjha|jawab|likho|likh|kaho)\b/i.test(lower)
+    || /\b(?:ab\s*se|from\s+now\s+on|always|only|sirf)\b/i.test(lower);
+
+  if (!switchTrigger) return null;
+
+  const targetPatterns = [
+    { code: "roman_urdu", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:roman\s+urdu|roman\s+hindi|hinglish)\b/i },
+    { code: "roman_urdu", regex: /\b(?:roman\s+urdu|roman\s+hindi|hinglish)\b[^.!?\n]{0,28}\b(?:mein|me|main|mai|mn)\s+(?:baat|bat|samjhao|samjha|bolo|jawab|likho|reply|likh)\b/i },
+    { code: "en", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:english|angrezi)\b/i },
+    { code: "en", regex: /\b(?:english|angrezi)\b[^.!?\n]{0,28}\b(?:mein|me|main|mai|mn)\s+(?:baat|bat|samjhao|samjha|bolo|jawab|likho|reply|likh)\b/i },
+    { code: "urdu", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:urdu(?:\s+script)?)\b/i },
+    { code: "urdu", regex: /\b(?:urdu(?:\s+script)?)\b[^.!?\n]{0,28}\b(?:mein|me|main|mai|mn)\s+(?:baat|bat|samjhao|samjha|bolo|jawab|likho|reply|likh)\b/i },
+    { code: "hindi", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:hindi|devanagari)\b/i },
+    { code: "hindi", regex: /\b(?:hindi)\b[^.!?\n]{0,28}\b(?:mein|me|main|mai|mn)\s+(?:baat|bat|samjhao|samjha|bolo|jawab|likho|reply|likh)\b/i },
+    { code: "ar", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:arabic|arabi)\b/i },
+    { code: "ar", regex: /\b(?:arabic|arabi)\b[^.!?\n]{0,28}\b(?:mein|me|main|mai|mn)\s+(?:baat|bat|samjhao|samjha|bolo|jawab|likho|reply|likh)\b/i },
+    { code: "es", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:spanish|español|espanol)\b/i },
+    { code: "fr", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:french|français|francais)\b/i },
+    { code: "de", regex: /\b(?:speak|talk|reply|respond|answer|write|explain|chat|switch\s+to|change\s+(?:language\s+)?to|use|ab\s*se|from\s+now\s+on|always|only|sirf)\b[^.!?\n]{0,40}\b(?:german|deutsch)\b/i }
+  ];
+
+  for (const { code, regex } of targetPatterns) {
+    if (regex.test(lower)) return code;
+  }
+  return null;
+}
+
+function detectScriptAndLanguage(text) {
+  const raw = typeof text === "string" ? text.trim() : "";
+  if (!raw) return { code: "en", label: "English" };
+
+  if (/[\u0900-\u097F]/.test(raw)) {
+    return { code: "hindi", label: "Hindi (Devanagari script)" };
+  }
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(raw)) {
+    const hasUrduMarkers = /[\u0679\u0688\u0691\u06BA\u06C1\u06BE\u06CC\u06D2\u06AF\u0686\u067E\u0698\u06A9]/.test(raw)
+      || /(?:آپ|کیسے|میں|ہے|ہیں|کیا|مجھے|نہیں|اور|کا|کی|کے|شکریہ|السلام)/.test(raw);
+    return hasUrduMarkers
+      ? { code: "urdu", label: "Urdu script (اردو)" }
+      : { code: "ar", label: "Arabic (العربية)" };
+  }
+  if (/[\u0400-\u04FF]/.test(raw)) {
+    return { code: "cyrillic", label: "the same Cyrillic-script language as the user's message" };
+  }
+  if (/[\u4E00-\u9FFF]/.test(raw)) {
+    return { code: "cjk", label: "Chinese (matching the user's script)" };
+  }
+  if (/[\u3040-\u30FF]/.test(raw)) {
+    return { code: "ja", label: "Japanese" };
+  }
+  if (/[\uAC00-\uD7AF]/.test(raw)) {
+    return { code: "ko", label: "Korean" };
+  }
+
+  const lower = raw.toLowerCase();
+  const strongRomanMarkers = [
+    /\b(?:kese|kaise)\s+ho\b/,
+    /\bkya\s+(?:haal|hal|chal|scene|hua|hai|kar)\b/,
+    /\b(?:samjha\s+do|samjhao|batao|bataiye|likh\s+do|kar\s+do|kardo|chahiye|chahta|chahti|mujhe|mujhko|aapka|aapko|tumhara|tumko|hamara|shukriya|salam|assalam|walaikum|kyunki|kyunke|nahi|nhi|theek\s+hai|bohot|bahut)\b/
+  ];
+  if (strongRomanMarkers.some(rx => rx.test(lower))) {
+    return { code: "roman_urdu", label: "Roman Urdu" };
+  }
+
+  const romanWordTokens = lower.match(/\b(?:kya|kaise|kese|kaisa|kaisi|hai|hain|hun|hoon|mein|hum|tum|aap|mera|meri|mere|apna|apni|apne|karo|karna|krna|karen|karein|hoga|hogi|honge|tha|thi|the|gaya|gayi|gaye|raha|rahi|rahe|bhai|yaar|dost|sawal|jawab|masla|madad|abhi|phir|pehle|baad|kyun|kab|kahan|kitna|kitne|koi|kuch|sab|zyada|acha|accha|sahi|galat|aur|lekin|magar|wala|wali|wale|walay|bhi|sirf|bilkul)\b/g) || [];
+  if (new Set(romanWordTokens).size >= 2) {
+    return { code: "roman_urdu", label: "Roman Urdu" };
+  }
+
+  return { code: "auto_mirror", label: "the exact language and script of the user's prompt" };
+}
+
+function resolveConversationLanguage(message, history = [], customLanguage = "auto") {
+  const normalizedSetting = normalizeLanguageCode(customLanguage);
+
+  let stickySwitch = null;
+  if (Array.isArray(history)) {
+    for (const item of history) {
+      if (item?.role !== "user") continue;
+      const text = typeof item.text === "string" ? item.text : (typeof item.content === "string" ? item.content : "");
+      const sw = detectExplicitLanguageSwitch(text);
+      if (sw) stickySwitch = sw;
+    }
+  }
+
+  const currentSwitch = detectExplicitLanguageSwitch(message);
+  const activeDirective = currentSwitch || (stickySwitch && stickySwitch !== "auto" ? stickySwitch : null)
+    || (normalizedSetting && normalizedSetting !== "auto" ? normalizedSetting : null);
+
+  if (activeDirective && activeDirective !== "auto") {
+    return {
+      mode: "explicit",
+      language: activeDirective,
+      switchedNow: Boolean(currentSwitch),
+      sticky: Boolean(currentSwitch || stickySwitch),
+      detected: detectScriptAndLanguage(message)
+    };
+  }
+
+  const detected = detectScriptAndLanguage(message);
+  return {
+    mode: "auto",
+    language: detected.code,
+    label: detected.label,
+    switchedNow: currentSwitch === "auto",
+    sticky: false,
+    detected
+  };
+}
+
 function buildChatSystemPrompt(tier = "lite", thinkingLevel = "low", options = {}) {
   const activeModel = JEVEXA_MODEL_NAMES[tier] || "Jevexa Lite";
   const thinkingDesc = thinkingLevel === "max" ? "Max reasoning depth" : (thinkingLevel === "standard" ? "Standard reasoning depth" : "Low reasoning depth");
@@ -140,44 +299,46 @@ ACTIVE JEVEXA MODEL IDENTITY:
 - If asked "which model is currently working?", "what model are you?", "which AI model is this?", "who is active?", or any question regarding your current model identity, you must state clearly and directly that you are **${activeModel}**.
 - Always identify yourself as **${activeModel}**. Never claim to be a different tier.`;
 
-  // Custom Instructions & Persona Preferences
-  const custom = options?.customSettings;
-  if (custom && typeof custom === "object") {
-    const customParts = [];
-    const aboutUser = typeof custom.aboutUser === "string" ? custom.aboutUser.trim().slice(0, 1000) : "";
-    const responseStyle = typeof custom.responseStyle === "string" ? custom.responseStyle.trim().slice(0, 1000) : "";
-    const language = typeof custom.language === "string" ? custom.language.trim().toLowerCase().slice(0, 30) : "auto";
-    const tone = typeof custom.tone === "string" ? custom.tone.trim().toLowerCase().slice(0, 30) : "";
-    const behavior = typeof custom.behavior === "string" ? custom.behavior.trim().toLowerCase().slice(0, 30) : "";
-    const codeDepth = typeof custom.codeDepth === "string" ? custom.codeDepth.trim().toLowerCase().slice(0, 30) : "";
+  const custom = options?.customSettings && typeof options.customSettings === "object" ? options.customSettings : {};
+  const langResolution = options?.languageResolution || resolveConversationLanguage(
+    options?.latestMessage || "",
+    options?.history || [],
+    custom.language || "auto"
+  );
 
-    if (aboutUser) {
-      customParts.push(`USER PROFILE / CONTEXT:\n${aboutUser}`);
-    }
-    if (responseStyle) {
-      customParts.push(`USER RESPONSE INSTRUCTIONS:\n${responseStyle}`);
-    }
-    if (language && language !== "auto") {
-      const languageMap = {
-        en: "ENGLISH. Always respond in fluent English, regardless of input language, unless explicitly asked to translate.",
-        english: "ENGLISH. Always respond in fluent English.",
-        roman_urdu: "ROMAN URDU. Always reply in natural, conversational Roman Urdu (Urdu written in Latin / English alphabet, e.g. 'Aapka sawal yeh hai...'). Do not answer in English.",
-        urdu: "URDU (اردو). Always reply in proper, fluent Urdu script (اردو رسم الخط).",
-        hindi: "HINDI (हिंदी). Always reply in proper, fluent Hindi script (देवناगरी लिपि).",
-        es: "SPANISH (Español). Always reply in fluent Spanish.",
-        spanish: "SPANISH (Español). Always reply in fluent Spanish.",
-        fr: "FRENCH (Français). Always reply in fluent French.",
-        french: "FRENCH (Français). Always reply in fluent French.",
-        de: "GERMAN (Deutsch). Always reply in fluent German.",
-        german: "GERMAN (Deutsch). Always reply in fluent German.",
-        ar: "ARABIC (العربية). Always reply in fluent Arabic.",
-        arabic: "ARABIC (العربية). Always reply in fluent Arabic."
-      };
-      customParts.push(`USER PREFERRED LANGUAGE (${language.toUpperCase()}): ${languageMap[language] || language}`);
-      customParts.push(`CRITICAL LANGUAGE DIRECTIVE: The user explicitly configured their language setting to '${language.toUpperCase()}'. You MUST produce your full response strictly in ${languageMap[language] || language}.`);
-    } else {
-      customParts.push("LANGUAGE MIRRORING: The user has selected 'Auto' mode. Always mirror the exact language and script (e.g. Roman Urdu, Urdu script, Hindi, Spanish, French, German, Arabic, English) of the user's prompt.");
-    }
+  // Custom Instructions & Persona Preferences
+  const customParts = [];
+  const aboutUser = typeof custom.aboutUser === "string" ? custom.aboutUser.trim().slice(0, 1000) : "";
+  const responseStyle = typeof custom.responseStyle === "string" ? custom.responseStyle.trim().slice(0, 1000) : "";
+  const tone = typeof custom.tone === "string" ? custom.tone.trim().toLowerCase().slice(0, 30) : "";
+  const behavior = typeof custom.behavior === "string" ? custom.behavior.trim().toLowerCase().slice(0, 30) : "";
+  const codeDepth = typeof custom.codeDepth === "string" ? custom.codeDepth.trim().toLowerCase().slice(0, 30) : "";
+
+  if (aboutUser) {
+    customParts.push(`USER PROFILE / CONTEXT:\n${aboutUser}`);
+  }
+  if (responseStyle) {
+    customParts.push(`USER RESPONSE INSTRUCTIONS (apply style preferences while obeying the active language rule below):\n${responseStyle}`);
+  }
+
+  if (langResolution.mode === "explicit") {
+    const langCode = langResolution.language;
+    const directive = LANGUAGE_DIRECTIVE_MAP[langCode] || langCode;
+    customParts.push(`USER PREFERRED LANGUAGE (${langCode.toUpperCase()}): ${directive}`);
+    customParts.push(`CRITICAL LANGUAGE DIRECTIVE: The user explicitly configured or requested '${langCode.toUpperCase()}'. You MUST produce your full response strictly in ${directive} Keep this language active for every turn until the user explicitly asks to switch languages. Even if saved memories or custom instructions are written in another language, deliver your reply in ${langCode.toUpperCase()}.`);
+  } else {
+    const detectedHint = langResolution.language === "roman_urdu"
+      ? "The latest user prompt is in **Roman Urdu** (Latin script). Reply naturally and fluently in Roman Urdu (keeping technical/coding identifiers in English where natural). Do NOT switch to English or Urdu Arabic script."
+      : langResolution.language === "urdu"
+        ? "The latest user prompt is in **Urdu script (اردو)**. Reply naturally in proper Urdu script."
+        : langResolution.language === "hindi"
+          ? "The latest user prompt is in **Hindi (Devanagari)**. Reply naturally in proper Hindi Devanagari script."
+          : langResolution.language === "ar"
+            ? "The latest user prompt is in **Arabic (العربية)**. Reply naturally in proper Arabic."
+            : "Match the exact language and script of the user's latest prompt (English -> English, Roman Urdu -> Roman Urdu, Urdu script -> Urdu script, Hindi -> Hindi, Arabic -> Arabic, etc.). Never force English when the user writes in another language, and never force another language when the user writes in English.";
+    customParts.push(`LANGUAGE MIRRORING: The user has selected 'Auto' mode. Always mirror the exact language and script (e.g. Roman Urdu, Urdu script, Hindi, Spanish, French, German, Arabic, English) of the user's prompt.\nACTIVE TURN LANGUAGE GUIDANCE: ${detectedHint}`);
+  }
+
     if (tone && tone !== "default") {
       const toneMap = {
         friendly: "Warm, supportive, approachable, and encouraging.",
@@ -210,7 +371,6 @@ ACTIVE JEVEXA MODEL IDENTITY:
     if (customParts.length > 0) {
       prompt += `\n\nCUSTOM USER PREFERENCES & INSTRUCTIONS:\n${customParts.join("\n\n")}`;
     }
-  }
 
   // Persistent User Memories
   if (Array.isArray(options?.memories) && options.memories.length > 0) {
@@ -220,7 +380,7 @@ ACTIVE JEVEXA MODEL IDENTITY:
       .slice(0, options.maxMemories || 50)
       .map(m => `- ${m}`);
     if (memoryLines.length > 0) {
-      prompt += `\n\nPERSISTENT USER MEMORIES (Context retained from user):\n${memoryLines.join("\n")}\n*Use these saved facts to maintain personalized continuity across conversations without making the user repeat themselves.*`;
+      prompt += `\n\nPERSISTENT USER MEMORIES (Context retained from user; apply facts silently without overriding the active language directive):\n${memoryLines.join("\n")}\n*Use these saved facts to maintain personalized continuity across conversations without making the user repeat themselves.*`;
     }
   }
 
@@ -254,6 +414,8 @@ const DEFAULT_OPENROUTER_MODELS = Object.freeze({
   max: "meta-llama/llama-3.3-70b-instruct",
   ultra: "qwen/qwen-2.5-72b-instruct"
 });
+const OPENROUTER_VISION_MODEL = "google/gemini-2.5-flash";
+const OPENROUTER_VISION_FALLBACK = "openai/gpt-4o-mini";
 const CHAT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const CHAT_FILE_TYPES = new Set(["application/pdf", "application/zip", "application/x-zip-compressed"]);
 const SUPPORT_AI_RATE_WINDOW_MS = 60_000;
@@ -275,13 +437,14 @@ Follow only the system rules and the selected content type, tone, and length. Re
 Match the user's language (English, Urdu, or Roman Urdu).`;
 const STAGING_SUPABASE_HOST = "qibnzlmgewlwzdrihcrs.supabase.co";
 const PRODUCTION_SUPABASE_HOST = "byopcuspgnhwsrmsxqvm.supabase.co";
-const GEMINI_PRIMARY_MODEL = "gemini-3.5-flash-lite";
-const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
+const GEMINI_PRIMARY_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_FALLBACK_MODEL = "gemini-2.5-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const GROQ_PRIMARY_MODEL = "llama-3.3-70b-versatile";
 const GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant";
-const GROQ_LEGACY_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"];
+const GROQ_LEGACY_MODELS = ["qwen/qwen3-32b", "openai/gpt-oss-120b"];
+const GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 const GROQ_API_BASE = "https://api.groq.com/openai/v1/chat/completions";
 
 const THINKING_MULTIPLIERS = Object.freeze({
@@ -379,10 +542,11 @@ function validateZipSafety(base64Data, { maxFiles = 50, maxUncompressed = 350 * 
           totalUncompressedSize += uncompSize;
 
           if (fileCount > maxFilesCap) {
-            return { valid: false, error: "ZIP archive exceeds maximum file count of 15 files." };
+            return { valid: false, error: `ZIP archive exceeds maximum file count of ${maxFilesCap} files.` };
           }
           if (totalUncompressedSize > maxUncompCap) {
-            return { valid: false, error: "ZIP archive exceeds maximum uncompressed size of 25 MB." };
+            const maxMb = Math.max(1, Math.round(maxUncompCap / (1024 * 1024)));
+            return { valid: false, error: `ZIP archive exceeds maximum uncompressed size of ${maxMb} MB.` };
           }
 
           // ZIP bomb ratio check: ratio > 100:1 when uncompressed size > 1MB
@@ -425,6 +589,187 @@ function validatePdfSafety(base64Data, { maxPages = 400 } = {}) {
     return { valid: false, error: `PDF exceeds maximum allowed page count (${maxPages} pages).` };
   }
   return { valid: true };
+}
+
+const ZIP_TEXT_EXTENSIONS = new Set([
+  "txt", "md", "markdown", "json", "js", "mjs", "cjs", "ts", "tsx", "jsx",
+  "py", "rb", "go", "rs", "java", "kt", "swift", "c", "cpp", "h", "hpp", "cs",
+  "php", "html", "htm", "css", "scss", "less", "sql", "xml", "yaml", "yml",
+  "toml", "ini", "cfg", "conf", "env", "sh", "bash", "zsh", "ps1", "bat",
+  "csv", "tsv", "svg", "graphql", "gql", "dockerfile", "gitignore"
+]);
+
+function isReadableZipEntry(filename) {
+  const lower = String(filename || "").toLowerCase();
+  const base = lower.split("/").pop() || "";
+  if (!base || lower.includes("node_modules/") || lower.includes(".git/") || lower.startsWith("__macosx/")) {
+    return false;
+  }
+  if (base === "dockerfile" || base === "makefile" || base === "readme" || base === "license") {
+    return true;
+  }
+  const dotIdx = base.lastIndexOf(".");
+  if (dotIdx === -1) return false;
+  const ext = base.slice(dotIdx + 1);
+  return ZIP_TEXT_EXTENSIONS.has(ext);
+}
+
+async function inflateRawZipBytes(compressedBytes, maxBytes = 512 * 1024) {
+  if (typeof DecompressionStream === "undefined") return null;
+  const ds = new DecompressionStream("deflate-raw");
+  const writer = ds.writable.getWriter();
+  writer.write(compressedBytes).catch(() => {});
+  writer.close().catch(() => {});
+  const reader = ds.readable.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value && value.length) {
+        total += value.length;
+        if (total > maxBytes) {
+          const remaining = maxBytes - (total - value.length);
+          if (remaining > 0) chunks.push(value.subarray(0, remaining));
+          await reader.cancel().catch(() => {});
+          break;
+        }
+        chunks.push(value);
+      }
+    }
+  } catch {
+    return null;
+  }
+  const out = new Uint8Array(Math.min(total, maxBytes));
+  let pos = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, pos);
+    pos += chunk.length;
+  }
+  return out;
+}
+
+async function extractZipSummaryForPrompt(base64Data, archiveName = "archive.zip", options = {}) {
+  const maxEntriesListed = options.maxEntriesListed || 80;
+  const maxExtractedFiles = options.maxExtractedFiles || 12;
+  const maxCharsPerFile = options.maxCharsPerFile || 3500;
+  const maxTotalChars = options.maxTotalChars || 20000;
+
+  let binary;
+  try {
+    binary = atob(base64Data);
+  } catch {
+    return `[ZIP archive "${archiveName}": unable to decode base64 contents.]`;
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const allPaths = [];
+  const extractedFiles = [];
+  let encryptedCount = 0;
+  let binaryCount = 0;
+  let skippedCount = 0;
+  let totalExtractedChars = 0;
+  let offset = 0;
+  const decoder = new TextDecoder("utf-8", { fatal: false });
+
+  while (offset + 30 <= bytes.length) {
+    if (bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b && bytes[offset + 2] === 0x03 && bytes[offset + 3] === 0x04) {
+      const flags = bytes[offset + 6] | (bytes[offset + 7] << 8);
+      const method = bytes[offset + 8] | (bytes[offset + 9] << 8);
+      const compSize = (bytes[offset + 18] | (bytes[offset + 19] << 8) | (bytes[offset + 20] << 16) | (bytes[offset + 21] << 24)) >>> 0;
+      const uncompSize = (bytes[offset + 22] | (bytes[offset + 23] << 8) | (bytes[offset + 24] << 16) | (bytes[offset + 25] << 24)) >>> 0;
+      const nameLen = bytes[offset + 26] | (bytes[offset + 27] << 8);
+      const extraLen = bytes[offset + 28] | (bytes[offset + 29] << 8);
+
+      const dataStart = offset + 30 + nameLen + extraLen;
+      if (offset + 30 + nameLen > bytes.length) break;
+
+      const filename = decoder.decode(bytes.subarray(offset + 30, offset + 30 + nameLen));
+      const isDir = filename.endsWith("/") || filename.endsWith("\\");
+      const isEncrypted = (flags & 0x01) !== 0;
+
+      if (!isDir && filename && !filename.includes("node_modules/") && !filename.includes(".git/") && !filename.startsWith("__MACOSX/")) {
+        if (allPaths.length < maxEntriesListed) {
+          allPaths.push(`${filename}${isEncrypted ? " [encrypted]" : ""}`);
+        }
+        if (isEncrypted) {
+          encryptedCount++;
+        } else if (isReadableZipEntry(filename) && extractedFiles.length < maxExtractedFiles && totalExtractedChars < maxTotalChars) {
+          const dataEnd = Math.min(bytes.length, dataStart + compSize);
+          if (compSize > 0 && dataEnd > dataStart && uncompSize <= 2 * 1024 * 1024) {
+            const rawSlice = bytes.subarray(dataStart, dataEnd);
+            let fileBytes = null;
+            if (method === 0) {
+              fileBytes = rawSlice.subarray(0, Math.min(rawSlice.length, 512 * 1024));
+            } else if (method === 8) {
+              fileBytes = await inflateRawZipBytes(rawSlice, 512 * 1024);
+            }
+            if (fileBytes && fileBytes.length > 0) {
+              let text = decoder.decode(fileBytes);
+              const hasNullBytes = text.includes("\u0000");
+              if (!hasNullBytes) {
+                const clipped = text.slice(0, maxCharsPerFile);
+                const truncated = text.length > maxCharsPerFile ? "\n...[truncated]" : "";
+                const entryContent = `${clipped}${truncated}`;
+                totalExtractedChars += entryContent.length;
+                extractedFiles.push({ path: filename, content: entryContent });
+              } else {
+                binaryCount++;
+              }
+            } else {
+              skippedCount++;
+            }
+          } else if (compSize === 0 && uncompSize === 0) {
+            extractedFiles.push({ path: filename, content: "(empty file)" });
+          } else {
+            skippedCount++;
+          }
+        } else if (!isReadableZipEntry(filename)) {
+          binaryCount++;
+        } else {
+          skippedCount++;
+        }
+      }
+
+      const nextOffset = dataStart + Math.max(0, compSize);
+      if (nextOffset <= offset) break;
+      offset = nextOffset;
+    } else if (bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b && (bytes[offset + 2] === 0x01 || bytes[offset + 2] === 0x05 || bytes[offset + 2] === 0x06)) {
+      break;
+    } else {
+      offset++;
+    }
+  }
+
+  const lines = [
+    `[ZIP ARCHIVE INSPECTED: ${archiveName}]`,
+    `Entries found (${allPaths.length}${allPaths.length >= maxEntriesListed ? "+" : ""}):`,
+    allPaths.length ? allPaths.map(p => `- ${p}`).join("\n") : "- (no readable file entries found)"
+  ];
+
+  if (encryptedCount > 0) {
+    lines.push(`Notice: ${encryptedCount} entry/entries are password-encrypted and cannot be read.`);
+  }
+  if (binaryCount > 0) {
+    lines.push(`Notice: ${binaryCount} binary/non-text file(s) were listed but not decoded as text.`);
+  }
+  if (skippedCount > 0) {
+    lines.push(`Notice: ${skippedCount} additional entry/entries were skipped due to size/file extraction caps.`);
+  }
+  if (extractedFiles.length > 0) {
+    lines.push("\nExtracted file contents:");
+    for (const entry of extractedFiles) {
+      lines.push(`\n--- FILE: ${entry.path} ---\n${entry.content}`);
+    }
+  } else if (encryptedCount === 0 && binaryCount > 0) {
+    lines.push("No plain-text/code files were found in this archive (binary-only archive).");
+  }
+
+  return lines.join("\n");
 }
 
 async function syncUserCreditsAndProfile(cfg, userId, newBalance) {
@@ -698,25 +1043,141 @@ async function settleServiceCredits({
   };
 }
 
-function getGroqModels(env) {
+const SSE_HEADERS = Object.freeze({
+  "Content-Type": "text/event-stream; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+  "Connection": "keep-alive",
+  "X-Accel-Buffering": "no",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, apikey, X-Client-Info, Cache-Control, Pragma"
+});
+
+function formatSseEvent(eventName, payload) {
+  return `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+function createStreamTimeoutController({
+  ttfbMs = 15000,
+  idleMs = 18000,
+  totalMs = 45000,
+  externalSignal = null
+} = {}) {
+  const controller = new AbortController();
+  let timedOut = false;
+  let externalAborted = false;
+  let ttfbTimer = null;
+  let idleTimer = null;
+  let totalTimer = null;
+
+  const abortWithTimeout = () => {
+    if (!controller.signal.aborted) {
+      timedOut = true;
+      controller.abort();
+    }
+  };
+
+  const onExternalAbort = () => {
+    if (!controller.signal.aborted) {
+      externalAborted = true;
+      controller.abort();
+    }
+  };
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      externalAborted = true;
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+  }
+
+  if (!controller.signal.aborted) {
+    if (ttfbMs > 0) ttfbTimer = setTimeout(abortWithTimeout, ttfbMs);
+    if (totalMs > 0) totalTimer = setTimeout(abortWithTimeout, totalMs);
+  }
+
+  const markActivity = () => {
+    if (ttfbTimer) {
+      clearTimeout(ttfbTimer);
+      ttfbTimer = null;
+    }
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    if (!controller.signal.aborted && idleMs > 0) {
+      idleTimer = setTimeout(abortWithTimeout, idleMs);
+    }
+  };
+
+  const cleanup = () => {
+    if (ttfbTimer) { clearTimeout(ttfbTimer); ttfbTimer = null; }
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    if (totalTimer) { clearTimeout(totalTimer); totalTimer = null; }
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    }
+  };
+
+  return {
+    signal: controller.signal,
+    markActivity,
+    cleanup,
+    isTimedOut: () => timedOut,
+    isExternalAbort: () => externalAborted || Boolean(externalSignal?.aborted)
+  };
+}
+
+function getProviderTimeoutProfile(tier = "lite", thinkingLevel = "low", hasAttachments = false) {
+  const deep = tier === "max" || tier === "ultra" || thinkingLevel === "max";
+  return {
+    ttfbMs: (deep || hasAttachments) ? 18000 : 12000,
+    idleMs: 18000,
+    totalMs: deep ? 60000 : 45000
+  };
+}
+
+function getGroqModels(env, { hasImages = false } = {}) {
+  if (hasImages) {
+    return [GROQ_VISION_MODEL];
+  }
   const customModel = typeof env?.GROQ_MODEL === "string" ? env.GROQ_MODEL.trim() : "";
   const models = [customModel || GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL, ...GROQ_LEGACY_MODELS].filter(Boolean);
   return Array.from(new Set(models));
 }
 
-function buildGroqUserContent(message, attachments) {
+async function buildGroqUserContent(message, attachments) {
   let text = typeof message === "string" ? message.trim() : "";
+  const imageParts = [];
+
   if (Array.isArray(attachments)) {
     for (const attachment of attachments) {
-      if (attachment?.name) {
-        text += `\n[Attached: ${attachment.name}]`;
+      if (!attachment) continue;
+      if (CHAT_IMAGE_TYPES.has(attachment.type) && typeof attachment.data === "string") {
+        imageParts.push({ type: "image_url", image_url: { url: attachment.data } });
+      } else if (attachment.type === "application/zip" && typeof attachment.data === "string") {
+        const match = attachment.data.match(/^data:[^;]+;base64,(.+)$/);
+        const b64 = match ? match[1] : "";
+        if (b64) {
+          const zipSummary = await extractZipSummaryForPrompt(b64, attachment.name);
+          text += `\n\n${zipSummary}`;
+        }
+      } else if (attachment.name && attachment.type !== "application/pdf") {
+        text += `\n[Attached document: ${attachment.name}]`;
       }
     }
   }
-  return text || "Hello";
+
+  const finalText = text.trim() || "Please review the attached content.";
+  if (imageParts.length > 0) {
+    return [{ type: "text", text: finalText }, ...imageParts];
+  }
+  return finalText;
 }
 
-function buildGroqMessages(history, userText) {
+function buildGroqMessages(history, userContent) {
   const messages = [];
   if (Array.isArray(history)) {
     for (const item of history) {
@@ -731,25 +1192,48 @@ function buildGroqMessages(history, userText) {
       }
     }
   }
-  messages.push({ role: "user", content: typeof userText === "string" && userText.trim() ? userText.trim() : "Hello" });
+  const normalizedUserContent = Array.isArray(userContent)
+    ? userContent
+    : (typeof userContent === "string" && userContent.trim() ? userContent.trim() : "Hello");
+  messages.push({ role: "user", content: normalizedUserContent });
   return messages;
 }
 
 function getGeminiModelsForTier(tier, env = {}) {
   const custom = typeof env?.GEMINI_MODEL === "string" ? env.GEMINI_MODEL.trim() : "";
-  if (custom) return [custom, GEMINI_FALLBACK_MODEL, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
-  if (tier === "pro" || tier === "max" || tier === "ultra") {
-    return ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  if (custom) {
+    return Array.from(new Set([custom, GEMINI_FALLBACK_MODEL, GEMINI_PRIMARY_MODEL, "gemini-2.0-flash"]));
   }
-  return [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+  if (tier === "max" || tier === "ultra") {
+    return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.5-flash-lite"];
+  }
+  if (tier === "pro") {
+    return ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+  }
+  return [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL, "gemini-2.0-flash"];
 }
 
-function buildGeminiUserParts(message, attachments) {
+function buildGeminiGenerationConfig(baseConfig, model, thinkingLevel = "low") {
+  const config = { ...(baseConfig || {}) };
+  if (typeof model === "string" && model.startsWith("gemini-2.5")) {
+    const budget = thinkingLevel === "max" ? 4096 : (thinkingLevel === "standard" ? 1024 : 0);
+    // gemini-2.5-pro requires thinkingBudget >= 128 when thinkingConfig is provided
+    if (model.includes("pro") && budget === 0) {
+      config.thinkingConfig = { thinkingBudget: 128 };
+    } else {
+      config.thinkingConfig = { thinkingBudget: budget };
+    }
+  }
+  return config;
+}
+
+async function buildGeminiUserParts(message, attachments) {
   const parts = [];
   if (message && message.trim()) {
     parts.push({ text: message.trim() });
   }
   for (const attachment of attachments || []) {
+    if (!attachment) continue;
     if (CHAT_IMAGE_TYPES.has(attachment.type) || attachment.type === "application/pdf") {
       const match = typeof attachment.data === "string" ? attachment.data.match(/^data:[^;]+;base64,(.+)$/) : null;
       const b64 = match ? match[1] : (attachment.data || "");
@@ -761,6 +1245,15 @@ function buildGeminiUserParts(message, attachments) {
           }
         });
       }
+    } else if (attachment.type === "application/zip") {
+      const match = typeof attachment.data === "string" ? attachment.data.match(/^data:[^;]+;base64,(.+)$/) : null;
+      const b64 = match ? match[1] : (attachment.data || "");
+      if (b64) {
+        const zipSummary = await extractZipSummaryForPrompt(b64, attachment.name);
+        parts.push({ text: zipSummary });
+      } else {
+        parts.push({ text: `[Attached ZIP archive: ${attachment.name}]` });
+      }
     } else {
       parts.push({
         text: `[Attached document: ${attachment.name}]`
@@ -771,6 +1264,37 @@ function buildGeminiUserParts(message, attachments) {
     parts.push({ text: "Hello" });
   }
   return parts;
+}
+
+async function buildOpenRouterUserContent(message, attachments) {
+  const textParts = [];
+  if (message && message.trim()) {
+    textParts.push(message.trim());
+  }
+  const mediaParts = [];
+  for (const attachment of attachments || []) {
+    if (!attachment) continue;
+    if (CHAT_IMAGE_TYPES.has(attachment.type)) {
+      mediaParts.push({ type: "image_url", image_url: { url: attachment.data } });
+    } else if (attachment.type === "application/pdf") {
+      mediaParts.push({
+        type: "file",
+        file: { filename: attachment.name, file_data: attachment.data }
+      });
+    } else if (attachment.type === "application/zip") {
+      const match = typeof attachment.data === "string" ? attachment.data.match(/^data:[^;]+;base64,(.+)$/) : null;
+      const b64 = match ? match[1] : "";
+      if (b64) {
+        textParts.push(await extractZipSummaryForPrompt(b64, attachment.name));
+      } else {
+        textParts.push(`[Attached ZIP archive: ${attachment.name}]`);
+      }
+    } else if (attachment.name) {
+      textParts.push(`[Attached document: ${attachment.name}]`);
+    }
+  }
+  const combinedText = textParts.join("\n\n").trim() || "Please review the attached file(s).";
+  return [{ type: "text", text: combinedText }, ...mediaParts];
 }
 
 function buildGeminiContents(history, userParts) {
@@ -800,6 +1324,40 @@ function buildGeminiContents(history, userParts) {
     contents.shift();
   }
   return contents;
+}
+
+async function consumeSseStream(body, onData, markActivity) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      markActivity?.();
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n")) !== -1) {
+        const rawLine = buffer.slice(0, idx).replace(/\r$/, "");
+        buffer = buffer.slice(idx + 1);
+        if (!rawLine || rawLine.startsWith(":")) continue;
+        if (rawLine.startsWith("data:")) {
+          const dataStr = rawLine.slice(5).trim();
+          if (!dataStr || dataStr === "[DONE]") continue;
+          await onData(dataStr);
+        }
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim().startsWith("data:")) {
+      const dataStr = buffer.trim().slice(5).trim();
+      if (dataStr && dataStr !== "[DONE]") {
+        await onData(dataStr);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 async function callGeminiGenerateContent({
@@ -839,113 +1397,259 @@ async function executeGeminiWithFallback({
   generationConfig,
   requestId,
   serviceName = "AI",
-  models = [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL, "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+  models = [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL, "gemini-2.0-flash"],
+  thinkingLevel = "low",
+  tier = "lite",
+  hasAttachments = false,
+  externalSignal = null,
+  stream = false,
+  onToken = null
 }) {
   let lastStatus = 0;
   let lastData = null;
   let lastErrorMsg = "";
+  const timeoutProfile = getProviderTimeoutProfile(tier, thinkingLevel, hasAttachments);
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const isPrimary = (i === 0 && models.length > 1);
-    const fallbackModel = models[1] || GEMINI_FALLBACK_MODEL;
-    const controller = new AbortController();
-    const timeoutMs = 8500;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const hasNext = i < models.length - 1;
+    const nextModel = models[i + 1];
+    let effectiveConfig = buildGeminiGenerationConfig(generationConfig, model, thinkingLevel);
+    let retriedWithoutThinking = false;
 
-    try {
-      const { response, data } = await callGeminiGenerateContent({
-        apiKey,
-        model,
-        systemInstruction,
-        contents,
-        generationConfig,
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
+    while (true) {
+      const timer = createStreamTimeoutController({ ...timeoutProfile, externalSignal });
+      let emittedTokens = false;
 
-      if (response.ok) {
-        const candidate = data?.candidates?.[0];
-        const finishReason = candidate?.finishReason;
-        const parts = candidate?.content?.parts;
-        const text = Array.isArray(parts)
-          ? parts.map(p => typeof p?.text === "string" ? p.text : "").join("").trim()
-          : "";
+      try {
+        if (stream) {
+          const response = await fetch(
+            `${GEMINI_API_BASE}/${model}:streamGenerateContent?alt=sse`,
+            {
+              method: "POST",
+              signal: timer.signal,
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": apiKey
+              },
+              body: JSON.stringify({
+                systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined,
+                contents,
+                generationConfig: effectiveConfig
+              })
+            }
+          );
 
-        if (text) {
-          const totalTokens = data?.usageMetadata?.totalTokenCount;
-          const promptTokens = data?.usageMetadata?.promptTokenCount;
-          const completionTokens = data?.usageMetadata?.candidatesTokenCount;
-          return {
-            ok: true,
-            model,
-            reply: text,
-            totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
-            promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
-            completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
-            data
-          };
-        }
+          if (response.ok) {
+            timer.markActivity();
+            const contentType = (response.headers.get("Content-Type") || "").toLowerCase();
+            let reply = "";
+            let finishReason = "";
+            let promptTokens = null;
+            let completionTokens = null;
+            let totalTokens = null;
 
-        if (finishReason === "SAFETY") {
+            if (contentType.includes("text/event-stream") && response.body) {
+              await consumeSseStream(response.body, async (dataStr) => {
+                let chunk;
+                try { chunk = JSON.parse(dataStr); } catch { return; }
+                const candidate = chunk?.candidates?.[0];
+                if (candidate?.finishReason) finishReason = candidate.finishReason;
+                const parts = candidate?.content?.parts;
+                if (Array.isArray(parts)) {
+                  const delta = parts.map(p => typeof p?.text === "string" ? p.text : "").join("");
+                  if (delta) {
+                    reply += delta;
+                    emittedTokens = true;
+                    await onToken?.(delta);
+                  }
+                }
+                if (chunk?.usageMetadata) {
+                  if (Number.isInteger(chunk.usageMetadata.promptTokenCount)) promptTokens = chunk.usageMetadata.promptTokenCount;
+                  if (Number.isInteger(chunk.usageMetadata.candidatesTokenCount)) completionTokens = chunk.usageMetadata.candidatesTokenCount;
+                  if (Number.isInteger(chunk.usageMetadata.totalTokenCount) && chunk.usageMetadata.totalTokenCount > 0) {
+                    totalTokens = chunk.usageMetadata.totalTokenCount;
+                  }
+                }
+              }, timer.markActivity);
+            } else {
+              const data = await readJsonResponse(response);
+              const candidate = data?.candidates?.[0];
+              finishReason = candidate?.finishReason || "";
+              const parts = candidate?.content?.parts;
+              reply = Array.isArray(parts)
+                ? parts.map(p => typeof p?.text === "string" ? p.text : "").join("").trim()
+                : "";
+              if (reply) {
+                emittedTokens = true;
+                await onToken?.(reply);
+              }
+              totalTokens = data?.usageMetadata?.totalTokenCount || null;
+              promptTokens = data?.usageMetadata?.promptTokenCount || null;
+              completionTokens = data?.usageMetadata?.candidatesTokenCount ?? null;
+            }
+            timer.cleanup();
+
+            const trimmedReply = reply.trim();
+            if (trimmedReply) {
+              return {
+                ok: true,
+                model,
+                reply: trimmedReply,
+                totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+                promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+                completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null
+              };
+            }
+            if (finishReason === "SAFETY") {
+              return {
+                ok: false,
+                safetyBlocked: true,
+                emittedTokens,
+                status: 400,
+                message: "The response was filtered by AI safety guidelines. Reserved credits were released; please rephrase your request."
+              };
+            }
+            if (hasNext && !emittedTokens) {
+              console.warn(`Gemini stream ${model} returned empty candidate, failing over to ${nextModel} (${requestId})`);
+              break;
+            }
+            return { ok: false, emittedTokens, status: 502, message: "No response was generated by Gemini. Reserved credits were released." };
+          }
+
+          const data = await readJsonResponse(response);
+          timer.cleanup();
+          lastStatus = response.status;
+          lastData = data;
+          const errorMsg = String(data?.error?.message || response.statusText || "").slice(0, 300);
+          lastErrorMsg = errorMsg;
+          console.error(`Gemini stream ${model} returned ${response.status}: ${errorMsg} (${requestId})`);
+
+          if (response.status === 400 && effectiveConfig?.thinkingConfig && !retriedWithoutThinking) {
+            retriedWithoutThinking = true;
+            const { thinkingConfig: _removed, ...stripped } = effectiveConfig;
+            effectiveConfig = stripped;
+            continue;
+          }
+          if (hasNext && (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500)) {
+            console.warn(`Gemini model ${model} hit ${response.status}, failing over to ${nextModel} (${requestId})`);
+            break;
+          }
           return {
             ok: false,
-            safetyBlocked: true,
-            status: 400,
-            message: "The response was filtered by AI safety guidelines. Reserved credits were released; please rephrase your request."
+            emittedTokens,
+            status: response.status,
+            data,
+            message: errorMsg ? `Gemini API error (${response.status}): ${errorMsg}` : `Gemini API error (${response.status})`,
+            isRateLimit: response.status === 429,
+            isAuthError: response.status === 401 || response.status === 403
           };
         }
 
-        if (i < models.length - 1) {
-          console.warn(`Gemini model ${model} returned empty candidate, trying fallback ${fallbackModel} (${requestId})`);
+        const { response, data } = await callGeminiGenerateContent({
+          apiKey,
+          model,
+          systemInstruction,
+          contents,
+          generationConfig: effectiveConfig,
+          signal: timer.signal
+        });
+        timer.cleanup();
+
+        if (response.ok) {
+          const candidate = data?.candidates?.[0];
+          const finishReason = candidate?.finishReason;
+          const parts = candidate?.content?.parts;
+          const text = Array.isArray(parts)
+            ? parts.map(p => typeof p?.text === "string" ? p.text : "").join("").trim()
+            : "";
+
+          if (text) {
+            const totalTokens = data?.usageMetadata?.totalTokenCount;
+            const promptTokens = data?.usageMetadata?.promptTokenCount;
+            const completionTokens = data?.usageMetadata?.candidatesTokenCount;
+            return {
+              ok: true,
+              model,
+              reply: text,
+              totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+              promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+              completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
+              data
+            };
+          }
+
+          if (finishReason === "SAFETY") {
+            return {
+              ok: false,
+              safetyBlocked: true,
+              status: 400,
+              message: "The response was filtered by AI safety guidelines. Reserved credits were released; please rephrase your request."
+            };
+          }
+
+          if (hasNext) {
+            console.warn(`Gemini model ${model} returned empty candidate, trying fallback ${nextModel} (${requestId})`);
+            break;
+          }
+
+          return {
+            ok: false,
+            status: 502,
+            message: "No response was generated by Gemini. Reserved credits were released."
+          };
+        }
+
+        lastStatus = response.status;
+        lastData = data;
+        const errorMsg = String(data?.error?.message || response.statusText || "").slice(0, 300);
+        lastErrorMsg = errorMsg;
+        console.error(`Gemini ${model} returned ${response.status}: ${errorMsg} (${requestId})`);
+
+        if (response.status === 400 && effectiveConfig?.thinkingConfig && !retriedWithoutThinking) {
+          retriedWithoutThinking = true;
+          const { thinkingConfig: _removed, ...stripped } = effectiveConfig;
+          effectiveConfig = stripped;
           continue;
+        }
+
+        if (hasNext && (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500)) {
+          console.warn(`Gemini model ${model} hit ${response.status}, failing over to ${nextModel} (${requestId})`);
+          break;
         }
 
         return {
           ok: false,
-          status: 502,
-          message: "No response was generated by Gemini. Reserved credits were released."
+          status: response.status,
+          data,
+          message: errorMsg ? `Gemini API error (${response.status}): ${errorMsg}` : `Gemini API error (${response.status})`,
+          isRateLimit: response.status === 429,
+          isAuthError: response.status === 401 || response.status === 403
+        };
+      } catch (err) {
+        timer.cleanup();
+        if (timer.isExternalAbort()) {
+          return { ok: false, aborted: true, emittedTokens, status: 499, message: "Request aborted by client." };
+        }
+        const isTimeout = timer.isTimedOut() || err?.name === "AbortError";
+        const errorMsg = isTimeout ? "timeout" : err?.message || "network";
+        lastErrorMsg = errorMsg;
+        console.error(`Gemini ${model} request error: ${errorMsg} (${requestId})`);
+
+        if (hasNext && !emittedTokens) {
+          console.warn(`Gemini model ${model} failed, failing over to ${nextModel} (${requestId})`);
+          break;
+        }
+
+        return {
+          ok: false,
+          emittedTokens,
+          timedOut: isTimeout,
+          networkError: !isTimeout,
+          status: isTimeout ? 504 : 502,
+          message: `Gemini API request failed: ${errorMsg}`
         };
       }
-
-      lastStatus = response.status;
-      lastData = data;
-      const errorMsg = String(data?.error?.message || response.statusText || "").slice(0, 300);
-      lastErrorMsg = errorMsg;
-      console.error(`Gemini ${model} returned ${response.status}: ${errorMsg} (${requestId})`);
-
-      if (i < models.length - 1 && (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500)) {
-        console.warn(`Gemini model ${model} hit ${response.status}, failing over to ${fallbackModel} (${requestId})`);
-        continue;
-      }
-
-      return {
-        ok: false,
-        status: response.status,
-        data,
-        message: errorMsg ? `Gemini API error (${response.status}): ${errorMsg}` : `Gemini API error (${response.status})`,
-        isRateLimit: response.status === 429,
-        isAuthError: response.status === 401 || response.status === 403
-      };
-    } catch (err) {
-      clearTimeout(timeoutId);
-      const isTimeout = err?.name === "AbortError";
-      const errorMsg = isTimeout ? "timeout" : err?.message || "network";
-      lastErrorMsg = errorMsg;
-      console.error(`Gemini ${model} request error: ${errorMsg} (${requestId})`);
-
-      if (i < models.length - 1) {
-        console.warn(`Gemini model ${model} failed, failing over to ${fallbackModel} (${requestId})`);
-        continue;
-      }
-
-      return {
-        ok: false,
-        timedOut: isTimeout,
-        networkError: !isTimeout,
-        status: isTimeout ? 504 : 502,
-        message: `Gemini API request failed: ${errorMsg}`
-      };
     }
   }
 
@@ -967,11 +1671,17 @@ async function executeGroqWithFallback({
   temperature = 0.7,
   requestId = "groq",
   serviceName = "AI",
-  models = [GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL]
+  models = [GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL, ...GROQ_LEGACY_MODELS],
+  tier = "lite",
+  thinkingLevel = "low",
+  externalSignal = null,
+  stream = false,
+  onToken = null
 }) {
   let lastStatus = 0;
   let lastData = null;
   let lastErrorMsg = "";
+  const timeoutProfile = getProviderTimeoutProfile(tier, thinkingLevel, false);
 
   const groqMessages = [];
   if (systemInstruction) {
@@ -983,38 +1693,98 @@ async function executeGroqWithFallback({
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const isPrimary = (i === 0 && models.length > 1);
-    const fallbackModel = models[1] || GROQ_FALLBACK_MODEL;
-    const controller = new AbortController();
-    const timeoutMs = 8500;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const hasNext = i < models.length - 1;
+    const nextModel = models[i + 1];
+    const timer = createStreamTimeoutController({ ...timeoutProfile, externalSignal });
+    let emittedTokens = false;
 
     try {
+      const payload = {
+        model,
+        messages: groqMessages,
+        max_tokens: maxTokens,
+        temperature
+      };
+      if (stream) {
+        payload.stream = true;
+        payload.stream_options = { include_usage: true };
+      }
+
       const response = await fetch(GROQ_API_BASE, {
         method: "POST",
-        signal: controller.signal,
+        signal: timer.signal,
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          model,
-          messages: groqMessages,
-          max_tokens: maxTokens,
-          temperature
-        })
+        body: JSON.stringify(payload)
       });
-      clearTimeout(timeoutId);
-
-      const data = await readJsonResponse(response);
 
       if (response.ok) {
+        timer.markActivity();
+        const contentType = (response.headers.get("Content-Type") || "").toLowerCase();
+
+        if (stream && contentType.includes("text/event-stream") && response.body) {
+          let reply = "";
+          let reasoningFallback = "";
+          let promptTokens = null;
+          let completionTokens = null;
+          let totalTokens = null;
+
+          await consumeSseStream(response.body, async (dataStr) => {
+            let chunk;
+            try { chunk = JSON.parse(dataStr); } catch { return; }
+            const delta = chunk?.choices?.[0]?.delta;
+            if (typeof delta?.content === "string" && delta.content.length > 0) {
+              reply += delta.content;
+              emittedTokens = true;
+              await onToken?.(delta.content);
+            } else if (typeof delta?.reasoning === "string" && delta.reasoning.length > 0) {
+              reasoningFallback += delta.reasoning;
+            }
+            const usageObj = chunk?.usage || chunk?.x_groq?.usage;
+            if (usageObj) {
+              if (Number.isInteger(usageObj.prompt_tokens)) promptTokens = usageObj.prompt_tokens;
+              if (Number.isInteger(usageObj.completion_tokens)) completionTokens = usageObj.completion_tokens;
+              if (Number.isInteger(usageObj.total_tokens) && usageObj.total_tokens > 0) totalTokens = usageObj.total_tokens;
+            }
+          }, timer.markActivity);
+          timer.cleanup();
+
+          const text = (reply || reasoningFallback).trim();
+          if (text) {
+            if (!emittedTokens && reasoningFallback) {
+              await onToken?.(text);
+            }
+            return {
+              ok: true,
+              provider: "groq",
+              model,
+              reply: text,
+              totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+              promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+              completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null
+            };
+          }
+          if (hasNext && !emittedTokens) {
+            console.warn(`Groq stream ${model} returned empty response, failing over to ${nextModel} (${requestId})`);
+            continue;
+          }
+          return { ok: false, emittedTokens, status: 502, message: "No response was generated by Groq. Reserved credits were released." };
+        }
+
+        const data = await readJsonResponse(response);
+        timer.cleanup();
         const choice = data?.choices?.[0];
         const content = typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
         const reasoning = typeof choice?.message?.reasoning === "string" ? choice.message.reasoning.trim() : "";
         const text = content || reasoning;
 
         if (text) {
+          if (stream) {
+            emittedTokens = true;
+            await onToken?.(text);
+          }
           const totalTokens = data?.usage?.total_tokens;
           const promptTokens = data?.usage?.prompt_tokens;
           const completionTokens = data?.usage?.completion_tokens;
@@ -1030,8 +1800,8 @@ async function executeGroqWithFallback({
           };
         }
 
-        if (isPrimary) {
-          console.warn(`Groq primary ${model} returned empty response, trying fallback ${fallbackModel} (${requestId})`);
+        if (hasNext) {
+          console.warn(`Groq ${model} returned empty response, trying fallback ${nextModel} (${requestId})`);
           continue;
         }
 
@@ -1042,14 +1812,16 @@ async function executeGroqWithFallback({
         };
       }
 
+      const data = await readJsonResponse(response);
+      timer.cleanup();
       lastStatus = response.status;
       lastData = data;
       const errorMsg = String(data?.error?.message || response.statusText || "").slice(0, 300);
       lastErrorMsg = errorMsg;
       console.error(`Groq ${model} returned ${response.status}: ${errorMsg} (${requestId})`);
 
-      if (isPrimary && (response.status >= 400)) {
-        console.warn(`Groq primary ${model} hit ${response.status}, retrying with ${fallbackModel} (${requestId})`);
+      if (hasNext && response.status !== 401 && response.status !== 403 && response.status >= 400) {
+        console.warn(`Groq ${model} hit ${response.status}, retrying with ${nextModel} (${requestId})`);
         continue;
       }
 
@@ -1062,19 +1834,23 @@ async function executeGroqWithFallback({
         isAuthError: response.status === 401 || response.status === 403
       };
     } catch (err) {
-      clearTimeout(timeoutId);
-      const isTimeout = err?.name === "AbortError";
+      timer.cleanup();
+      if (timer.isExternalAbort()) {
+        return { ok: false, aborted: true, emittedTokens, status: 499, message: "Request aborted by client." };
+      }
+      const isTimeout = timer.isTimedOut() || err?.name === "AbortError";
       const errorMsg = isTimeout ? "timeout" : err?.message || "network";
       lastErrorMsg = errorMsg;
       console.error(`Groq ${model} request error: ${errorMsg} (${requestId})`);
 
-      if (isPrimary) {
-        console.warn(`Groq primary ${model} failed, failing over to ${fallbackModel} (${requestId})`);
+      if (hasNext && !emittedTokens) {
+        console.warn(`Groq ${model} failed, failing over to ${nextModel} (${requestId})`);
         continue;
       }
 
       return {
         ok: false,
+        emittedTokens,
         timedOut: isTimeout,
         networkError: !isTimeout,
         status: isTimeout ? 504 : 502,
@@ -1093,6 +1869,11 @@ async function executeGroqWithFallback({
   };
 }
 
+function supportsOpenRouterReasoning(modelId = "") {
+  const m = String(modelId || "").toLowerCase();
+  return /(?:gemini-2\.5|deepseek-r1|o1|o3|o4|qwen3|claude-3\.7|claude-sonnet-4|claude-opus-4)/.test(m);
+}
+
 async function executeOpenRouterWithFallback({
   apiKey,
   systemInstruction,
@@ -1103,12 +1884,19 @@ async function executeOpenRouterWithFallback({
   serviceName = "AI",
   model = DEFAULT_OPENROUTER_MODELS.lite,
   fallbackModel = DEFAULT_OPENROUTER_MODELS.max,
-  thinkingEffort = undefined
+  thinkingEffort = undefined,
+  tier = "lite",
+  thinkingLevel = "low",
+  hasAttachments = false,
+  externalSignal = null,
+  stream = false,
+  onToken = null
 }) {
-  const models = [model, fallbackModel].filter(Boolean);
+  const models = Array.from(new Set([model, fallbackModel].filter(Boolean)));
   let lastStatus = 0;
   let lastData = null;
   let lastErrorMsg = "";
+  const timeoutProfile = getProviderTimeoutProfile(tier, thinkingLevel, hasAttachments);
 
   const orMessages = [];
   if (systemInstruction) {
@@ -1120,112 +1908,186 @@ async function executeOpenRouterWithFallback({
 
   for (let i = 0; i < models.length; i++) {
     const currentModel = models[i];
-    const isPrimary = (i === 0 && models.length > 1);
-    const controller = new AbortController();
-    const timeoutMs = 8500;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const hasNext = i < models.length - 1;
+    const nextModel = models[i + 1];
+    let includeReasoning = Boolean(thinkingEffort);
+    let retriedWithoutReasoning = false;
 
-    try {
-      const payload = {
-        model: currentModel,
-        messages: orMessages,
-        max_tokens: maxTokens,
-        temperature
-      };
-      if (thinkingEffort) {
-        payload.reasoning = { effort: thinkingEffort };
-      }
+    while (true) {
+      const timer = createStreamTimeoutController({ ...timeoutProfile, externalSignal });
+      let emittedTokens = false;
 
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          "HTTP-Referer": "https://jevexa.net",
-          "X-Title": "Jevexa"
-        },
-        body: JSON.stringify(payload)
-      });
-      clearTimeout(timeoutId);
+      try {
+        const payload = {
+          model: currentModel,
+          messages: orMessages,
+          max_tokens: maxTokens,
+          temperature
+        };
+        if (includeReasoning) {
+          payload.reasoning = { effort: thinkingEffort };
+        }
+        if (stream) {
+          payload.stream = true;
+        }
 
-      const data = await readJsonResponse(response);
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          signal: timer.signal,
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://jevexa.net",
+            "X-Title": "Jevexa"
+          },
+          body: JSON.stringify(payload)
+        });
 
-      if (response.ok) {
-        const choice = data?.choices?.[0];
-        const candidate = choice?.message?.content;
-        const text = (typeof candidate === "string"
-          ? candidate
-          : Array.isArray(candidate)
-            ? candidate.map(p => typeof p?.text === "string" ? p.text : "").join("")
-            : (typeof choice?.message?.reasoning === "string" ? choice.message.reasoning : "")).trim();
+        if (response.ok) {
+          timer.markActivity();
+          const contentType = (response.headers.get("Content-Type") || "").toLowerCase();
 
-        if (text) {
-          const totalTokens = data?.usage?.total_tokens;
-          const promptTokens = data?.usage?.prompt_tokens;
-          const completionTokens = data?.usage?.completion_tokens;
+          if (stream && contentType.includes("text/event-stream") && response.body) {
+            let reply = "";
+            let reasoningFallback = "";
+            let promptTokens = null;
+            let completionTokens = null;
+            let totalTokens = null;
+
+            await consumeSseStream(response.body, async (dataStr) => {
+              let chunk;
+              try { chunk = JSON.parse(dataStr); } catch { return; }
+              const delta = chunk?.choices?.[0]?.delta;
+              if (typeof delta?.content === "string" && delta.content.length > 0) {
+                reply += delta.content;
+                emittedTokens = true;
+                await onToken?.(delta.content);
+              } else if (typeof delta?.reasoning === "string" && delta.reasoning.length > 0) {
+                reasoningFallback += delta.reasoning;
+              }
+              if (chunk?.usage) {
+                if (Number.isInteger(chunk.usage.prompt_tokens)) promptTokens = chunk.usage.prompt_tokens;
+                if (Number.isInteger(chunk.usage.completion_tokens)) completionTokens = chunk.usage.completion_tokens;
+                if (Number.isInteger(chunk.usage.total_tokens) && chunk.usage.total_tokens > 0) totalTokens = chunk.usage.total_tokens;
+              }
+            }, timer.markActivity);
+            timer.cleanup();
+
+            const text = (reply || reasoningFallback).trim();
+            if (text) {
+              if (!emittedTokens && reasoningFallback) {
+                await onToken?.(text);
+              }
+              return {
+                ok: true,
+                provider: "openrouter",
+                model: currentModel,
+                reply: text,
+                totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+                promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+                completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null
+              };
+            }
+            if (hasNext && !emittedTokens) {
+              console.warn(`OpenRouter stream ${currentModel} returned empty response, failing over to ${nextModel} (${requestId})`);
+              break;
+            }
+            return { ok: false, emittedTokens, status: 502, message: "No response was generated by OpenRouter. Reserved credits were released." };
+          }
+
+          const data = await readJsonResponse(response);
+          timer.cleanup();
+          const choice = data?.choices?.[0];
+          const candidate = choice?.message?.content;
+          const text = (typeof candidate === "string"
+            ? candidate
+            : Array.isArray(candidate)
+              ? candidate.map(p => typeof p?.text === "string" ? p.text : "").join("")
+              : (typeof choice?.message?.reasoning === "string" ? choice.message.reasoning : "")).trim();
+
+          if (text) {
+            if (stream) {
+              emittedTokens = true;
+              await onToken?.(text);
+            }
+            const totalTokens = data?.usage?.total_tokens;
+            const promptTokens = data?.usage?.prompt_tokens;
+            const completionTokens = data?.usage?.completion_tokens;
+            return {
+              ok: true,
+              provider: "openrouter",
+              model: currentModel,
+              reply: text,
+              totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
+              promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
+              completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
+              data
+            };
+          }
+
+          if (hasNext) {
+            console.warn(`OpenRouter ${currentModel} returned empty response, trying fallback ${nextModel} (${requestId})`);
+            break;
+          }
+
           return {
-            ok: true,
-            provider: "openrouter",
-            model: currentModel,
-            reply: text,
-            totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
-            promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
-            completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
-            data
+            ok: false,
+            status: 502,
+            message: "No response was generated by OpenRouter. Reserved credits were released."
           };
         }
 
-        if (isPrimary) {
-          console.warn(`OpenRouter primary ${currentModel} returned empty response, trying fallback (${requestId})`);
+        const data = await readJsonResponse(response);
+        timer.cleanup();
+        lastStatus = response.status;
+        lastData = data;
+        const errorMsg = String(data?.error?.message || response.statusText || "").slice(0, 300);
+        lastErrorMsg = errorMsg;
+        console.error(`OpenRouter ${currentModel} returned ${response.status}: ${errorMsg} (${requestId})`);
+
+        if (response.status === 400 && includeReasoning && !retriedWithoutReasoning) {
+          retriedWithoutReasoning = true;
+          includeReasoning = false;
           continue;
+        }
+
+        if (hasNext && (response.status === 400 || response.status === 404 || response.status === 429 || response.status >= 500)) {
+          console.warn(`OpenRouter ${currentModel} hit ${response.status}, failing over to ${nextModel} (${requestId})`);
+          break;
         }
 
         return {
           ok: false,
-          status: 502,
-          message: "No response was generated by OpenRouter. Reserved credits were released."
+          status: response.status,
+          data,
+          message: errorMsg ? `OpenRouter API error (${response.status}): ${errorMsg}` : `OpenRouter API error (${response.status})`,
+          isRateLimit: response.status === 429,
+          isAuthError: response.status === 401 || response.status === 403
+        };
+      } catch (err) {
+        timer.cleanup();
+        if (timer.isExternalAbort()) {
+          return { ok: false, aborted: true, emittedTokens, status: 499, message: "Request aborted by client." };
+        }
+        const isTimeout = timer.isTimedOut() || err?.name === "AbortError";
+        const errorMsg = isTimeout ? "timeout" : err?.message || "network";
+        lastErrorMsg = errorMsg;
+        console.error(`OpenRouter ${currentModel} request error: ${errorMsg} (${requestId})`);
+
+        if (hasNext && !emittedTokens) {
+          console.warn(`OpenRouter ${currentModel} failed, failing over to ${nextModel} (${requestId})`);
+          break;
+        }
+
+        return {
+          ok: false,
+          emittedTokens,
+          timedOut: isTimeout,
+          networkError: !isTimeout,
+          status: isTimeout ? 504 : 502,
+          message: `OpenRouter API request failed: ${errorMsg}`
         };
       }
-
-      lastStatus = response.status;
-      lastData = data;
-      const errorMsg = String(data?.error?.message || response.statusText || "").slice(0, 300);
-      lastErrorMsg = errorMsg;
-      console.error(`OpenRouter ${currentModel} returned ${response.status}: ${errorMsg} (${requestId})`);
-
-      if (isPrimary && (response.status === 404 || response.status === 429 || response.status >= 500)) {
-        console.warn(`OpenRouter primary ${currentModel} hit ${response.status}, failing over to ${fallbackModel} (${requestId})`);
-        continue;
-      }
-
-      return {
-        ok: false,
-        status: response.status,
-        data,
-        message: errorMsg ? `OpenRouter API error (${response.status}): ${errorMsg}` : `OpenRouter API error (${response.status})`,
-        isRateLimit: response.status === 429,
-        isAuthError: response.status === 401 || response.status === 403
-      };
-    } catch (err) {
-      clearTimeout(timeoutId);
-      const isTimeout = err?.name === "AbortError";
-      const errorMsg = isTimeout ? "timeout" : err?.message || "network";
-      lastErrorMsg = errorMsg;
-      console.error(`OpenRouter ${currentModel} request error: ${errorMsg} (${requestId})`);
-
-      if (isPrimary) {
-        console.warn(`OpenRouter primary ${currentModel} failed, failing over to ${fallbackModel} (${requestId})`);
-        continue;
-      }
-
-      return {
-        ok: false,
-        timedOut: isTimeout,
-        networkError: !isTimeout,
-        status: isTimeout ? 504 : 502,
-        message: `OpenRouter API request failed: ${errorMsg}`
-      };
     }
   }
 
@@ -1275,7 +2137,12 @@ function hasExpectedFileSignature(type, base64) {
   return false;
 }
 
-function parseChatPayload(body) {
+function parseChatPayload(body, options = {}) {
+  const maxFileSizeBytes = Number.isFinite(options.maxFileSizeBytes) && options.maxFileSizeBytes > 0
+    ? options.maxFileSizeBytes
+    : 100 * 1024 * 1024;
+  const allowQuoteOnly = Boolean(options.allowQuoteOnly);
+
   const inputMessage = typeof body?.message === "string" ? body.message.trim() : "";
   if (inputMessage.length > 6000) return { error: "Your message is too long. Please shorten it.", status: 413 };
   const tier = typeof body?.tier === "string" ? body.tier.toLowerCase() : "lite";
@@ -1298,48 +2165,56 @@ function parseChatPayload(body) {
       return { error: "One of the attached files is invalid." };
     }
     const name = typeof attachment.name === "string" ? attachment.name.trim() : "";
-    const type = typeof attachment.type === "string" ? attachment.type.toLowerCase() : "";
+    const rawType = typeof attachment.type === "string" ? attachment.type.toLowerCase() : "";
+    const type = rawType === "application/x-zip-compressed" ? "application/zip" : rawType;
     if (!name || name.length > 120 || /[\u0000-\u001f]/.test(name)) {
       return { error: "One of the attached file names is invalid." };
+    }
+    if (allowQuoteOnly && attachment.quoteOnly === true && (CHAT_IMAGE_TYPES.has(type) || CHAT_FILE_TYPES.has(type))) {
+      attachmentTokens += CHAT_IMAGE_TYPES.has(type) ? 4800 : 20_000;
+      attachments.push({ name, type, data: "" });
+      continue;
     }
     if (CHAT_IMAGE_TYPES.has(type)) {
       const data = typeof attachment.data === "string" ? attachment.data : "";
       const match = data.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/);
+      const byteLen = match ? base64ByteLength(match[2]) : 0;
       if (!match || match[1] !== type || match[2].length % 4 !== 0
-        || base64ByteLength(match[2]) >= 5 * 1024 * 1024
+        || byteLen > maxFileSizeBytes
         || !hasExpectedFileSignature(type, match[2])) {
-        return { error: "Images must be valid JPEG, PNG, WebP, or GIF files under 5 MB." };
+        const mbCap = Math.round(maxFileSizeBytes / (1024 * 1024));
+        return { error: `Images must be valid JPEG, PNG, WebP, or GIF files under ${mbCap} MB.` };
       }
       attachmentTokens += 4800;
       attachments.push({ name, type, data });
     } else if (CHAT_FILE_TYPES.has(type)) {
-      // Non-image uploads gated by user plan in handleChat
       const data = typeof attachment.data === "string" ? attachment.data : "";
-      const expectedType = type === "application/x-zip-compressed" ? "application/zip" : type;
       const match = data.match(/^data:(application\/(?:pdf|zip|x-zip-compressed));base64,([A-Za-z0-9+/]+={0,2})$/);
       const dataType = match?.[1] === "application/x-zip-compressed" ? "application/zip" : match?.[1];
-      if (!match || dataType !== expectedType || match[2].length % 4 !== 0
-        || base64ByteLength(match[2]) >= 5 * 1024 * 1024
-        || !hasExpectedFileSignature(expectedType, match[2])) {
-        return { error: "PDF and ZIP files must be valid and under 5 MB." };
+      const byteLen = match ? base64ByteLength(match[2]) : 0;
+      if (!match || dataType !== type || match[2].length % 4 !== 0
+        || byteLen > maxFileSizeBytes
+        || !hasExpectedFileSignature(type, match[2])) {
+        const mbCap = Math.round(maxFileSizeBytes / (1024 * 1024));
+        return { error: `PDF and ZIP files must be valid and under ${mbCap} MB.` };
       }
-      if (expectedType === "application/zip") {
-        const zipSafety = validateZipSafety(match[2]);
+      if (type === "application/zip") {
+        const zipSafety = validateZipSafety(match[2], { maxFiles: 100, maxUncompressed: 350 * 1024 * 1024 });
         if (!zipSafety.valid) {
           return { error: zipSafety.error || "ZIP archive does not meet safety limits." };
         }
-      } else if (expectedType === "application/pdf") {
+      } else if (type === "application/pdf") {
         const pdfSafety = validatePdfSafety(match[2]);
         if (!pdfSafety.valid) {
           return { error: pdfSafety.error || "PDF does not meet safety limits." };
         }
       }
       attachmentTokens += 20_000;
-      attachments.push({ name, type: expectedType, data });
+      attachments.push({ name, type, data });
     } else {
       return { error: tier === "lite"
-        ? "Images only on Lite."
-        : "Supported attachments are JPEG, PNG, WebP, GIF, PDF, and ZIP files under 5 MB." };
+        ? "Supported attachments are JPEG, PNG, WebP, GIF, PDF (Paid), and ZIP (Paid)."
+        : "Supported attachments are JPEG, PNG, WebP, GIF, PDF, and ZIP files." };
     }
   }
   if (!inputMessage && attachments.length === 0) return { error: "Please enter a message or attach a file." };
@@ -2015,10 +2890,10 @@ async function readRequestJson(request, maxBytes = 65536) {
 async function handleCreditQuote(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
-  const parsedBody = await readRequestJson(request, 16 * 1024 * 1024);
+  const parsedBody = await readRequestJson(request, 140 * 1024 * 1024);
   if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
   const body = parsedBody.body;
-  const parsed = parseChatPayload(body);
+  const parsed = parseChatPayload(body, { allowQuoteOnly: true });
   if (parsed.error) return json({ error: parsed.error }, parsed.status || 400);
 
   let cfg;
@@ -2140,7 +3015,7 @@ async function releaseChatReservation(cfg, userId, requestId) {
   }
 }
 
-async function handleChat(request, env) {
+async function handleChat(request, env, ctx) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
   }
@@ -2154,9 +3029,10 @@ async function handleChat(request, env) {
   const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
   if (!geminiApiKey && !groqApiKey && !openRouterApiKey) return json({ error: "AI service is being configured. Please contact support." }, 503);
 
-  const parsedBody = await readRequestJson(request, 16 * 1024 * 1024);
+  const parsedBody = await readRequestJson(request, 140 * 1024 * 1024);
   if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
   const body = parsedBody.body;
+  const wantsStream = body?.stream === true || (request.headers.get("Accept") || "").includes("text/event-stream");
 
   const parsed = parseChatPayload(body);
   if (parsed.error) return json({ error: parsed.error }, parsed.status || 400);
@@ -2248,7 +3124,6 @@ async function handleChat(request, env) {
     ["lite", "starter", "pro", "max", "business", "ultra"].includes(userPlan)
   );
 
-  const TIER_UPLOAD_CAPS = TIER_PLAN_LIMITS;
   const activePlanKey = isPaidPlan ? userPlan : "free";
   const planCaps = TIER_PLAN_LIMITS[activePlanKey] || TIER_PLAN_LIMITS.free;
 
@@ -2464,62 +3339,7 @@ async function handleChat(request, env) {
     return json({ error: "Could not confirm the credit reservation. Please try again." }, 503);
   }
 
-  if (reservation.reserved_credits !== fixedCredits) {
-    let released = await releaseChatReservation(cfg, user.id, requestId);
-  if (!released) {
-    try {
-      const resRes = await sbRequest(
-        cfg,
-        `/rest/v1/credit_reservations?select=id,status,reserved_credits&user_id=eq.${encodeURIComponent(user.id)}&request_id=eq.${encodeURIComponent(requestId)}&status=eq.reserved&limit=1`
-      );
-      const resRows = await readJsonResponse(resRes);
-      if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
-        const reservedCredits = resRows[0].reserved_credits || 1;
-        const releasePatchRes = await sbRequest(
-          cfg,
-          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}&status=eq.reserved`,
-          {
-            method: "PATCH",
-            headers: { Prefer: "return=representation" },
-            body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
-          }
-        );
-        const releasedRows = await readJsonResponse(releasePatchRes);
-        if (releasePatchRes.ok && Array.isArray(releasedRows) && releasedRows.length > 0) {
-          const balRes = await sbRequest(
-            cfg,
-            `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
-          );
-          const balRows = await readJsonResponse(balRes);
-          if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
-            const newBal = (balRows[0].balance || 0) + reservedCredits;
-            await sbRequest(
-              cfg,
-              `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
-              {
-                method: "PATCH",
-                body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
-              }
-            );
-          }
-          released = true;
-        }
-      }
-    } catch (fbErr) {
-      console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
-    }
-  }
-    return json({
-      error: released
-        ? "Chat tier pricing changed before reservation. No charge was made; please retry."
-        : "Chat tier pricing could not be confirmed and the reservation is being held for safe reconciliation.",
-      requestId
-    }, 503);
-  }
-
-  const reservedCredits = reservation.reserved_credits;
-
-  const releaseWithError = async (message, status) => {
+  const releaseReservationSafe = async () => {
     if (reservation?.fallbackDirect) {
       try {
         await sbRequest(
@@ -2533,55 +3353,72 @@ async function handleChat(request, env) {
             })
           }
         );
+        return true;
       } catch (refundErr) {
         console.error("Direct reservation refund notice:", refundErr?.message || refundErr, requestId);
+        return false;
       }
-      return json({ error: message, requestId }, status);
     }
     let released = await releaseChatReservation(cfg, user.id, requestId);
-  if (!released) {
-    try {
-      const resRes = await sbRequest(
-        cfg,
-        `/rest/v1/credit_reservations?select=id,status,reserved_credits&user_id=eq.${encodeURIComponent(user.id)}&request_id=eq.${encodeURIComponent(requestId)}&status=eq.reserved&limit=1`
-      );
-      const resRows = await readJsonResponse(resRes);
-      if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
-        const reservedCredits = resRows[0].reserved_credits || 1;
-        const releasePatchRes = await sbRequest(
+    if (!released) {
+      try {
+        const resRes = await sbRequest(
           cfg,
-          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}&status=eq.reserved`,
-          {
-            method: "PATCH",
-            headers: { Prefer: "return=representation" },
-            body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
-          }
+          `/rest/v1/credit_reservations?select=id,status,reserved_credits&user_id=eq.${encodeURIComponent(user.id)}&request_id=eq.${encodeURIComponent(requestId)}&status=eq.reserved&limit=1`
         );
-        const releasedRows = await readJsonResponse(releasePatchRes);
-        if (releasePatchRes.ok && Array.isArray(releasedRows) && releasedRows.length > 0) {
-          const balRes = await sbRequest(
+        const resRows = await readJsonResponse(resRes);
+        if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
+          const resCreds = resRows[0].reserved_credits || 1;
+          const releasePatchRes = await sbRequest(
             cfg,
-            `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
+            `/rest/v1/credit_reservations?id=eq.${resRows[0].id}&status=eq.reserved`,
+            {
+              method: "PATCH",
+              headers: { Prefer: "return=representation" },
+              body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
+            }
           );
-          const balRows = await readJsonResponse(balRes);
-          if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
-            const newBal = (balRows[0].balance || 0) + reservedCredits;
-            await sbRequest(
+          const releasedRows = await readJsonResponse(releasePatchRes);
+          if (releasePatchRes.ok && Array.isArray(releasedRows) && releasedRows.length > 0) {
+            const balRes = await sbRequest(
               cfg,
-              `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
-              {
-                method: "PATCH",
-                body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
-              }
+              `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
             );
+            const balRows = await readJsonResponse(balRes);
+            if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+              const newBal = (balRows[0].balance || 0) + resCreds;
+              await sbRequest(
+                cfg,
+                `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+                {
+                  method: "PATCH",
+                  body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+                }
+              );
+            }
+            released = true;
           }
-          released = true;
         }
+      } catch (fbErr) {
+        console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
       }
-    } catch (fbErr) {
-      console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
     }
+    return released;
+  };
+
+  if (reservation.reserved_credits !== fixedCredits) {
+    const released = await releaseReservationSafe();
+    return json({
+      error: released
+        ? "Chat tier pricing changed before reservation. No charge was made; please retry."
+        : "Chat tier pricing could not be confirmed and the reservation is being held for safe reconciliation.",
+      requestId
+    }, 503);
   }
+
+  const reservedCredits = reservation.reserved_credits;
+  const releaseWithError = async (message, status) => {
+    const released = await releaseReservationSafe();
     return json({
       error: released ? message : "The request failed and its credit reservation is being held for safe reconciliation.",
       requestId
@@ -2589,11 +3426,24 @@ async function handleChat(request, env) {
   };
 
   const activeModelName = JEVEXA_MODEL_NAMES[parsed.tier] || "Jevexa Lite";
+  const languageResolution = resolveConversationLanguage(
+    parsed.message,
+    parsed.history,
+    parsed.customSettings?.language || "auto"
+  );
   const tierSystemPrompt = buildChatSystemPrompt(parsed.tier, parsed.thinkingLevel, {
     customSettings: parsed.customSettings,
     memories: parsed.memories,
-    maxMemories: planCaps.maxMemories
+    maxMemories: planCaps.maxMemories,
+    latestMessage: parsed.message,
+    history: parsed.history,
+    languageResolution
   });
+
+  const hasImageAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some(a => CHAT_IMAGE_TYPES.has(a.type));
+  const hasPdfAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some(a => a.type === "application/pdf");
+  const hasVisualOrPdfAttachments = hasImageAttachments || hasPdfAttachments;
+  const hasAnyAttachments = Array.isArray(parsed.attachments) && parsed.attachments.length > 0;
 
   let reply = "";
   let totalTokens = parsed.estimatedTokens;
@@ -2604,12 +3454,12 @@ async function handleChat(request, env) {
   let lastProviderError = null;
   let activeProviderName = "AI";
 
-  // Multi-Provider Routing Cascade: Groq (llama-3.3-70b-versatile primary ultra-fast engine) -> Gemini Fallback -> OpenRouter Tertiary
-  const executeGroqChat = async () => {
+  const executeGroqChat = async ({ stream = false, onToken = null } = {}) => {
     if (!groqApiKey) return false;
-    const groqUserText = buildGroqUserContent(parsed.message, parsed.attachments);
-    const groqMessages = buildGroqMessages(parsed.history, groqUserText);
-    const groqModels = getGroqModels(env);
+    if (hasPdfAttachments) return false;
+    const groqUserContent = await buildGroqUserContent(parsed.message, parsed.attachments);
+    const groqMessages = buildGroqMessages(parsed.history, groqUserContent);
+    const groqModels = getGroqModels(env, { hasImages: hasImageAttachments });
     const groqResult = await executeGroqWithFallback({
       apiKey: groqApiKey,
       systemInstruction: tierSystemPrompt,
@@ -2618,7 +3468,12 @@ async function handleChat(request, env) {
       temperature: 0.6,
       requestId,
       serviceName: "Chat",
-      models: groqModels
+      models: groqModels,
+      tier: parsed.tier,
+      thinkingLevel: parsed.thinkingLevel,
+      externalSignal: request.signal,
+      stream,
+      onToken
     });
 
     if (groqResult.ok && groqResult.reply) {
@@ -2635,12 +3490,12 @@ async function handleChat(request, env) {
     }
     console.warn(`Groq chat failed (${groqResult.status || groqResult.message || "error"}), checking failover provider (${requestId})`);
     lastProviderError = groqResult;
-    return false;
+    return groqResult.aborted ? "aborted" : (groqResult.emittedTokens ? "partial_failed" : false);
   };
 
-  const executeGeminiChat = async () => {
+  const executeGeminiChat = async ({ stream = false, onToken = null } = {}) => {
     if (!geminiApiKey) return false;
-    const userParts = buildGeminiUserParts(parsed.message, parsed.attachments);
+    const userParts = await buildGeminiUserParts(parsed.message, parsed.attachments);
     const contents = buildGeminiContents(parsed.history, userParts);
     const generationConfig = {
       temperature: 0.6,
@@ -2655,7 +3510,13 @@ async function handleChat(request, env) {
       generationConfig,
       requestId,
       serviceName: "Chat",
-      models: geminiModels
+      models: geminiModels,
+      thinkingLevel: parsed.thinkingLevel,
+      tier: parsed.tier,
+      hasAttachments: hasAnyAttachments,
+      externalSignal: request.signal,
+      stream,
+      onToken
     });
 
     if (geminiResult.ok && geminiResult.reply) {
@@ -2671,30 +3532,43 @@ async function handleChat(request, env) {
       return true;
     }
     console.warn(`Gemini chat failed (${geminiResult.status || geminiResult.message || "error"}), checking failover provider (${requestId})`);
-    if (geminiResult.safetyBlocked) {
-      lastProviderError = geminiResult;
-      return "safety_blocked";
-    }
     lastProviderError = geminiResult;
+    if (geminiResult.aborted) return "aborted";
+    if (geminiResult.safetyBlocked) return "safety_blocked";
+    if (geminiResult.emittedTokens) return "partial_failed";
     return false;
   };
 
-  const executeOpenRouterChat = async () => {
+  const executeOpenRouterChat = async ({ stream = false, onToken = null } = {}) => {
     if (!openRouterApiKey) return false;
+    const orUserContent = await buildOpenRouterUserContent(parsed.message, parsed.attachments);
+    const primaryOrModel = hasVisualOrPdfAttachments
+      ? OPENROUTER_VISION_MODEL
+      : (model || DEFAULT_OPENROUTER_MODELS[parsed.tier] || DEFAULT_OPENROUTER_MODELS.lite);
+    const fallbackOrModel = hasVisualOrPdfAttachments
+      ? OPENROUTER_VISION_FALLBACK
+      : DEFAULT_OPENROUTER_MODELS.max;
+
     const orResult = await executeOpenRouterWithFallback({
       apiKey: openRouterApiKey,
       systemInstruction: tierSystemPrompt,
       messages: [
         ...parsed.history.map(({ role, content }) => ({ role, content })),
-        { role: "user", content: parsed.userContent }
+        { role: "user", content: orUserContent }
       ],
       maxTokens: parsed.maxOutputTokens,
       temperature: 0.6,
       requestId,
       serviceName: "Chat",
-      model: model || DEFAULT_OPENROUTER_MODELS[parsed.tier] || DEFAULT_OPENROUTER_MODELS.lite,
-      fallbackModel: DEFAULT_OPENROUTER_MODELS.max,
-      thinkingEffort: parsed.thinkingEffort
+      model: primaryOrModel,
+      fallbackModel: fallbackOrModel,
+      thinkingEffort: parsed.thinkingEffort,
+      tier: parsed.tier,
+      thinkingLevel: parsed.thinkingLevel,
+      hasAttachments: hasAnyAttachments,
+      externalSignal: request.signal,
+      stream,
+      onToken
     });
 
     if (orResult.ok && orResult.reply) {
@@ -2711,24 +3585,254 @@ async function handleChat(request, env) {
     }
     console.error(`OpenRouter chat failed: ${orResult.message} (${requestId})`);
     lastProviderError = orResult;
-    return false;
+    return orResult.aborted ? "aborted" : (orResult.emittedTokens ? "partial_failed" : false);
   };
 
-  const primaryIsGemini = env?.AI_PRIMARY_PROVIDER === "gemini";
-  if (primaryIsGemini) {
-    const res = await executeGeminiChat();
-    if (res === "safety_blocked") return releaseWithError(lastProviderError.message, 400);
-    if (!executionSuccess) await executeGroqChat();
-    if (!executionSuccess) await executeOpenRouterChat();
-  } else {
-    await executeGroqChat();
-    if (!executionSuccess) {
-      const res = await executeGeminiChat();
-      if (res === "safety_blocked") return releaseWithError(lastProviderError.message, 400);
+  const runProviderCascade = async ({ stream = false, onToken = null } = {}) => {
+    const primaryIsGemini = env?.AI_PRIMARY_PROVIDER === "gemini";
+    const cascadeOrder = hasVisualOrPdfAttachments
+      ? [
+          executeGeminiChat,
+          executeOpenRouterChat,
+          ...(hasImageAttachments && !hasPdfAttachments ? [executeGroqChat] : [])
+        ]
+      : (primaryIsGemini
+          ? [executeGeminiChat, executeGroqChat, executeOpenRouterChat]
+          : [executeGroqChat, executeGeminiChat, executeOpenRouterChat]);
+
+    for (const runner of cascadeOrder) {
+      if (request.signal?.aborted) {
+        lastProviderError = { ok: false, aborted: true, status: 499, message: "Request aborted by client." };
+        return "aborted";
+      }
+      const outcome = await runner({ stream, onToken });
+      if (outcome === true) return "ok";
+      if (outcome === "safety_blocked" || outcome === "aborted" || outcome === "partial_failed") {
+        return outcome;
+      }
     }
-    if (!executionSuccess) {
-      await executeOpenRouterChat();
+    return "failed";
+  };
+
+  const settleChatCredits = async () => {
+    const usage = calculateUsageCredits({
+      tier: parsed.tier,
+      thinkingLevel: parsed.thinkingLevel,
+      attachments: parsed.attachments,
+      promptTokens,
+      completionTokens,
+      totalTokens: tokenCountMeasured ? totalTokens : null,
+      inputText: parsed.message,
+      outputText: reply,
+      service: parsed.service,
+      hasVision: hasImageAttachments
+    });
+    totalTokens = usage.totalTokens;
+    tokenCountMeasured = usage.measured;
+
+    let chargedCredits = fixedCredits;
+    let remainingCredits = reservation.balance;
+
+    if (reservation?.fallbackDirect) {
+      chargedCredits = Math.min(reservedCredits, usage.credits);
+      const refundDiff = reservedCredits - chargedCredits;
+      let finalBal = reservation.balance;
+      if (refundDiff > 0) {
+        try {
+          finalBal += refundDiff;
+          await syncUserCreditsAndProfile(cfg, user.id, finalBal);
+        } catch (err) {
+          console.warn("Direct settlement refund difference notice:", err?.message || err, requestId);
+        }
+      }
+      remainingCredits = finalBal;
+      try {
+        await sbRequest(cfg, "/rest/v1/credit_transactions", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: user.id,
+            amount: -chargedCredits,
+            description: `AI chatbot usage (${parsed.tier.toUpperCase()})`,
+            type: "usage",
+            reference: `usage:${requestId}`,
+            service: parsed.service,
+            status: "settled",
+            request_id: requestId,
+            metadata: { total_tokens: totalTokens, tier: parsed.tier }
+          })
+        });
+      } catch (txErr) {
+        console.warn("Direct settlement transaction log notice:", txErr?.message || txErr, requestId);
+      }
+    } else {
+      let settlementResponse;
+      let settlement;
+      const safeTotalTokens = Math.max(1, Math.min(50000, Math.round(Number(totalTokens) || 1000)));
+      try {
+        settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
+          p_user_id: user.id,
+          p_request_id: requestId,
+          p_usage_tokens: safeTotalTokens
+        });
+        settlement = await readJsonResponse(settlementResponse);
+        if (!settlementResponse.ok && settlementResponse.status >= 500) {
+          try {
+            const retryRes = await callCreditRpc(cfg, "jevexa_credit_settle", {
+              p_user_id: user.id,
+              p_request_id: requestId,
+              p_usage_tokens: safeTotalTokens
+            });
+            const retryData = await readJsonResponse(retryRes);
+            if (retryRes.ok && retryData?.ok) {
+              settlementResponse = retryRes;
+              settlement = retryData;
+            }
+          } catch { /* ignore retry error */ }
+        }
+      } catch (error) {
+        console.error("Credit settlement failed:", error?.message || "network", requestId);
+        return {
+          ok: false,
+          status: 503,
+          payload: {
+            reply,
+            error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
+            requestId,
+            unconfirmedSettlement: true
+          }
+        };
+      }
+      if (!settlementResponse.ok
+        || settlement?.ok !== true
+        || !Number.isInteger(settlement.charged_credits)
+        || settlement.charged_credits < 1
+        || settlement.charged_credits > reservedCredits
+        || !Number.isInteger(settlement.balance)
+        || settlement.balance < 0) {
+        console.error("Credit settlement rejected:", settlementResponse.status, requestId);
+        return {
+          ok: false,
+          status: 503,
+          payload: {
+            reply,
+            error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
+            requestId,
+            unconfirmedSettlement: true
+          }
+        };
+      }
+      chargedCredits = settlement.charged_credits;
+      remainingCredits = settlement.balance;
+      await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
     }
+
+    return {
+      ok: true,
+      payload: {
+        reply,
+        tier: parsed.tier,
+        model: activeModelName,
+        modelName: activeModelName,
+        thinkingLevel: parsed.thinkingLevel,
+        creditsCharged: chargedCredits,
+        creditsRemaining: remainingCredits,
+        credits_used: chargedCredits,
+        remaining_credits: remainingCredits,
+        creditsUsed: chargedCredits,
+        remainingCredits: remainingCredits,
+        tokensUsed: totalTokens,
+        providerUsed: activeProviderName,
+        totalTokens,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        usageEstimated: !tokenCountMeasured,
+        detectedLanguage: languageResolution.language,
+        switchedLanguage: languageResolution.switchedNow ? languageResolution.language : null,
+        requestId
+      }
+    };
+  };
+
+  if (wantsStream) {
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    const writeEvent = async (eventName, payload) => {
+      try {
+        await writer.write(encoder.encode(formatSseEvent(eventName, payload)));
+      } catch { /* ignore closed client stream */ }
+    };
+
+    const pumpPromise = (async () => {
+      try {
+        await writeEvent("status", { phase: "thinking", tier: parsed.tier, model: activeModelName, requestId });
+        const cascadeStatus = await runProviderCascade({
+          stream: true,
+          onToken: async (delta) => {
+            await writeEvent("token", { text: delta });
+          }
+        });
+
+        if (cascadeStatus === "aborted" || request.signal?.aborted) {
+          await releaseReservationSafe();
+          return;
+        }
+
+        if (!executionSuccess || cascadeStatus !== "ok") {
+          const released = await releaseReservationSafe();
+          let errMsg = "Chatbot is temporarily unavailable. Reserved credits were released.";
+          let errStatus = 502;
+          if (cascadeStatus === "safety_blocked" && lastProviderError?.message) {
+            errMsg = lastProviderError.message;
+            errStatus = 400;
+          } else if (lastProviderError?.timedOut) {
+            errMsg = "The AI request timed out. Reserved credits were released; please try again.";
+            errStatus = 504;
+          } else if (lastProviderError?.isRateLimit) {
+            errMsg = "AI is busy right now. Reserved credits were released; please try again shortly.";
+            errStatus = 429;
+          } else if (lastProviderError?.isAuthError) {
+            errMsg = "AI service configuration needs attention. Reserved credits were released.";
+          }
+          await writeEvent("error", {
+            error: released ? errMsg : "The request failed and its credit reservation is being held for safe reconciliation.",
+            status: errStatus,
+            released,
+            requestId
+          });
+          return;
+        }
+
+        const settled = await settleChatCredits();
+        if (!settled.ok) {
+          await writeEvent("error", { ...settled.payload, status: settled.status });
+          return;
+        }
+        await writeEvent("done", settled.payload);
+      } catch (err) {
+        console.error("Chat SSE stream failure:", err?.message || err, requestId);
+        await releaseReservationSafe();
+        await writeEvent("error", {
+          error: "Streaming interrupted. Reserved credits were released.",
+          status: 502,
+          released: true,
+          requestId
+        });
+      } finally {
+        try { await writer.close(); } catch { /* ignore */ }
+      }
+    })();
+
+    ctx?.waitUntil?.(pumpPromise);
+    return new Response(readable, { status: 200, headers: SSE_HEADERS });
+  }
+
+  const cascadeOutcome = await runProviderCascade({ stream: false });
+  if (cascadeOutcome === "safety_blocked") {
+    return releaseWithError(lastProviderError.message, 400);
+  }
+  if (cascadeOutcome === "aborted") {
+    return releaseWithError("Request aborted. Reserved credits were released.", 499);
   }
 
   if (!executionSuccess) {
@@ -2756,128 +3860,11 @@ async function handleChat(request, env) {
     return releaseWithError("Chatbot is temporarily unavailable. Reserved credits were released.", 502);
   }
 
-  const usage = calculateUsageCredits({
-    tier: parsed.tier,
-    thinkingLevel: parsed.thinkingLevel,
-    attachments: parsed.attachments,
-    promptTokens,
-    completionTokens,
-    totalTokens: tokenCountMeasured ? totalTokens : null,
-    inputText: parsed.message,
-    outputText: reply,
-    service: parsed.service
-  });
-  totalTokens = usage.totalTokens;
-  tokenCountMeasured = usage.measured;
-
-  let chargedCredits = fixedCredits;
-  let remainingCredits = reservation.balance;
-
-  if (reservation?.fallbackDirect) {
-    chargedCredits = Math.min(reservedCredits, usage.credits);
-    const refundDiff = reservedCredits - chargedCredits;
-    let finalBal = reservation.balance;
-    if (refundDiff > 0) {
-      try {
-        finalBal += refundDiff;
-        await syncUserCreditsAndProfile(cfg, user.id, finalBal);
-      } catch (err) {
-        console.warn("Direct settlement refund difference notice:", err?.message || err, requestId);
-      }
-    }
-    remainingCredits = finalBal;
-    try {
-      await sbRequest(cfg, "/rest/v1/credit_transactions", {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: user.id,
-          amount: -chargedCredits,
-          description: `AI chatbot usage (${parsed.tier.toUpperCase()})`,
-          type: "usage",
-          reference: `usage:${requestId}`,
-          service: parsed.service,
-          status: "settled",
-          request_id: requestId,
-          metadata: { total_tokens: totalTokens, tier: parsed.tier }
-        })
-      });
-    } catch (txErr) {
-      console.warn("Direct settlement transaction log notice:", txErr?.message || txErr, requestId);
-    }
-  } else {
-    let settlementResponse;
-    let settlement;
-    const safeTotalTokens = Math.max(1, Math.min(50000, Math.round(Number(totalTokens) || 1000)));
-    try {
-      settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
-        p_user_id: user.id,
-        p_request_id: requestId,
-        p_usage_tokens: safeTotalTokens
-      });
-      settlement = await readJsonResponse(settlementResponse);
-      if (!settlementResponse.ok && settlementResponse.status >= 500) {
-        try {
-          const retryRes = await callCreditRpc(cfg, "jevexa_credit_settle", {
-            p_user_id: user.id,
-            p_request_id: requestId,
-            p_usage_tokens: safeTotalTokens
-          });
-          const retryData = await readJsonResponse(retryRes);
-          if (retryRes.ok && retryData?.ok) {
-            settlementResponse = retryRes;
-            settlement = retryData;
-          }
-        } catch { /* ignore retry error */ }
-      }
-    } catch (error) {
-      console.error("Credit settlement failed:", error?.message || "network", requestId);
-      return json({
-        reply,
-        error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-        requestId,
-        unconfirmedSettlement: true
-      }, 503);
-    }
-    if (!settlementResponse.ok
-      || settlement?.ok !== true
-      || !Number.isInteger(settlement.charged_credits)
-      || settlement.charged_credits < 1
-      || settlement.charged_credits > reservedCredits
-      || !Number.isInteger(settlement.balance)
-      || settlement.balance < 0) {
-      console.error("Credit settlement rejected:", settlementResponse.status, requestId);
-      return json({
-        reply,
-        error: "AI completed the request, but credit settlement could not be confirmed. The reservation remains held; do not retry with a new request ID.",
-        requestId,
-        unconfirmedSettlement: true
-      }, 503);
-    }
-    chargedCredits = settlement.charged_credits;
-    remainingCredits = settlement.balance;
-    await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+  const settled = await settleChatCredits();
+  if (!settled.ok) {
+    return json(settled.payload, settled.status);
   }
-
-  return json({
-    reply,
-    tier: parsed.tier,
-    model: activeModelName,
-    modelName: activeModelName,
-    thinkingLevel: parsed.thinkingLevel,
-    creditsCharged: chargedCredits,
-    creditsRemaining: remainingCredits,
-    credits_used: chargedCredits,
-    remaining_credits: remainingCredits,
-    creditsUsed: chargedCredits,
-    remainingCredits: remainingCredits,
-    tokensUsed: totalTokens,
-    providerUsed: activeProviderName,
-    totalTokens,
-    promptTokens: usage.promptTokens,
-    completionTokens: usage.completionTokens,
-    usageEstimated: !tokenCountMeasured,
-    requestId
-  });
+  return json(settled.payload);
 }
 
 async function handleContent(request, env) {

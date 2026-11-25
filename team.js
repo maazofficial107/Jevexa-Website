@@ -246,50 +246,94 @@
             memberTableBody.appendChild(tr);
         });
 
+        // Helper to sync member changes when authenticated
+        async function syncTeamMemberMutation(method, payload, query = '') {
+            const session = await getSession();
+            if (!session) return { localOnly: true };
+            try {
+                const res = await fetch(`/api/team/members${query}`, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: payload ? JSON.stringify(payload) : undefined
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    return { error: data.error || 'Could not update team member on server.', status: res.status };
+                }
+                return { ok: true, data };
+            } catch (err) {
+                return { offlineFallback: true, error: err?.message };
+            }
+        }
+
         // Event listeners for role change, status toggle, remove
         memberTableBody.querySelectorAll('.team-role-select').forEach(sel => {
-            sel.addEventListener('change', (e) => {
+            sel.addEventListener('change', async (e) => {
                 const targetEmail = e.currentTarget.dataset.email;
                 const newRole = e.currentTarget.value;
                 const targetMember = state.members.find(m => m.email === targetEmail);
-                if (targetMember) {
-                    targetMember.role = newRole;
-                    state.auditLogs.unshift({
-                        timestamp: new Date().toISOString(),
-                        action: "Role Changed",
-                        actor: "Workspace Admin",
-                        details: `Assigned role ${newRole} to ${targetEmail}`,
-                        status: "Success"
-                    });
-                    renderAuditLogs();
-                    window.showToast?.(`Updated role of ${targetEmail} to ${newRole}.`);
+                if (!targetMember) return;
+                const prevRole = targetMember.role;
+                const res = await syncTeamMemberMutation('PATCH', { id: targetMember.id, email: targetEmail, role: newRole });
+                if (res.error && res.status && res.status >= 400 && res.status < 500) {
+                    e.currentTarget.value = prevRole;
+                    window.showToast?.(res.error);
+                    return;
                 }
+                targetMember.role = newRole;
+                state.auditLogs.unshift({
+                    timestamp: new Date().toISOString(),
+                    action: "Role Changed",
+                    actor: "Workspace Admin",
+                    details: `Assigned role ${newRole} to ${targetEmail}`,
+                    status: "Success"
+                });
+                saveCachedTeam();
+                renderAuditLogs();
+                window.showToast?.(`Updated role of ${targetEmail} to ${newRole}.`);
             });
         });
 
         memberTableBody.querySelectorAll('.team-status-toggle').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const targetEmail = e.currentTarget.dataset.email;
                 const targetMember = state.members.find(m => m.email === targetEmail);
-                if (targetMember) {
-                    targetMember.status = targetMember.status === 'Suspended' ? 'Active' : 'Suspended';
-                    state.auditLogs.unshift({
-                        timestamp: new Date().toISOString(),
-                        action: "Status Changed",
-                        actor: "Workspace Admin",
-                        details: `Set ${targetEmail} status to ${targetMember.status}`,
-                        status: "Success"
-                    });
-                    renderMembers();
-                    renderAuditLogs();
-                    window.showToast?.(`Member ${targetEmail} is now ${targetMember.status}.`);
+                if (!targetMember) return;
+                const nextStatus = targetMember.status === 'Suspended' ? 'Active' : 'Suspended';
+                const res = await syncTeamMemberMutation('PATCH', { id: targetMember.id, email: targetEmail, status: nextStatus });
+                if (res.error && res.status && res.status >= 400 && res.status < 500) {
+                    window.showToast?.(res.error);
+                    return;
                 }
+                targetMember.status = nextStatus;
+                state.auditLogs.unshift({
+                    timestamp: new Date().toISOString(),
+                    action: "Status Changed",
+                    actor: "Workspace Admin",
+                    details: `Set ${targetEmail} status to ${targetMember.status}`,
+                    status: "Success"
+                });
+                renderMembers();
+                renderAuditLogs();
+                window.showToast?.(`Member ${targetEmail} is now ${targetMember.status}.`);
             });
         });
 
         memberTableBody.querySelectorAll('.team-remove-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const targetEmail = e.currentTarget.dataset.email;
+                const targetMember = state.members.find(m => m.email === targetEmail);
+                const query = targetMember?.id
+                    ? `?id=${encodeURIComponent(targetMember.id)}&email=${encodeURIComponent(targetEmail)}`
+                    : `?email=${encodeURIComponent(targetEmail)}`;
+                const res = await syncTeamMemberMutation('DELETE', null, query);
+                if (res.error && res.status && res.status >= 400 && res.status < 500) {
+                    window.showToast?.(res.error);
+                    return;
+                }
                 state.members = state.members.filter(m => m.email !== targetEmail);
                 state.auditLogs.unshift({
                     timestamp: new Date().toISOString(),

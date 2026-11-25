@@ -181,6 +181,16 @@
             postBody = `Most teams overcomplicate ${cleanTopic.slice(0, 45)}.\n\nThe real secret? Automate the repetitive steps, personalize where it matters, and measure weekly.\n\n${normCta}`;
             hashtags = ['#AI', '#BuildInPublic', '#Productivity'];
             bestTime = 'Monday-Friday at 12:15 PM EST';
+        } else if (normPlatform === 'threads') {
+            platformLimit = 500;
+            postBody = `Hot take on ${cleanTopic}:\n\nSpeed doesn't come from longer prompts — it comes from cleaner inputs and repeatable workflows.\n\nWhat's one step you're automating this week? ${normCta}`;
+            hashtags = ['#Threads', '#Automation', '#Creators'];
+            bestTime = 'Tuesday & Thursday at 11:30 AM EST';
+        } else if (normPlatform === 'facebook') {
+            platformLimit = 2500;
+            postBody = `Practical playbook for ${cleanTopic}:\n\nWe broke our process into 3 simple stages: standardize the brief, draft with focused AI tools, and review real metrics every Friday.\n\n${normCta}`;
+            hashtags = ['#SmallBusiness', '#Workflows', '#DigitalGrowth'];
+            bestTime = 'Wednesday at 1:00 PM EST';
         } else if (normPlatform === 'instagram') {
             platformLimit = 2200;
             postBody = `✨ Here is what nobody tells you about ${cleanTopic}.\n\nWhen we first started scaling operations, we focused on doing more. What actually drove 3x output was simplifying.\n\n📌 3 Rules to Remember:\n1. Eliminate manual friction before adding tools\n2. Prioritize repeatable pipelines\n3. Protect high-leverage focus hours\n\n💬 ${normCta}`;
@@ -407,10 +417,10 @@
             const fallbackPost = deterministicClientSocial(topic, platform, tone, goal, cta);
             renderPostPreview(fallbackPost);
             if (statusEl) {
-                statusEl.textContent = 'Post draft generated via deterministic engine.';
-                statusEl.className = 'social-status-msg success';
+                statusEl.textContent = 'Cloud AI unavailable — generated locally via deterministic engine (no credits charged).';
+                statusEl.className = 'social-status-msg info';
             }
-            window.showToast?.('Social post generated!');
+            window.showToast?.('Social post drafted locally (no credits charged).');
         } finally {
             clearTimeout(socialTimeoutId);
             state.isGenerating = false;
@@ -422,13 +432,17 @@
     }
 
     function addToCalendar() {
-        if (!state.currentPost || !postBodyEl) {
-            window.showToast?.('Generate or select a post draft first.');
+        const content = postBodyEl ? postBodyEl.value.trim() : '';
+        if (!state.currentPost || !content) {
+            window.showToast?.('Generate or enter post copy before scheduling.');
+            if (statusEl) {
+                statusEl.textContent = 'Enter or generate post copy before adding to the calendar.';
+                statusEl.className = 'social-status-msg error';
+            }
             return;
         }
 
         const platform = state.currentPost.platform || 'linkedin';
-        const content = postBodyEl.value;
         const entry = {
             id: generateUuid(),
             platform,

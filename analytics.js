@@ -1278,6 +1278,14 @@
     // Handle File Ingestion
     function handleIngestFile(file) {
         if (!file) return;
+        if (file.size === 0) {
+            if (el.status) {
+                el.status.textContent = `File "${file.name}" is empty (0 bytes). Please upload a dataset with headers and rows.`;
+                el.status.className = 'analytics-status-msg danger';
+            }
+            window.showToast?.('Uploaded dataset is empty.');
+            return;
+        }
         const maxBytes = 15 * 1024 * 1024;
         if (file.size > maxBytes) {
             if (el.status) {
@@ -1571,6 +1579,8 @@
             }
             window.showToast?.(`Import error: ${err.message}`);
         } finally {
+            clearTimeout(fetchTimeoutId);
+            state.isFetchingUrl = false;
             if (el.fetchUrlBtn) {
                 el.fetchUrlBtn.disabled = false;
                 el.fetchUrlBtn.innerHTML = '<i class="fas fa-magnifying-glass-chart"></i> Fetch &amp; Ingest';
@@ -1749,10 +1759,10 @@
             console.warn('Analytics API notice, falling back to deterministic modeling:', err);
             updateAllViews();
             if (el.status) {
-                el.status.textContent = 'Analytics KPIs updated via deterministic modeling engine.';
-                el.status.className = 'analytics-status-msg success';
+                el.status.textContent = 'Cloud AI unavailable — KPIs updated via local deterministic engine (no credits charged).';
+                el.status.className = 'analytics-status-msg info';
             }
-            window.showToast?.('Analytics report generated!');
+            window.showToast?.('Analytics updated locally (no credits charged).');
         } finally {
             clearTimeout(analyticsTimeoutId);
             state.isAnalyzing = false;

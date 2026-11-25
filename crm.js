@@ -538,6 +538,7 @@
 
         const oldStage = lead.stage;
         lead.stage = newStage;
+        try { sessionStorage.setItem('jevexa_crm_leads_cache', JSON.stringify(state.leads)); } catch (_) {}
         renderAll();
 
         try {
@@ -881,6 +882,14 @@
     // CSV Import
     async function handleCsvImport(file) {
         if (!file) return;
+        if (file.size === 0) {
+            if (typeof window.showToast === 'function') window.showToast(`File "${file.name}" is empty (0 bytes).`);
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            if (typeof window.showToast === 'function') window.showToast('CSV file exceeds the 5 MB import limit.');
+            return;
+        }
         const session = await getSession();
         if (!session?.user?.id) {
             if (typeof window.openAuthModal === 'function') window.openAuthModal('signup');
@@ -969,6 +978,7 @@
                 if (error) throw error;
                 if (Array.isArray(data)) {
                     state.leads = [...data, ...state.leads];
+                    try { sessionStorage.setItem('jevexa_crm_leads_cache', JSON.stringify(state.leads)); } catch (_) {}
                     renderAll();
                 }
 

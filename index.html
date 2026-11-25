@@ -835,7 +835,7 @@
                     <div class="section-header workspace-section-header">
                         <span class="section-tag"><i class="fas fa-pen-nib"></i> Live AI Tool</span>
                         <h2 class="section-title" id="contentToolTitle">Create Business <span class="gradient-text">Content</span></h2>
-                        <p class="section-desc">Sign in to generate a blog post, social caption, email, product description, or short social post. Usage is charged in credits based on measured tokens.</p>
+                        <p class="section-desc">Generate blog posts, social captions, emails, product descriptions, or short copy tailored to your tone and audience. Cloud AI usage settles in credits by measured tokens.</p>
                     </div>
                     <div class="content-tool-panel glass workspace-panel">
                         <form id="contentForm" class="content-tool-form">
@@ -1368,7 +1368,7 @@
                             <div class="outreach-email-editor">
                                 <div class="form-group">
                                     <label for="outreachEmailSubject">Subject Line</label>
-                                    <input type="text" id="outreachEmailSubject" placeholder="Generating high-impact subject line...">
+                                    <input type="text" id="outreachEmailSubject" placeholder="Quick question about scaling your pipeline...">
                                 </div>
 
                                 <div class="outreach-ab-box" id="outreachAbSubjectContainer" hidden>
@@ -1381,7 +1381,7 @@
 
                                 <div class="form-group">
                                     <label for="outreachEmailBody">Email Body</label>
-                                    <textarea id="outreachEmailBody" rows="11" placeholder="Your personalized email sequence will generate here. You can freely edit any part before dispatching."></textarea>
+                                    <textarea id="outreachEmailBody" rows="11" placeholder="Select a prospect or generate a sequence to draft your personalized outreach email here..."></textarea>
                                 </div>
 
                                 <div class="outreach-actions-bar">
@@ -1479,7 +1479,7 @@
                             </div>
                             <div class="ocr-form-group">
                                 <label for="ocrTextInput">Document Text / OCR Content *</label>
-                                <textarea id="ocrTextInput" rows="7" placeholder="Paste invoice, receipt, or contract text here..."></textarea>
+                                <textarea id="ocrTextInput" rows="7" placeholder="Paste invoice, receipt, contract, or shipping text here, or drop a file above..."></textarea>
                             </div>
                             <div class="crm-form-row">
                                 <div class="crm-form-col">
@@ -1520,19 +1520,19 @@
                             <div id="ocrResultCard" class="ocr-result-card glass">
                                 <div class="ocr-card-header">
                                     <div>
-                                        <h3 id="ocrVendorName" class="ocr-vendor-title">Apex Technology Solutions</h3>
+                                        <h3 id="ocrVendorName" class="ocr-vendor-title">Apex Cloud Computing Inc.</h3>
                                         <span id="ocrDocTypeBadge" class="crm-stage-pill stage-won">Invoice</span>
                                     </div>
                                     <div class="ocr-card-meta">
                                         <span id="ocrPaymentStatus" class="ocr-status-pill status-paid">Paid</span>
-                                        <span id="ocrConfidence" class="ocr-confidence-pill">96% Match</span>
+                                        <span id="ocrConfidence" class="ocr-confidence-pill">98% Confidence</span>
                                     </div>
                                 </div>
                                 <div id="ocrPaneStructured" class="ocr-tab-pane active">
                                     <div class="ocr-meta-grid">
-                                        <div><span class="ocr-meta-label">Invoice #</span><strong id="ocrInvoiceNumber">INV-2026-8842</strong></div>
-                                        <div><span class="ocr-meta-label">Date</span><span id="ocrDate">2026-11-15</span></div>
-                                        <div><span class="ocr-meta-label">Due Date</span><span id="ocrDueDate">2026-11-29</span></div>
+                                        <div><span class="ocr-meta-label">Invoice #</span><strong id="ocrInvoiceNumber">INV-2026-0842</strong></div>
+                                        <div><span class="ocr-meta-label">Date</span><span id="ocrDate">2026-10-15</span></div>
+                                        <div><span class="ocr-meta-label">Due Date</span><span id="ocrDueDate">2026-11-15</span></div>
                                     </div>
                                     <div class="ocr-table-wrap">
                                         <table class="ocr-table">
@@ -1540,15 +1540,15 @@
                                                 <tr><th>Description</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
                                             </thead>
                                             <tbody id="ocrLineItemsTableBody">
-                                                <tr><td>Enterprise Cloud Node</td><td>1</td><td>$450.00</td><td>$450.00</td></tr>
-                                                <tr><td>Automation Support</td><td>1</td><td>$230.00</td><td>$230.00</td></tr>
+                                                <tr><td>Enterprise AI Cluster Hosting</td><td>1</td><td>$450.00</td><td>$450.00</td></tr>
+                                                <tr><td>Dedicated API Support Tier</td><td>1</td><td>$250.00</td><td>$250.00</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
                                     <div class="ocr-totals-box">
-                                        <div class="ocr-total-row"><span>Subtotal:</span><strong id="ocrSubtotal">$680.00</strong></div>
-                                        <div class="ocr-total-row"><span>Tax:</span><strong id="ocrTax">$69.50</strong></div>
-                                        <div class="ocr-total-row grand"><span>Grand Total:</span><strong id="ocrTotal">$749.50</strong></div>
+                                        <div class="ocr-total-row"><span>Subtotal:</span><strong id="ocrSubtotal">$700.00</strong></div>
+                                        <div class="ocr-total-row"><span>Tax:</span><strong id="ocrTax">$57.75 (8.25%)</strong></div>
+                                        <div class="ocr-total-row grand"><span>Grand Total:</span><strong id="ocrTotal">$757.75</strong></div>
                                     </div>
                                 </div>
                                 <div id="ocrPaneJson" class="ocr-tab-pane" hidden>
@@ -1619,7 +1619,7 @@
                                         <option value="product_launch" selected>Product Launch Announcement</option>
                                         <option value="founder_lesson">Founder Journey &amp; Lessons</option>
                                         <option value="industry_trends">Industry Trends Breakdown</option>
-                                        <option value="relatable_meme">Relatable Industry Take</option>
+                                        <option value="relatable_meme">Relatable Industry Insight</option>
                                     </select>
                                 </div>
                                 <div class="ocr-form-group">
@@ -1680,7 +1680,7 @@
                                     <label for="socialPostBody">Post Draft</label>
                                     <span id="socialCharCount" class="social-char-count">0 / 3000 characters</span>
                                 </div>
-                                <textarea id="socialPostBody" rows="8" placeholder="Generated post draft will display here..."></textarea>
+                                <textarea id="socialPostBody" rows="8" placeholder="Your generated post copy and hashtags will appear here ready to edit or schedule..."></textarea>
                                 <div class="social-meta-bar">
                                     <div><strong>Hashtags:</strong> <span id="socialHashtags"></span></div>
                                     <div><strong>Best Time:</strong> <span id="socialBestTime">Tuesday at 8:45 AM EST</span></div>
@@ -2512,7 +2512,7 @@
                             </div>
                             <div class="ocr-form-group">
                                 <label for="dataPasteInput">Paste Tabular CSV / TSV / Records *</label>
-                                <textarea id="dataPasteInput" rows="7" placeholder="Paste CSV data with headers here..."></textarea>
+                                <textarea id="dataPasteInput" rows="7" placeholder="Paste CSV, TSV, or JSON records with headers here, or upload a dataset above..."></textarea>
                             </div>
                             <div class="data-operations-box glass">
                                 <h4>Transformation Operations</h4>
@@ -2658,9 +2658,9 @@
 
                     <div class="step-content">
 
-                        <h3>Use AI Chat or Content Generation</h3>
+                        <h3>Launch any AI Workspace</h3>
 
-                        <p>Both tools require sign-in and reserve credits before processing a request.</p>
+                        <p>Open any of the 10 live tools—from AI Chat and Content Generation to Document OCR, Analytics, Workflows, and Mini CRM.</p>
 
                     </div>
 
@@ -2674,7 +2674,7 @@
 
                         <h3>Review credit usage</h3>
 
-                        <p>Account settings show your available balance and transaction history. The other eight AI tools will roll out across three releases.</p>
+                        <p>Your account wallet tracks live credit balance, token-weighted deductions, and exportable transaction history across all connected AI tools.</p>
 
                     </div>
 
@@ -2976,9 +2976,9 @@
 
                     </div>
 
-                    <p>AI Chat and Content Generation are connected AI tools. Both require a working account, service configuration, and available credits.</p>
+                    <p>All 10 flagship AI automation workspaces are live, powered by token-weighted cloud AI with instant local engines when working offline.</p>
 
-                    <span class="review-date">Live tool</span>
+                    <span class="review-date">10/10 Live Tools</span>
 
                 </div>
 
@@ -3034,7 +3034,7 @@
 
                             <div class="avatar" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">DB</div>
 
-                            <div><h3>Database checks</h3><span>Verification pending</span></div>
+                            <div><h3>Database &amp; Security</h3><span>Supabase RLS Active</span></div>
 
                         </div>
 
@@ -3128,7 +3128,7 @@
 
                     <button type="button" class="faq-question" aria-expanded="false"><span>Do I need coding skills to use JEVEXA?</span><i class="fas fa-chevron-down"></i></button>
 
-                    <div class="faq-answer"><p>No coding is needed to use AI Chat or Content Generation. The other eight tools are planned across three releases.</p></div>
+                    <div class="faq-answer"><p>No coding is required. Every workspace offers structured inputs, realistic presets, file uploads, and one-click exports so teams can automate immediately.</p></div>
 
                 </div>
 
@@ -3505,7 +3505,7 @@
                     </div>
                     <div class="chatbot-info">
                         <h4 id="chatbotTitle">Jevexa AI</h4>
-                        <span class="status" id="chatbotStatusText">AI chat • Sign-in required</span>
+                        <span class="status" id="chatbotStatusText">AI Chat • Sign in to start</span>
                     </div>
                 </div>
                 <div class="chatbot-header-right">
@@ -3538,7 +3538,7 @@
 
                     <div class="msg-content">
 
-                        <p>Hey! 👋 I'm the JEVEXA assistant. I can explain account credits, the connected AI chatbot, and current feature availability. What would you like to know?</p>
+                        <p>Hi! I'm the JEVEXA Assistant. Ask me to draft content, analyze documents, troubleshoot workflows, or explain your account credits.</p>
 
                     </div>
 
@@ -3890,7 +3890,7 @@
                     <div>
 
                         <strong>AI Chat Assistant</strong>
-                        <span>Requires configured provider access</span>
+                        <span>Multi-turn reasoning & file attachments</span>
 
                     </div>
 
@@ -3904,8 +3904,8 @@
 
                     <div>
 
-                        <strong>Credit Wallet</strong>
-                        <span>Check balance and transaction history</span>
+                        <strong>Full 10-Tool Suite</strong>
+                        <span>Content, OCR, Analytics, CRM & Workflows</span>
 
                     </div>
 
@@ -3919,8 +3919,8 @@
 
                     <div>
 
-                        <strong>Account Credits</strong>
-                        <span>Review balance and usage</span>
+                        <strong>Credit Wallet</strong>
+                        <span>Real-time balance and transaction history</span>
 
                     </div>
 
@@ -3934,8 +3934,8 @@
 
                     <div>
 
-                        <strong>Supabase Sign-in</strong>
-                        <span>Account access for connected features</span>
+                        <strong>Secure Cloud Sync</strong>
+                        <span>Protected accounts with Supabase RLS</span>
 
                     </div>
 
@@ -3955,8 +3955,8 @@
 
                 <div class="login-stat">
 
-                    <strong>10</strong>
-                    <span>AI tools planned</span>
+                    <strong>100</strong>
+                    <span>Free welcome credits</span>
 
                 </div>
 

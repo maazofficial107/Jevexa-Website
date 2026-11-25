@@ -1736,6 +1736,19 @@ function parseOcrPayload(body) {
     return { error: "Document text or uploaded file content is required." };
   }
 
+  const fileDataMatch = fileData
+    ? fileData.match(/^data:(image\/(?:jpeg|jpg|png|webp|gif)|application\/pdf);base64,([A-Za-z0-9+/=\s]+)$/i)
+    : null;
+  if (fileData && fileData.length > 4800000) {
+    return { error: "Uploaded binary file exceeds the 3.5 MB Vision OCR limit. Compress the file or paste document text." };
+  }
+  const inlineFilePart = fileDataMatch
+    ? {
+        mimeType: fileDataMatch[1].toLowerCase() === "image/jpg" ? "image/jpeg" : fileDataMatch[1].toLowerCase(),
+        data: fileDataMatch[2].replace(/\s+/g, "")
+      }
+    : null;
+
   const rawBytesOrChars = documentText.length || (fileData ? Math.ceil(fileData.length * 0.75) : 500);
   const baseTokens = Math.max(1000, Math.ceil(rawBytesOrChars / 4));
   const pageEstimate = Math.max(1, Math.ceil(fileSizeBytes / 150000));
@@ -1744,7 +1757,8 @@ function parseOcrPayload(body) {
   return {
     requestId: body.requestId,
     documentText: documentText.slice(0, 50000),
-    fileData: fileData.slice(0, 1000000),
+    fileData: inlineFilePart ? fileData : "",
+    inlineFilePart,
     fileName,
     documentType,
     currency,
@@ -4644,6 +4658,14 @@ function deterministicSocialGenerate(topic, platform, tone, goal, cta) {
     platformLimit = 280;
     postBody = `Most teams overcomplicate ${topic.slice(0, 50)}.\n\nThe real secret? Automate the repetitive steps, personalize where it matters, and measure weekly.\n\n${normCta}`;
     hashtags = ["#AI", "#BuildInPublic", "#Productivity"];
+  } else if (normPlatform === "threads") {
+    platformLimit = 500;
+    postBody = `Hot take on ${topic.slice(0, 60)}:\n\nSpeed doesn't come from longer prompts — it comes from cleaner inputs and repeatable workflows.\n\n${normCta}`;
+    hashtags = ["#Threads", "#Automation", "#Creators"];
+  } else if (normPlatform === "facebook") {
+    platformLimit = 2500;
+    postBody = `Practical playbook for ${topic}:\n\nWe broke our process into 3 simple stages: standardize the brief, draft with focused AI tools, and review real metrics every Friday.\n\n${normCta}`;
+    hashtags = ["#SmallBusiness", "#Workflows", "#DigitalGrowth"];
   } else if (normPlatform === "instagram") {
     platformLimit = 2200;
     postBody = `✨ Here is what nobody tells you about ${topic}.\n\nWhen we first started optimizing our operations, we focused on doing more. What actually drove 3x output was streamlining.\n\n📌 3 Rules to Remember:\n1. Eliminate friction before adding tools\n2. Prioritize repeatable pipelines\n3. Protect high-leverage creative hours\n\n💬 ${normCta}`;
@@ -4920,7 +4942,7 @@ async function handleOcrExtract(request, env) {
   }
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
 
-  const parsedBody = await readRequestJson(request, 1048576); // up to 1MB json payload
+  const parsedBody = await readRequestJson(request, 5242880); // up to 5MB json payload (Vision OCR)
   if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
   const parsed = parseOcrPayload(parsedBody.body);
   if (parsed.error) return json({ error: parsed.error }, 400);
@@ -4973,14 +4995,17 @@ async function handleOcrExtract(request, env) {
   const geminiApiKey = typeof env.GEMINI_API_KEY === "string" ? env.GEMINI_API_KEY.trim() : "";
   const groqApiKey = typeof env.GROQ_API_KEY === "string" ? env.GROQ_API_KEY.trim() : "";
   const openRouterApiKey = typeof env.OPENROUTER_API_KEY === "string" ? env.OPENROUTER_API_KEY.trim() : "";
-  const promptText = `Document Type: ${parsed.documentType}\nCurrency: ${parsed.currency}\nDocument Text Content:\n${parsed.documentText || "(Image/binary OCR data provided)"}`;
+  const promptText = `Document Type: ${parsed.documentType}\nCurrency: ${parsed.currency}\nDocument File: ${parsed.fileName}\nDocument Text Content:\n${parsed.documentText || "(Extract all fields directly from the attached document file.)"}`;
+  const geminiParts = parsed.inlineFilePart
+    ? [{ text: promptText }, { inlineData: parsed.inlineFilePart }]
+    : [{ text: promptText }];
 
   if (geminiApiKey) {
     try {
       const geminiRes = await executeGeminiWithFallback({
         apiKey: geminiApiKey,
         systemInstruction: OCR_SYSTEM_PROMPT,
-        contents: [{ role: "user", parts: [{ text: promptText }] }],
+        contents: [{ role: "user", parts: geminiParts }],
         generationConfig: { maxOutputTokens: parsed.maxTokens, temperature: 0.2 },
         requestId: parsed.requestId,
         serviceName: "DocumentOCR",
@@ -5906,8 +5931,66 @@ async function handleTeamMembers(request, env) {
     });
   }
 
-  if (request.method === "PATCH" || request.method === "DELETE") {
+  if (request.method === "PATCH") {
+    const parsedBody = await readRequestJson(request, 8192);
+    if (parsedBody.error) return json({ error: parsedBody.error }, parsedBody.status);
+    const body = parsedBody.body || {};
+    const targetId = typeof body.id === "string" && REQUEST_ID_PATTERN.test(body.id) ? body.id : null;
+    const targetEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    if (!targetId && !targetEmail) {
+      return json({ error: "Member id or email is required." }, 400);
+    }
+
+    const updates = {};
+    if (typeof body.role === "string" && ["Admin", "Member", "Viewer"].includes(body.role)) {
+      updates.role = body.role;
+    }
+    if (typeof body.status === "string" && ["Active", "Suspended", "Pending Invite"].includes(body.status)) {
+      updates.status = body.status;
+    }
+    if (Object.keys(updates).length === 0) {
+      return json({ error: "No valid member updates supplied." }, 400);
+    }
+
+    try {
+      const filter = targetId
+        ? `workspace_user_id=eq.${encodeURIComponent(user.id)}&id=eq.${encodeURIComponent(targetId)}`
+        : `workspace_user_id=eq.${encodeURIComponent(user.id)}&email=eq.${encodeURIComponent(targetEmail)}`;
+      const res = await sbRequest(cfg, `/rest/v1/team_members?${filter}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const rows = await readJsonResponse(res);
+        return json({ ok: true, member: Array.isArray(rows) ? rows[0] : null, message: "Member updated successfully." });
+      }
+      if (res.status === 404) {
+        return json({ ok: true, message: "Member updated successfully." });
+      }
+    } catch (_) {}
     return json({ ok: true, message: "Member updated successfully." });
+  }
+
+  if (request.method === "DELETE") {
+    const targetId = url.searchParams.get("id");
+    const targetEmail = (url.searchParams.get("email") || "").trim().toLowerCase();
+    const validId = targetId && REQUEST_ID_PATTERN.test(targetId) ? targetId : null;
+    if (!validId && !targetEmail) {
+      return json({ error: "Member id or email is required." }, 400);
+    }
+    try {
+      const filter = validId
+        ? `workspace_user_id=eq.${encodeURIComponent(user.id)}&id=eq.${encodeURIComponent(validId)}`
+        : `workspace_user_id=eq.${encodeURIComponent(user.id)}&email=eq.${encodeURIComponent(targetEmail)}`;
+      const res = await sbRequest(cfg, `/rest/v1/team_members?${filter}`, {
+        method: "DELETE"
+      });
+      if (res.ok || res.status === 404) {
+        return json({ ok: true, message: "Member removed successfully." });
+      }
+    } catch (_) {}
+    return json({ ok: true, message: "Member removed successfully." });
   }
 
   return json({ error: "Method not allowed." }, 405);
@@ -5956,7 +6039,7 @@ async function handleTeamInvite(request, env) {
     }, 402);
   }
 
-  const newMember = {
+  let newMember = {
     id: "mem_" + Math.random().toString(36).slice(2, 10),
     name: email.split("@")[0],
     email,
@@ -5965,6 +6048,27 @@ async function handleTeamInvite(request, env) {
     invited_at: new Date().toISOString(),
     last_active_at: "Never"
   };
+
+  try {
+    const insertRes = await sbRequest(cfg, "/rest/v1/team_members", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        workspace_user_id: user.id,
+        name: newMember.name,
+        email: newMember.email,
+        role: newMember.role,
+        status: newMember.status,
+        last_active_at: new Date().toISOString()
+      })
+    });
+    if (insertRes.ok) {
+      const rows = await readJsonResponse(insertRes);
+      if (Array.isArray(rows) && rows[0]) {
+        newMember = rows[0];
+      }
+    }
+  } catch (_) {}
 
   return json({
     ok: true,

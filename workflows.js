@@ -453,6 +453,10 @@
             }
             console.warn('API execution notice, completing via client engine:', err);
             await executeSimulatedSteps();
+            if (statusEl) {
+                statusEl.textContent = 'Cloud runner unavailable — executed workflow locally via client engine (no credits charged).';
+                statusEl.className = 'workflow-status-msg info';
+            }
         } finally {
             state.isRunning = false;
             if (runWorkflowBtn) {
@@ -595,7 +599,7 @@
         resetOnLogout: () => {
             state.isRunning = false;
             state.runs = [];
-            try { localStorage.removeItem(RUNS_STORAGE_KEY); } catch (_) {}
+            try { localStorage.removeItem(WORKFLOW_RUNS_STORAGE_KEY); } catch (_) {}
             window.JEVEXA_WORKFLOWS.closeExecModal();
             if (templateSelect) templateSelect.value = 'lead_conversion';
             loadTemplate('lead_conversion');

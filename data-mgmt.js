@@ -388,6 +388,16 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
             return;
         }
+        const nonEmptyLines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+        const looksLikeJson = text.startsWith('[') || text.startsWith('{');
+        if (!looksLikeJson && nonEmptyLines.length < 2) {
+            if (statusEl) {
+                statusEl.textContent = 'Please include a header row and at least one data row.';
+                statusEl.className = 'data-status-msg error';
+            }
+            window.showToast?.('Dataset needs a header row and at least one data row.');
+            return;
+        }
 
         state.isProcessing = true;
         if (processBtn) {
@@ -484,10 +494,10 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             const fallbackResult = cleanDatasetLocally(text, operations, dedupKey);
             renderResults(fallbackResult, text);
             if (statusEl) {
-                statusEl.textContent = `Cleaned ${fallbackResult.summary.cleanedCount} records via deterministic data engine.`;
-                statusEl.className = 'data-status-msg success';
+                statusEl.textContent = `Cloud AI unavailable — cleaned ${fallbackResult.summary.cleanedCount} records locally (no credits charged).`;
+                statusEl.className = 'data-status-msg info';
             }
-            window.showToast?.('Dataset cleaned and normalized successfully!');
+            window.showToast?.('Dataset cleaned locally (no credits charged).');
         } finally {
             state.isProcessing = false;
             if (processBtn) {
@@ -499,10 +509,26 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
 
     function handleDataFile(file) {
         if (!file) return;
+        if (file.size === 0) {
+            if (statusEl) {
+                statusEl.textContent = `File "${file.name}" is empty (0 bytes). Please upload a CSV, TSV, or JSON file with records.`;
+                statusEl.className = 'data-status-msg error';
+            }
+            window.showToast?.('Uploaded file is empty.');
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
             const text = loadEvent.target?.result;
             if (pasteInput && typeof text === 'string') {
+                if (!text.trim()) {
+                    if (statusEl) {
+                        statusEl.textContent = `File "${file.name}" contains no readable records.`;
+                        statusEl.className = 'data-status-msg error';
+                    }
+                    window.showToast?.('Uploaded file contains no records.');
+                    return;
+                }
                 pasteInput.value = text;
                 if (statusEl) {
                     const sizeKb = (file.size / 1024).toFixed(1);
@@ -618,13 +644,29 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         bindSafe(tabRaw, 'click', () => switchTab('raw'));
         bindSafe(tabAnomalies, 'click', () => switchTab('anomalies'));
 
-        // Download Clean CSV
-        bindSafe(downloadCsvBtn, 'click', () => {
+        // Helper to ensure non-empty records exist before export
+        function ensureCleanedRecordsForExport() {
             if (!state.cleanedRecords.length) {
                 const text = pasteInput ? pasteInput.value.trim() : SAMPLE_DATASETS.messy_leads;
-                const local = cleanDatasetLocally(text);
-                renderResults(local, text);
+                if (text) {
+                    const local = cleanDatasetLocally(text);
+                    renderResults(local, text);
+                }
             }
+            if (!state.cleanedRecords.length) {
+                if (statusEl) {
+                    statusEl.textContent = 'No cleaned records available to export. Load or paste a dataset first.';
+                    statusEl.className = 'data-status-msg error';
+                }
+                window.showToast?.('No cleaned records available to export.');
+                return false;
+            }
+            return true;
+        }
+
+        // Download Clean CSV
+        bindSafe(downloadCsvBtn, 'click', () => {
+            if (!ensureCleanedRecordsForExport()) return;
             const headers = Object.keys(state.cleanedRecords[0] || {});
             const rows = state.cleanedRecords.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','));
             const csv = [headers.join(','), ...rows].join('\n');
@@ -638,11 +680,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
 
         // Download Clean JSON
         bindSafe(downloadJsonBtn, 'click', () => {
-            if (!state.cleanedRecords.length) {
-                const text = pasteInput ? pasteInput.value.trim() : SAMPLE_DATASETS.messy_leads;
-                const local = cleanDatasetLocally(text);
-                renderResults(local, text);
-            }
+            if (!ensureCleanedRecordsForExport()) return;
             const jsonStr = JSON.stringify({
                 metadata: {
                     cleanedAt: new Date().toISOString(),
@@ -661,11 +699,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
 
         // Copy TSV to Clipboard
         bindSafe(copyClipboardBtn, 'click', () => {
-            if (!state.cleanedRecords.length) {
-                const text = pasteInput ? pasteInput.value.trim() : SAMPLE_DATASETS.messy_leads;
-                const local = cleanDatasetLocally(text);
-                renderResults(local, text);
-            }
+            if (!ensureCleanedRecordsForExport()) return;
             const headers = Object.keys(state.cleanedRecords[0] || {});
             const rows = state.cleanedRecords.map(r => headers.map(h => String(r[h] ?? '')).join('\t'));
             const tsv = [headers.join('\t'), ...rows].join('\n');

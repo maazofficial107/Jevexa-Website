@@ -2089,6 +2089,10 @@
         };
 
         for (const file of files) {
+            if (!file.size) {
+                setStatus(`${file.name || 'Selected file'} is empty (0 bytes) and was skipped.`);
+                continue;
+            }
             const extension = (file.name || '').split('.').pop().toLowerCase();
             const type = (file.type || extensionTypes[extension] || '').toLowerCase();
             const isImage = imageTypes.includes(type) || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(extension);

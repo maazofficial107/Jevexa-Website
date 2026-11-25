@@ -486,13 +486,13 @@
 
         const subject1 = `Quick question regarding ${pComp}'s growth`;
         const altSubject = `Idea for ${pName} & ${pComp}`;
-        const body1 = `Hi ${pName},\n\nI noticed your work as ${pRole} at ${pComp}${website ? ' (' + website + ')' : ''} and wanted to reach out directly.\n\nTeams in your space typically spend 15+ hours weekly juggling manual workflows. We developed an integrated AI Automation Studio that solves this by unifying CRM, cold outreach, and document extraction under one predictable credit wallet.\n\nOur clients typically see a 3x lift in operational efficiency within their first 14 days.\n\n${pCta} — would you have 10 minutes this Thursday afternoon?\n\nBest regards,\nYour Name\nJevexa AI Automation Studio`;
+        const body1 = `Hi ${pName},\n\nI noticed your work as ${pRole} at ${pComp}${website ? ' (' + website + ')' : ''} and wanted to reach out directly.\n\nTeams in your space typically spend 15+ hours weekly juggling manual workflows. We developed an integrated AI Automation Studio that solves this by unifying CRM, outreach, and document extraction under one predictable credit wallet.\n\nOur clients typically see measurable efficiency gains within their first two weeks.\n\n${pCta} — would you have 10 minutes this Thursday afternoon?\n\nBest regards,\n[Your Name]`;
 
         const subject2 = `Re: ${subject1}`;
-        const body2 = `Hi ${pName},\n\nFollowing up on my previous note. I know how busy scaling ${pComp} can be.\n\nTo share a quick example: an enterprise team recently automated their lead qualification and outreach pipeline, cutting their customer acquisition cost by 32%.\n\nWould you be open to a brief 10-minute preview this week?\n\nBest,\nYour Name`;
+        const body2 = `Hi ${pName},\n\nFollowing up on my previous note. I know how busy scaling ${pComp} can be.\n\nTo share a quick example: a growing SaaS team recently automated their lead qualification and outreach pipeline, reducing response time across their funnel.\n\nWould you be open to a brief 10-minute preview this week?\n\nBest,\n[Your Name]`;
 
         const subject3 = `Permission to close your file, ${pName}?`;
-        const body3 = `Hi ${pName},\n\nI realize you are likely heads-down scaling ${pComp}, so I will pause my outreach here.\n\nIf you ever look to streamline customer data extraction and automated outreach without managing multiple disjointed tools, feel free to reach out anytime at jevexa.net.\n\nWishing you and ${pComp} continued growth!\n\nBest,\nYour Name`;
+        const body3 = `Hi ${pName},\n\nI realize you are likely heads-down scaling ${pComp}, so I will pause my outreach here.\n\nIf you ever look to streamline customer data extraction and automated outreach without managing multiple disjointed tools, feel free to reach out anytime at jevexa.net.\n\nWishing you and ${pComp} continued growth!\n\nBest,\n[Your Name]`;
 
         return {
             initial: {
@@ -666,9 +666,9 @@
             state.currentSequenceId = 'seq_' + Date.now();
             updateSequenceStatusPill('Draft');
             switchStep(1);
-            setStatus('Outreach sequence generated via client engine.', 'success');
+            setStatus('Cloud AI unavailable — outreach sequence drafted locally (no credits charged).', 'info');
             if (typeof window.showToast === 'function') {
-                window.showToast('Sequence generated successfully!');
+                window.showToast('Sequence drafted locally (no credits charged).');
             }
         } finally {
             state.requestInFlight = false;
@@ -745,9 +745,10 @@
             if (leadId) {
                 const followupDate = new Date(Date.now() + 3 * 86400000).toISOString();
                 
-                // Try backend API first
+                // Try backend API first (only send valid UUID sequence IDs to /api/outreach/sequences)
+                const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
                 let synced = false;
-                if (state.currentSequenceId) {
+                if (state.currentSequenceId && uuidPattern.test(state.currentSequenceId)) {
                     try {
                         const res = await fetch(`/api/outreach/sequences`, {
                             method: 'PATCH',
@@ -763,6 +764,24 @@
                             })
                         });
                         if (res.ok) synced = true;
+                    } catch (_) {}
+                }
+
+                if (!synced && uuidPattern.test(String(leadId))) {
+                    try {
+                        const crmPatchRes = await fetch('/api/crm/leads', {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`
+                            },
+                            body: JSON.stringify({
+                                id: leadId,
+                                stage: 'Contacted',
+                                next_followup_at: followupDate
+                            })
+                        });
+                        if (crmPatchRes.ok) synced = true;
                     } catch (_) {}
                 }
 
@@ -1006,19 +1025,19 @@
 
     const DEFAULT_SEQUENCE = {
         initial: {
-            subject: 'Scaling CloudScale Inc with autonomous AI workflows',
+            subject: 'Scaling CloudScale Inc with AI workflows',
             alternative_subject: 'Quick question regarding CloudScale Inc operations',
-            body: `Hi Alex,\n\nI noticed CloudScale Inc is scaling its infrastructure offerings. When rapidly growing B2B teams expand, outbound personalization and document workflows often create operational bottlenecks.\n\nAt JEVEXA, we built an integrated 10-tool AI studio that automates customer outreach, lead scoring, and contract extraction with high reliability.\n\nWould you be open to a 10-minute chat this Thursday at 2 PM to explore how this fits into your current workflow?\n\nBest regards,\nYour Name\nJEVEXA AI Studio`
+            body: `Hi Alex,\n\nI noticed CloudScale Inc is scaling its infrastructure offerings. When rapidly growing B2B teams expand, outbound personalization and document workflows often create operational bottlenecks.\n\nAt JEVEXA, we built an integrated 10-tool AI studio that automates customer outreach, lead scoring, and document extraction with high reliability.\n\nWould you be open to a 10-minute chat this Thursday at 2 PM to explore how this fits into your current workflow?\n\nBest regards,\n[Your Name]`
         },
         followup_1: {
             day: 'Day 3',
-            subject: 'Re: Scaling CloudScale Inc with autonomous AI workflows',
-            body: `Hi Alex,\n\nFollowing up on my note from Tuesday. We recently helped a similar B2B tech company automate 80% of their routine lead qualification and follow-up sequences, cutting response times from 4 hours to under 3 minutes.\n\nHappy to share the 1-page architecture breakdown if you are interested.\n\nBest,\nYour Name`
+            subject: 'Re: Scaling CloudScale Inc with AI workflows',
+            body: `Hi Alex,\n\nFollowing up on my note from earlier this week. We recently helped a similar B2B team streamline routine lead qualification and follow-up sequences so reps spend more time closing.\n\nHappy to share a short workflow breakdown if you are interested.\n\nBest,\n[Your Name]`
         },
         followup_2: {
             day: 'Day 7',
             subject: 'Final note: CloudScale Inc & AI automation',
-            body: `Hi Alex,\n\nI realize you are likely heads-down scaling the business, so I will pause my outreach here.\n\nIf you ever look to streamline customer data extraction and automated outreach without managing multiple disjointed tools, feel free to reach out anytime at jevexa.net.\n\nWishing you and CloudScale Inc continued growth!\n\nBest,\nYour Name`
+            body: `Hi Alex,\n\nI realize you are likely heads-down scaling the business, so I will pause my outreach here.\n\nIf you ever look to streamline customer data extraction and automated outreach without managing multiple disjointed tools, feel free to reach out anytime at jevexa.net.\n\nWishing you and CloudScale Inc continued growth!\n\nBest,\n[Your Name]`
         }
     };
 

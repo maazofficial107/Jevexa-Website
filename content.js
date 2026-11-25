@@ -295,6 +295,15 @@
             return;
         }
 
+        const trimmedTopic = topicInput.value.trim();
+        if (!trimmedTopic) {
+            requestInFlight = false;
+            generateButton.disabled = false;
+            topicInput.focus();
+            setStatus('Please enter a topic or brief before generating content.', 'error');
+            return;
+        }
+
         let requestId;
         try {
             requestId = createRequestId();
@@ -306,7 +315,7 @@
         }
 
         const requestBody = {
-            topic: topicInput.value.trim(),
+            topic: trimmedTopic,
             type: typeInput.value,
             tone: toneInput.value,
             length: lengthInput.value,

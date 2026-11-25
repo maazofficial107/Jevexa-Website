@@ -323,6 +323,9 @@ Terms: Net 30`
         }
         if (confidenceEl) confidenceEl.textContent = `${data.confidence_score || 95}% Match`;
 
+        const curr = data.currency || 'USD';
+        const symbol = getCurrencySymbol(curr);
+
         // Render line items
         if (lineItemsBody) {
             lineItemsBody.innerHTML = '';
@@ -335,15 +338,13 @@ Terms: Net 30`
                 tr.innerHTML = `
                     <td class="ocr-item-desc">${escapeHtml(item.description || 'Item')}</td>
                     <td class="ocr-item-qty">${item.quantity || 1}</td>
-                    <td class="ocr-item-rate">$${Number(item.unit_price || 0).toFixed(2)}</td>
-                    <td class="ocr-item-total">$${Number(item.total || 0).toFixed(2)}</td>
+                    <td class="ocr-item-rate">${symbol}${Number(item.unit_price || 0).toFixed(2)}</td>
+                    <td class="ocr-item-total">${symbol}${Number(item.total || 0).toFixed(2)}</td>
                 `;
                 lineItemsBody.appendChild(tr);
             });
         }
 
-        const curr = data.currency || 'USD';
-        const symbol = curr === 'EUR' ? '€' : (curr === 'GBP' ? '£' : '$');
         if (subtotalEl) subtotalEl.textContent = `${symbol}${Number(data.subtotal || 0).toFixed(2)}`;
         if (taxEl) taxEl.textContent = `${symbol}${Number(data.tax_amount || 0).toFixed(2)} (${data.tax_rate || 0}%)`;
         if (totalEl) totalEl.textContent = `${symbol}${Number(data.total_amount || 0).toFixed(2)}`;
@@ -357,6 +358,15 @@ Terms: Net 30`
         if (rawTextViewEl) {
             rawTextViewEl.textContent = rawText || JSON.stringify(data, null, 2);
         }
+    }
+
+    function getCurrencySymbol(curr) {
+        const code = String(curr || 'USD').toUpperCase();
+        if (code === 'EUR') return '€';
+        if (code === 'GBP') return '£';
+        if (code === 'PKR') return 'PKR ';
+        if (code === 'CAD') return 'CA$';
+        return '$';
     }
 
     function escapeHtml(str) {
@@ -390,6 +400,19 @@ Terms: Net 30`
         const curr = currencySelect ? currencySelect.value : 'USD';
 
         if (!session) {
+            if (!text && state.uploadedFileData) {
+                state.isProcessing = false;
+                if (extractBtn) {
+                    extractBtn.disabled = false;
+                    extractBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Extract Structured Data';
+                }
+                if (statusEl) {
+                    statusEl.textContent = `File "${state.uploadedFileName || 'document'}" is ready. Sign in to run Vision AI extraction on images/PDFs, or paste document text above for local parsing.`;
+                    statusEl.className = 'ocr-status-msg info';
+                }
+                window.showToast?.('Sign in for image/PDF Vision OCR, or paste text to parse locally.');
+                return;
+            }
             // Instant local extraction for guest / offline mode
             setTimeout(() => {
                 const localData = deterministicClientOcr(text, docType, curr);
@@ -400,10 +423,10 @@ Terms: Net 30`
                     extractBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Extract Structured Data';
                 }
                 if (statusEl) {
-                    statusEl.textContent = 'Document structured data extracted successfully! (Sign in to sync with cloud wallet)';
-                    statusEl.className = 'ocr-status-msg success';
+                    statusEl.textContent = 'Document structured data extracted locally. Sign in for Vision AI & cloud wallet sync.';
+                    statusEl.className = 'ocr-status-msg info';
                 }
-                window.showToast?.('Document data extracted successfully!');
+                window.showToast?.('Document data extracted locally!');
             }, 300);
             return;
         }
@@ -469,10 +492,10 @@ Terms: Net 30`
             const fallbackData = deterministicClientOcr(text, docType, curr);
             renderExtraction(fallbackData, text);
             if (statusEl) {
-                statusEl.textContent = 'Data extracted via deterministic parsing engine.';
-                statusEl.className = 'ocr-status-msg success';
+                statusEl.textContent = 'Cloud AI unavailable — parsed locally via deterministic engine (no credits charged).';
+                statusEl.className = 'ocr-status-msg info';
             }
-            window.showToast?.('Document data extracted successfully!');
+            window.showToast?.('Parsed locally via deterministic fallback (no credits charged).');
         } finally {
             clearTimeout(ocrTimeoutId);
             state.isProcessing = false;
@@ -485,6 +508,14 @@ Terms: Net 30`
 
     function handleOcrFile(file) {
         if (!file) return;
+        if (file.size === 0) {
+            if (statusEl) {
+                statusEl.textContent = `File "${file.name}" is empty (0 bytes). Please upload a valid document.`;
+                statusEl.className = 'ocr-status-msg error';
+            }
+            window.showToast?.('Uploaded file is empty.');
+            return;
+        }
         const maxBytes = 10 * 1024 * 1024;
         if (file.size > maxBytes) {
             if (statusEl) {
@@ -494,10 +525,18 @@ Terms: Net 30`
             window.showToast?.('File too large (max 10 MB).');
             return;
         }
-        state.uploadedFileName = file.name;
-        state.uploadedFileSize = file.size;
         const nameLower = file.name.toLowerCase();
         const isBinary = file.type.startsWith('image/') || file.type === 'application/pdf' || nameLower.endsWith('.pdf');
+        if (isBinary && file.size > 3.5 * 1024 * 1024) {
+            if (statusEl) {
+                statusEl.textContent = 'Images & PDFs must be under 3.5 MB for cloud Vision OCR. Compress the file or paste text below.';
+                statusEl.className = 'ocr-status-msg error';
+            }
+            window.showToast?.('Image/PDF too large (max 3.5 MB for Vision OCR).');
+            return;
+        }
+        state.uploadedFileName = file.name;
+        state.uploadedFileSize = file.size;
         const reader = new FileReader();
         reader.onerror = () => {
             if (statusEl) {
@@ -510,11 +549,8 @@ Terms: Net 30`
         if (isBinary) {
             reader.onload = (e) => {
                 state.uploadedFileData = e.target?.result || null;
-                if (textInput) {
-                    textInput.value = `[Uploaded Binary File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\nVendor: ${file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')}\nDate: ${new Date().toISOString().split('T')[0]}\nPaste extracted text or additional line-item notes below before re-running if needed.`;
-                }
                 if (statusEl) {
-                    statusEl.textContent = `Document "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Analyzing...`;
+                    statusEl.textContent = `Document "${file.name}" attached (${(file.size / 1024).toFixed(1)} KB). Analyzing with OCR...`;
                     statusEl.className = 'ocr-status-msg info';
                 }
                 extractDocument();
@@ -524,7 +560,15 @@ Terms: Net 30`
         } else {
             reader.onload = (e) => {
                 state.uploadedFileData = null;
-                const fileContent = e.target?.result || '';
+                const fileContent = String(e.target?.result || '');
+                if (!fileContent.trim()) {
+                    if (statusEl) {
+                        statusEl.textContent = `File "${file.name}" has no readable text content.`;
+                        statusEl.className = 'ocr-status-msg error';
+                    }
+                    window.showToast?.('Uploaded text file is empty.');
+                    return;
+                }
                 if (textInput) textInput.value = fileContent;
                 if (statusEl) {
                     statusEl.textContent = `File "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
@@ -668,7 +712,8 @@ Terms: Net 30`
                 state.currentResult = deterministicClientOcr(curText || SAMPLE_DOCS.saas_invoice, 'auto', 'USD');
                 renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
             }
-            const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: $${state.currentResult.subtotal}\nTax: $${state.currentResult.tax_amount}\nTotal: $${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
+            const sym = getCurrencySymbol(state.currentResult.currency);
+            const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: ${sym}${state.currentResult.subtotal}\nTax: ${sym}${state.currentResult.tax_amount}\nTotal: ${sym}${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
             const fallbackDownload = () => {
                 downloadFile(`OCR_Summary_${state.currentResult.invoice_number || 'document'}.txt`, summary, 'text/plain');
                 window.showToast?.('Summary downloaded as text file!');
@@ -696,7 +741,8 @@ Terms: Net 30`
                     state.currentResult = deterministicClientOcr(curText || SAMPLE_DOCS.saas_invoice, 'auto', 'USD');
                     renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
                 }
-                const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: $${state.currentResult.subtotal}\nTax: $${state.currentResult.tax_amount}\nTotal: $${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
+                const sym = getCurrencySymbol(state.currentResult.currency);
+            const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: ${sym}${state.currentResult.subtotal}\nTax: ${sym}${state.currentResult.tax_amount}\nTotal: ${sym}${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
                 downloadFile(`OCR_Summary_${state.currentResult.invoice_number || 'document'}.txt`, summary, 'text/plain');
                 window.showToast?.('Summary downloaded as text file!');
                 if (statusEl) {

@@ -734,14 +734,19 @@
 
                 if (createdData) {
                     state.leads.unshift(createdData);
-                    await window.supabaseClient
-                        .from('crm_activities')
-                        .insert({
-                            user_id: session.user.id,
-                            lead_id: createdData.id,
-                            type: 'note',
-                            description: `Lead created with initial stage: ${createdData.stage}`
-                        }).catch(() => {});
+                    try {
+                        sessionStorage.setItem('jevexa_crm_leads_cache', JSON.stringify(state.leads));
+                    } catch (_) {}
+                    try {
+                        await window.supabaseClient
+                            .from('crm_activities')
+                            .insert({
+                                user_id: session.user.id,
+                                lead_id: createdData.id,
+                                type: 'note',
+                                description: `Lead created with initial stage: ${createdData.stage}`
+                            });
+                    } catch (_) {}
                 }
 
                 if (typeof window.showToast === 'function') window.showToast('Lead created successfully!');
@@ -759,7 +764,16 @@
 
     // Delete Lead
     async function deleteLead(leadId) {
-        if (!confirm('Are you sure you want to delete this lead? All associated activities will also be removed.')) {
+        const confirmed = typeof window.JEVEXA_CONFIRM === 'function'
+            ? await window.JEVEXA_CONFIRM({
+                title: 'Delete lead?',
+                message: 'Are you sure you want to delete this lead? All associated activities will also be removed.',
+                confirmText: 'Delete Lead',
+                danger: true,
+                iconClass: 'fa-trash-can'
+            })
+            : false;
+        if (!confirmed) {
             return;
         }
         const session = await getSession();
@@ -785,6 +799,9 @@
             }
 
             state.leads = state.leads.filter(l => l.id !== leadId);
+            try {
+                sessionStorage.setItem('jevexa_crm_leads_cache', JSON.stringify(state.leads));
+            } catch (_) {}
             if (state.selectedLeadId === leadId) closeLeadDrawer();
             renderAll();
             if (typeof window.showToast === 'function') window.showToast('Lead deleted.');
@@ -815,7 +832,7 @@
             csvRows.push(row.join(','));
         });
 
-        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -823,8 +840,42 @@
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         if (typeof window.showToast === 'function') window.showToast(`Exported ${state.leads.length} leads to CSV.`);
+    }
+
+    function parseCsvRows(rawText) {
+        const cleanText = String(rawText || '').replace(/^\uFEFF/, '').trim();
+        if (!cleanText) return [];
+        const rows = [];
+        let row = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < cleanText.length; i++) {
+            const ch = cleanText[i];
+            if (ch === '"') {
+                if (inQuotes && cleanText[i + 1] === '"') {
+                    cur += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch === ',' && !inQuotes) {
+                row.push(cur.trim());
+                cur = '';
+            } else if ((ch === '\r' || ch === '\n') && !inQuotes) {
+                if (ch === '\r' && cleanText[i + 1] === '\n') i++;
+                row.push(cur.trim());
+                if (row.some(cell => cell !== '')) rows.push(row);
+                row = [];
+                cur = '';
+            } else {
+                cur += ch;
+            }
+        }
+        row.push(cur.trim());
+        if (row.some(cell => cell !== '')) rows.push(row);
+        return rows;
     }
 
     // CSV Import
@@ -840,19 +891,17 @@
         reader.onload = async (e) => {
             try {
                 const text = e.target.result;
-                const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-                if (lines.length <= 1) {
+                const parsedRows = parseCsvRows(text);
+                if (parsedRows.length <= 1) {
                     if (typeof window.showToast === 'function') window.showToast('CSV file is empty or missing headers.');
                     return;
                 }
 
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+                const headers = parsedRows[0].map(h => h.trim().toLowerCase());
                 const newLeads = [];
 
-                for (let i = 1; i < lines.length; i++) {
-                    const rowText = lines[i];
-                    const values = rowText.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || rowText.split(',');
-                    const cleanValues = values.map(v => v ? v.trim().replace(/^"|"$/g, '').replace(/""/g, '"') : '');
+                for (let i = 1; i < parsedRows.length; i++) {
+                    const cleanValues = parsedRows[i];
 
                     const leadObj = {
                         user_id: session.user.id,
@@ -868,11 +917,18 @@
                         else if (h === 'company') leadObj.company = val;
                         else if (h === 'role') leadObj.role = val;
                         else if (h === 'website') leadObj.website = val;
-                        else if (h.includes('value')) leadObj.deal_value = Number(val) || 0;
+                        else if (h.includes('value')) leadObj.deal_value = Number(String(val).replace(/[^0-9.-]/g, '')) || 0;
                         else if (h === 'stage' && STAGES.includes(val)) leadObj.stage = val;
-                        else if (h.includes('score')) leadObj.lead_score = val ? Number(val) : null;
+                        else if (h.includes('score')) leadObj.lead_score = val ? (Number(val) || null) : null;
                         else if (h === 'notes') leadObj.notes = val;
-                        else if (h.includes('followup')) leadObj.next_followup_at = val ? new Date(val).toISOString() : null;
+                        else if (h.includes('followup')) {
+                            if (val) {
+                                const parsedDate = new Date(val);
+                                leadObj.next_followup_at = !isNaN(parsedDate.getTime()) ? parsedDate.toISOString() : null;
+                            } else {
+                                leadObj.next_followup_at = null;
+                            }
+                        }
                     });
 
                     if (leadObj.name) {
@@ -1029,6 +1085,9 @@
             if (drawerAiSummary) {
                 drawerAiSummary.textContent = lead.ai_summary || 'AI qualified lead with tailored recommendations.';
             }
+            if (drawerAiAction) {
+                drawerAiAction.textContent = lead.suggested_outreach_angle || 'Follow up with personalized outreach sequence.';
+            }
         } else {
             drawerAiScoreBox.hidden = true;
             drawerAiScoreBox.setAttribute('hidden', '');
@@ -1099,9 +1158,9 @@
             return;
         }
 
-        drawerAddNoteBtn.disabled = true;
+        if (drawerAddNoteBtn) drawerAddNoteBtn.disabled = true;
         try {
-            await window.supabaseClient
+            const { error } = await window.supabaseClient
                 .from('crm_activities')
                 .insert({
                     user_id: session.user.id,
@@ -1109,6 +1168,7 @@
                     type: 'note',
                     description: note
                 });
+            if (error) throw error;
 
             drawerNoteInput.value = '';
             await renderDrawerTimeline(leadId);
@@ -1117,7 +1177,7 @@
             console.error('Error adding note:', err);
             if (typeof window.showToast === 'function') window.showToast('Could not add note.');
         } finally {
-            drawerAddNoteBtn.disabled = false;
+            if (drawerAddNoteBtn) drawerAddNoteBtn.disabled = false;
         }
     }
 
@@ -1204,14 +1264,16 @@
                 })
             });
 
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                         window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'AI Lead Scoring credits');
                     }
                 }
-                throw new Error(data?.error || 'AI scoring request failed.');
+                const err = new Error(data?.error || 'AI scoring request failed.');
+                err.status = res.status;
+                throw err;
             }
 
             lead.lead_score = data.lead_score;
@@ -1219,6 +1281,9 @@
             if (data.suggested_outreach_angle) {
                 lead.suggested_outreach_angle = data.suggested_outreach_angle;
             }
+            try {
+                sessionStorage.setItem('jevexa_crm_leads_cache', JSON.stringify(state.leads));
+            } catch (_) {}
 
             // Immediately update credits in UI
             if (typeof data.remaining_credits === 'number') {
@@ -1238,6 +1303,10 @@
                 window.showToast(`AI Score generated: ${data.lead_score}/100 (${data.conversion_likelihood})`);
             }
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                window.showToast?.(err.message || 'Could not score lead.');
+                return;
+            }
             console.warn('AI Score API request failed, applying deterministic fallback:', err);
             const fallback = deterministicClientCrmScore(lead);
             lead.lead_score = fallback.lead_score;
@@ -1401,7 +1470,17 @@
         closeLeadModal,
         deleteLead,
         exportCsv,
-        getLeads: () => state.leads
+        getLeads: () => state.leads,
+        resetOnLogout: () => {
+            state.leads = [];
+            state.selectedLeadId = null;
+            state.isLoadingLeads = false;
+            state.isAiScoring = false;
+            try { sessionStorage.removeItem('jevexa_crm_leads_cache'); } catch (_) {}
+            closeLeadModal();
+            closeLeadDrawer();
+            renderAll();
+        }
     };
 
     function checkAutoMount() {

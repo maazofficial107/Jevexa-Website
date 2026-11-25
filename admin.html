@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
 
 <title>JEVEXA — Admin Control Center</title>
 <base href="/">
@@ -541,22 +542,24 @@ tbody tr:hover{
         <form id="loginForm">
 
             <div class="field">
-                <label>Admin Email</label>
+                <label for="email">Admin Email</label>
 
                 <input
                     type="email"
                     id="email"
+                    autocomplete="email"
                     placeholder="Enter admin email"
                     required
                 >
             </div>
 
             <div class="field">
-                <label>Password</label>
+                <label for="password">Password</label>
 
                 <input
                     type="password"
                     id="password"
+                    autocomplete="current-password"
                     placeholder="Enter password"
                     required
                 >
@@ -784,6 +787,13 @@ loginForm.addEventListener('submit', async (e)=>{
         return;
     }
 
+    const submitBtn = loginForm.querySelector('.login-btn');
+    const origBtnText = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in...';
+    }
+
     const email =
     document.getElementById('email')
     .value.trim();
@@ -803,6 +813,11 @@ loginForm.addEventListener('submit', async (e)=>{
     } catch (error) {
         console.error('Admin sign-in failed:', error);
         loginError.textContent = 'Could not verify admin access. Please try again.';
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = origBtnText || 'Sign In to Dashboard';
+        }
     }
 
 });
@@ -855,9 +870,15 @@ async function loadContacts(session){
     if (!response.ok || !Array.isArray(result.contacts)) {
         const message = result.error || 'Contact submissions are temporarily unavailable.';
         emptyMessage.textContent = message;
-        loginError.textContent = response.status === 403
-            ? 'Admin access only.'
-            : message;
+        if (response.status === 403) {
+            loginError.innerHTML = 'Admin access only. <button type="button" id="adminSwitchAccountBtn" style="margin-left:8px;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#f8fafc;cursor:pointer;font-size:12px;">Sign out &amp; switch</button>';
+            document.getElementById('adminSwitchAccountBtn')?.addEventListener('click', async () => {
+                try { await supabaseClient?.auth?.signOut(); } catch (_) {}
+                location.reload();
+            });
+        } else {
+            loginError.textContent = message;
+        }
         return false;
     }
     const contacts = result.contacts;
@@ -901,7 +922,7 @@ async function loadContacts(session){
 const adminLogoutButton = document.getElementById('logoutBtn');
 let adminLogoutInFlight = false;
 adminLogoutButton?.addEventListener('click', async () => {
-    if (adminLogoutInFlight) return;
+    if (adminLogoutInFlight || !supabaseClient) return;
     adminLogoutInFlight = true;
     adminLogoutButton.disabled = true;
     try {

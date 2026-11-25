@@ -109,7 +109,7 @@
                         body: JSON.stringify({ requestId })
                     });
                     const recData = await recRes.json().catch(() => ({}));
-                    if (recData?.released) {
+                    if (recRes.ok && recData?.released) {
                         forgetPendingRequest(session, requestId);
                         setStatus(`Stale request ${requestId} was auto-reconciled (${result.data.reserved_credits} credits released). Ready to generate.`);
                         return false;
@@ -122,28 +122,11 @@
                     setStatus('Stale generation hold expired and was safely cleared.');
                     return false;
                 }
+                setStatus('Previous credit hold is still reconciling. Please retry in a few seconds.', 'info');
+                return true;
             }
-            try {
-                const recRes = await fetch('/api/credits/reconcile', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
-                    },
-                    body: JSON.stringify({ requestId })
-                });
-                const recData = await recRes.json().catch(() => ({}));
-                if (recData?.released) {
-                    forgetPendingRequest(session, requestId);
-                    setStatus(`Pending request ${requestId} was auto-reconciled (${result.data.reserved_credits} credits released). Ready to generate.`);
-                    return false;
-                }
-            } catch (recErr) {
-                console.warn('Content immediate auto-reconciliation call:', recErr);
-            }
-            forgetPendingRequest(session, requestId);
-            setStatus('Previous generation hold cleared. Ready to generate.');
-            return false;
+            setStatus('A previous generation is still finalizing. Please wait a few seconds and try again.', 'info');
+            return true;
         }
         if (result.data.status === 'settled' || result.data.status === 'released') {
             const previousStatus = result.data.status === 'settled'
@@ -222,6 +205,7 @@
             if (textEl && iconEl) {
                 textEl.classList.add('fade-out');
                 setTimeout(() => {
+                    if (!contentProcessingTimer || !textEl.isConnected || !iconEl.isConnected) return;
                     textEl.textContent = liveStates[stateIdx].text;
                     iconEl.className = `fas ${liveStates[stateIdx].icon}`;
                     textEl.classList.remove('fade-out');
@@ -249,11 +233,15 @@
     bindSafe(form, 'submit', async event => {
         event.preventDefault();
         if (requestInFlight) return;
+        requestInFlight = true;
+        generateButton.disabled = true;
 
         const existingRetry = document.getElementById('contentRetryAction');
         if (existingRetry) existingRetry.remove();
 
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            requestInFlight = false;
+            generateButton.disabled = false;
             setStatus('You are currently offline. Please check your internet connection before generating content.', 'error');
             if (typeof window.showToast === 'function') {
                 window.showToast('You are currently offline. Please reconnect to generate content.');
@@ -265,10 +253,14 @@
         try {
             session = await getSession();
         } catch (error) {
+            requestInFlight = false;
+            generateButton.disabled = false;
             setStatus(error?.message || 'Could not verify your session.', 'error');
             return;
         }
         if (!session) {
+            requestInFlight = false;
+            generateButton.disabled = false;
             if (typeof window.showToast === 'function') {
                 window.showToast('Please create an account or sign in to use the Content Generator.');
             }
@@ -286,6 +278,8 @@
         const countEl = document.getElementById('creditsCount');
         const cachedBalance = countEl ? parseInt(countEl.textContent, 10) : NaN;
         if (!isNaN(cachedBalance) && cachedBalance <= 0) {
+            requestInFlight = false;
+            generateButton.disabled = false;
             setStatus('You have 0 credits remaining. Please choose a plan or top up to generate content.', 'error');
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                 window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'additional AI credits');
@@ -295,12 +289,18 @@
             return;
         }
 
-        if (await reconcilePendingRequest(session)) return;
+        if (await reconcilePendingRequest(session)) {
+            requestInFlight = false;
+            generateButton.disabled = false;
+            return;
+        }
 
         let requestId;
         try {
             requestId = createRequestId();
         } catch (error) {
+            requestInFlight = false;
+            generateButton.disabled = false;
             setStatus(error.message, 'error');
             return;
         }
@@ -312,8 +312,6 @@
             length: lengthInput.value,
             requestId
         };
-        requestInFlight = true;
-        generateButton.disabled = true;
         copyButton.disabled = true;
         downloadButton.disabled = true;
         if (downloadMdButton) downloadMdButton.disabled = true;
@@ -473,7 +471,10 @@
         } catch (error) {
             clearContentProcessing();
             output.textContent = '';
-            forgetPendingRequest(session, requestId);
+            const isUncertainNetworkFailure = error?.name === 'AbortError' || error?.name === 'TypeError';
+            if (!isUncertainNetworkFailure) {
+                forgetPendingRequest(session, requestId);
+            }
             const msg = error?.name === 'AbortError'
                 ? 'The content request timed out. Please check your network and try again.'
                 : (error?.message || 'The content request could not be completed.');
@@ -628,8 +629,17 @@
         }
     }
 
-    function clearContentHistory() {
-        if (!confirm('Clear all saved content generation history?')) return;
+    async function clearContentHistory() {
+        const confirmed = typeof window.JEVEXA_CONFIRM === 'function'
+            ? await window.JEVEXA_CONFIRM({
+                title: 'Clear content history?',
+                message: 'Clear all saved content generation history?',
+                confirmText: 'Clear History',
+                danger: true,
+                iconClass: 'fa-trash-can'
+            })
+            : false;
+        if (!confirmed) return;
         try {
             localStorage.removeItem(HISTORY_STORAGE_KEY);
             updateHistoryUI();
@@ -639,6 +649,12 @@
         } catch (e) {
             console.warn('Could not clear content history:', e);
         }
+    }
+
+    function escapeContentHtml(str) {
+        return String(str || '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[c]);
     }
 
     function updateHistoryUI() {
@@ -657,22 +673,26 @@
 
         historyList.innerHTML = history.map(item => {
             const dateStr = new Date(item.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const preview = (item.content || '').slice(0, 140).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const preview = escapeContentHtml((item.content || '').slice(0, 140));
+            const safeTopic = escapeContentHtml((item.topic || 'Untitled').slice(0, 48));
+            const safeType = escapeContentHtml(item.type || 'content');
+            const safeTone = escapeContentHtml(item.tone || 'standard');
+            const safeId = escapeContentHtml(item.id);
             return `
-            <div class="content-history-item glass" data-history-id="${item.id}" style="padding:14px; margin-bottom:12px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.03);">
+            <div class="content-history-item glass" data-history-id="${safeId}" style="padding:14px; margin-bottom:12px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.03);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
                     <div>
-                        <strong style="color:var(--text-heading); font-size:13.5px;">${(item.topic || 'Untitled').slice(0, 48)}</strong>
+                        <strong style="color:var(--text-heading); font-size:13.5px;">${safeTopic}</strong>
                         <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
-                            <span style="text-transform:uppercase; font-weight:600; color:var(--primary);">${item.type || 'content'}</span> • ${item.tone || 'standard'} • ${dateStr}
+                            <span style="text-transform:uppercase; font-weight:600; color:var(--primary);">${safeType}</span> • ${safeTone} • ${escapeContentHtml(dateStr)}
                         </div>
                     </div>
-                    <span style="font-size:11px; color:#38bdf8; background:rgba(56,189,248,0.1); padding:2px 6px; border-radius:4px;">⚡ ${item.creditsUsed || 0} creds</span>
+                    <span style="font-size:11px; color:#38bdf8; background:rgba(56,189,248,0.1); padding:2px 6px; border-radius:4px;">⚡ ${Number(item.creditsUsed) || 0} creds</span>
                 </div>
                 <p style="font-size:12px; line-height:1.5; color:var(--text-body); margin:8px 0 10px; max-height:48px; overflow:hidden; text-overflow:ellipsis;">${preview}…</p>
                 <div style="display:flex; gap:8px;">
-                    <button type="button" class="btn btn-xs btn-primary restore-content-history-btn" data-history-id="${item.id}"><i class="fas fa-arrow-rotate-left"></i> Restore</button>
-                    <button type="button" class="btn btn-xs btn-outline delete-content-history-btn" data-history-id="${item.id}" style="color:#ef4444;"><i class="fas fa-trash-can"></i></button>
+                    <button type="button" class="btn btn-xs btn-primary restore-content-history-btn" data-history-id="${safeId}"><i class="fas fa-arrow-rotate-left"></i> Restore</button>
+                    <button type="button" class="btn btn-xs btn-outline delete-content-history-btn" data-history-id="${safeId}" style="color:#ef4444;"><i class="fas fa-trash-can"></i></button>
                 </div>
             </div>`;
         }).join('');
@@ -711,6 +731,7 @@
         renderHistoryDrawer();
         historyDrawer.hidden = false;
         historyDrawer.removeAttribute('hidden');
+        historyDrawer.setAttribute('aria-hidden', 'false');
         historyDrawer.classList.add('open');
     }
 
@@ -718,6 +739,7 @@
         if (!historyDrawer) return;
         historyDrawer.classList.remove('open');
         historyDrawer.setAttribute('hidden', '');
+        historyDrawer.setAttribute('aria-hidden', 'true');
         historyDrawer.hidden = true;
     }
 
@@ -732,6 +754,25 @@
     });
     window.closeContentHistoryDrawer = closeHistoryDrawer;
     window.openContentHistoryDrawer = openHistoryDrawer;
+    window.JEVEXA_CONTENT = {
+        resetOnLogout: () => {
+            clearContentProcessing();
+            requestInFlight = false;
+            if (generateButton) generateButton.disabled = false;
+            if (topicInput) topicInput.value = '';
+            const charCount = document.getElementById('contentCharCount');
+            if (charCount) charCount.textContent = '0 / 1000';
+            if (output) output.textContent = '';
+            if (copyButton) copyButton.disabled = true;
+            if (downloadButton) downloadButton.disabled = true;
+            if (downloadMdButton) downloadMdButton.disabled = true;
+            setStatus('', 'info');
+            try { localStorage.removeItem(HISTORY_STORAGE_KEY); } catch (_) {}
+            closeHistoryDrawer();
+            updateHistoryUI();
+            renderHistoryDrawer();
+        }
+    };
     updateHistoryUI();
 
         window.JEVEXA_RECONCILE_CONTENT = async () => {

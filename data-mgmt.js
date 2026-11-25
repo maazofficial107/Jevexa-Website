@@ -54,9 +54,60 @@ ORD-101,John Miller,john@gmail.com,10/24/2026,149.99,Completed
 ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
     };
 
+    function parseDelimitedRecords(csvText) {
+        const cleanText = String(csvText || '').replace(/^\uFEFF/, '').trim();
+        if (!cleanText) return { headers: [], rows: [] };
+
+        let firstLine = '';
+        let inHeaderQuote = false;
+        for (let i = 0; i < cleanText.length; i++) {
+            const ch = cleanText[i];
+            if (ch === '"') {
+                if (inHeaderQuote && cleanText[i + 1] === '"') { i++; continue; }
+                inHeaderQuote = !inHeaderQuote;
+            } else if ((ch === '\n' || ch === '\r') && !inHeaderQuote) {
+                firstLine = cleanText.slice(0, i);
+                break;
+            }
+        }
+        if (!firstLine) firstLine = cleanText;
+        const delimiter = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',');
+
+        const parsedRows = [];
+        let row = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < cleanText.length; i++) {
+            const char = cleanText[i];
+            if (char === '"') {
+                if (inQuotes && cleanText[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === delimiter && !inQuotes) {
+                row.push(current.trim());
+                current = '';
+            } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                if (char === '\r' && cleanText[i + 1] === '\n') i++;
+                row.push(current.trim());
+                if (row.some(cell => cell !== '')) parsedRows.push(row);
+                row = [];
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        row.push(current.trim());
+        if (row.some(cell => cell !== '')) parsedRows.push(row);
+        if (parsedRows.length < 2) return { headers: [], rows: [] };
+        return { headers: parsedRows[0], rows: parsedRows.slice(1) };
+    }
+
     function cleanDatasetLocally(csvText, operations = {}, dedupKey = 'Email') {
-        const lines = (csvText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) {
+        const { headers, rows: rawRows } = parseDelimitedRecords(csvText);
+        if (!headers.length || !rawRows.length) {
             return {
                 records: [],
                 summary: { originalCount: 0, cleanedCount: 0, duplicatesRemoved: 0, emailsCleaned: 0, datesFixed: 0, anomaliesDetected: 0 },
@@ -64,8 +115,6 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             };
         }
 
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-        const rawRows = lines.slice(1);
         const originalCount = rawRows.length;
 
         let duplicatesRemoved = 0;
@@ -83,9 +132,8 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             dedupColIndex = headers.findIndex(h => /email|id|order|name/i.test(h));
         }
 
-        rawRows.forEach((rowStr, rowIndex) => {
+        rawRows.forEach((cols, rowIndex) => {
             const rowNumber = rowIndex + 2;
-            const cols = rowStr.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
 
             const record = {};
             let isAnomaly = false;
@@ -127,10 +175,12 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 if (operations.normalizeDates !== false && /date/i.test(h)) {
                     const dateMatch = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
                     if (dateMatch) {
-                        const p1 = dateMatch[1].padStart(2, '0');
-                        const p2 = dateMatch[2].padStart(2, '0');
+                        const n1 = parseInt(dateMatch[1], 10);
+                        const n2 = parseInt(dateMatch[2], 10);
                         const yr = dateMatch[3];
-                        val = `${yr}-${p1}-${p2}`;
+                        const month = n1 > 12 ? String(n2).padStart(2, '0') : String(n1).padStart(2, '0');
+                        const day = n1 > 12 ? String(n1).padStart(2, '0') : String(n2).padStart(2, '0');
+                        val = `${yr}-${month}-${day}`;
                         datesFixed++;
                     }
                 }
@@ -285,16 +335,21 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         if (countAnomaliesEl) countAnomaliesEl.textContent = state.summary.anomaliesDetected || 0;
 
         // Cleaned Table
-        if (cleanedTableHead && cleanedTableBody && state.cleanedRecords.length > 0) {
-            const cols = Object.keys(state.cleanedRecords[0]);
-            cleanedTableHead.innerHTML = `<tr>${cols.map(c => `<th style="padding:10px; font-size:12px; font-weight:700; color:#38bdf8; background:rgba(15,23,42,0.8);">${escapeHtml(c)}</th>`).join('')}</tr>`;
+        if (cleanedTableHead && cleanedTableBody) {
+            if (state.cleanedRecords.length > 0) {
+                const cols = Object.keys(state.cleanedRecords[0]);
+                cleanedTableHead.innerHTML = `<tr>${cols.map(c => `<th style="padding:10px; font-size:12px; font-weight:700; color:#38bdf8; background:rgba(15,23,42,0.8);">${escapeHtml(c)}</th>`).join('')}</tr>`;
 
-            cleanedTableBody.innerHTML = '';
-            state.cleanedRecords.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = cols.map(c => `<td style="padding:8px 10px; font-size:12px; color:#f1f5f9; border-bottom:1px solid rgba(255,255,255,0.05);">${escapeHtml(String(row[c] || ''))}</td>`).join('');
-                cleanedTableBody.appendChild(tr);
-            });
+                cleanedTableBody.innerHTML = '';
+                state.cleanedRecords.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = cols.map(c => `<td style="padding:8px 10px; font-size:12px; color:#f1f5f9; border-bottom:1px solid rgba(255,255,255,0.05);">${escapeHtml(String(row[c] ?? ''))}</td>`).join('');
+                    cleanedTableBody.appendChild(tr);
+                });
+            } else {
+                cleanedTableHead.innerHTML = '';
+                cleanedTableBody.innerHTML = '<tr><td style="padding:18px; text-align:center; font-size:12.5px; color:#94a3b8;">No cleaned rows available.</td></tr>';
+            }
         }
 
         // Raw Text View
@@ -324,6 +379,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
     }
 
     async function processData() {
+        if (state.isProcessing) return;
         const text = pasteInput ? pasteInput.value.trim() : '';
         if (!text) {
             if (statusEl) {
@@ -392,12 +448,14 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 body: JSON.stringify(payload)
             });
 
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Data Management credits');
                 }
-                throw new Error(result.error || 'Failed to clean dataset.');
+                const err = new Error(result.error || 'Failed to clean dataset.');
+                err.status = res.status;
+                throw err;
             }
 
             renderResults(result, text);
@@ -414,6 +472,14 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
             window.showToast?.('Dataset cleaned and normalized successfully!');
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                if (statusEl) {
+                    statusEl.textContent = err.message || 'Could not clean dataset.';
+                    statusEl.className = 'data-status-msg error';
+                }
+                window.showToast?.(err.message || 'Could not clean dataset.');
+                return;
+            }
             console.warn('Data cleaning Cloud API notice, activating client engine:', err);
             const fallbackResult = cleanDatasetLocally(text, operations, dedupKey);
             renderResults(fallbackResult, text);
@@ -438,12 +504,12 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             const text = loadEvent.target?.result;
             if (pasteInput && typeof text === 'string') {
                 pasteInput.value = text;
-                processData(); // Automatically process uploaded file
                 if (statusEl) {
                     const sizeKb = (file.size / 1024).toFixed(1);
-                    statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Cleaned and normalized.`;
+                    statusEl.textContent = `Loaded ${file.name} (${sizeKb} KB). Cleaning and normalizing...`;
                     statusEl.className = 'data-status-msg info';
                 }
+                processData();
                 window.showToast?.(`File "${file.name}" loaded and processed.`);
             }
         };
@@ -456,7 +522,10 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         reader.readAsText(file);
     }
 
+    let initialized = false;
     function init() {
+        if (initialized) return;
+        initialized = true;
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(processBtn, 'click', processData);
@@ -465,6 +534,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         if (fileInput) {
             bindSafe(fileInput, 'change', (event) => {
                 const file = event.target?.files?.[0];
+                event.target.value = '';
                 if (file) handleDataFile(file);
             });
         }
@@ -556,7 +626,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 renderResults(local, text);
             }
             const headers = Object.keys(state.cleanedRecords[0] || {});
-            const rows = state.cleanedRecords.map(r => headers.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(','));
+            const rows = state.cleanedRecords.map(r => headers.map(h => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','));
             const csv = [headers.join(','), ...rows].join('\n');
             downloadFile(`Jevexa_Cleaned_Dataset_${new Date().toISOString().split('T')[0]}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
             window.showToast?.('Cleaned dataset downloaded as CSV!');
@@ -597,20 +667,25 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 renderResults(local, text);
             }
             const headers = Object.keys(state.cleanedRecords[0] || {});
-            const rows = state.cleanedRecords.map(r => headers.map(h => String(r[h] || '')).join('\t'));
+            const rows = state.cleanedRecords.map(r => headers.map(h => String(r[h] ?? '')).join('\t'));
             const tsv = [headers.join('\t'), ...rows].join('\n');
-            navigator.clipboard.writeText(tsv)
-                .then(() => {
-                    window.showToast?.('Cleaned data copied to clipboard (TSV format, ready for Excel/Sheets)!');
-                    if (statusEl) {
-                        statusEl.textContent = 'TSV data copied to clipboard.';
-                        statusEl.className = 'data-status-msg success';
-                    }
-                })
-                .catch(() => {
-                    downloadFile(`Cleaned_TSV_${new Date().toISOString().split('T')[0]}.tsv`, tsv, 'text/tab-separated-values');
-                    window.showToast?.('Cleaned TSV downloaded as file!');
-                });
+            const fallbackTsvDownload = () => {
+                downloadFile(`Cleaned_TSV_${new Date().toISOString().split('T')[0]}.tsv`, tsv, 'text/tab-separated-values');
+                window.showToast?.('Cleaned TSV downloaded as file!');
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(tsv)
+                    .then(() => {
+                        window.showToast?.('Cleaned data copied to clipboard (TSV format, ready for Excel/Sheets)!');
+                        if (statusEl) {
+                            statusEl.textContent = 'TSV data copied to clipboard.';
+                            statusEl.className = 'data-status-msg success';
+                        }
+                    })
+                    .catch(fallbackTsvDownload);
+            } else {
+                fallbackTsvDownload();
+            }
         });
 
         // Load and clean initial default dataset so counters are never 0
@@ -632,6 +707,15 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 pasteInput.value = SAMPLE_DATASETS[key];
                 processData();
             }
+        },
+        resetOnLogout: () => {
+            state.isProcessing = false;
+            if (fileInput) fileInput.value = '';
+            const sample = SAMPLE_DATASETS.messy_leads;
+            if (presetSelect) presetSelect.value = 'messy_leads';
+            if (pasteInput) pasteInput.value = sample;
+            if (statusEl) { statusEl.textContent = ''; statusEl.className = 'data-status-msg'; }
+            renderResults(cleanDatasetLocally(sample), sample);
         }
     };
     window.JEVEXA_DATA_MGMT = window.JEVEXA_DATA;

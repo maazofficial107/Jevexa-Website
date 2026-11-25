@@ -132,15 +132,22 @@
                 .order('created_at', { ascending: false });
 
             if (!error && Array.isArray(data)) {
-                state.crmLeads = data;
+                const list = [...data];
+                if (state.linkedLead && !list.some(l => l.id === state.linkedLead.id)) {
+                    list.unshift(state.linkedLead);
+                }
+                state.crmLeads = list;
                 const options = [
                     '<option value="">-- Manual Entry / Custom Prospect --</option>',
-                    ...data.map(lead => {
+                    ...list.map(lead => {
                         const label = lead.company ? `${lead.name} (${lead.company})` : lead.name;
-                        return `<option value="${lead.id}">${escapeHtml(label)}</option>`;
+                        return `<option value="${escapeHtml(lead.id)}">${escapeHtml(label)}</option>`;
                     })
                 ];
                 leadSelect.innerHTML = options.join('');
+                if (state.linkedLead?.id) {
+                    leadSelect.value = state.linkedLead.id;
+                }
             }
         } catch (err) {
             console.warn('Could not load CRM leads for outreach:', err);
@@ -163,7 +170,9 @@
         if (roleInput) roleInput.value = lead.role || '';
         if (websiteInput) websiteInput.value = lead.website || '';
 
-        if (valuePropInput && !valuePropInput.value.trim()) {
+        const defaultPlaceholderOffer = 'Scale operational productivity and qualification speed with AI automation.';
+        const currentOffer = valuePropInput ? valuePropInput.value.trim() : '';
+        if (valuePropInput && (!currentOffer || currentOffer === defaultPlaceholderOffer || currentOffer.startsWith('Suggested hook:') || currentOffer.startsWith('Prospect context:') || currentOffer.startsWith('Lead background:'))) {
             if (lead.suggested_outreach_angle) {
                 valuePropInput.value = `Suggested hook: ${lead.suggested_outreach_angle}\n\nProspect context: ${lead.ai_summary || lead.notes || 'Scale operational productivity with AI automation.'}`;
             } else if (lead.ai_summary) {
@@ -309,7 +318,16 @@
 
         historyList.querySelectorAll('.del-seq-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
-                if (!confirm('Delete this outreach sequence?')) return;
+                const confirmed = typeof window.JEVEXA_CONFIRM === 'function'
+                    ? await window.JEVEXA_CONFIRM({
+                        title: 'Delete outreach sequence?',
+                        message: 'Are you sure you want to delete this saved outreach sequence?',
+                        confirmText: 'Delete Sequence',
+                        danger: true,
+                        iconClass: 'fa-trash-can'
+                    })
+                    : false;
+                if (!confirmed) return;
                 await deleteSavedSequence(btn.dataset.seqId);
             });
         });
@@ -317,7 +335,15 @@
 
     async function deleteSavedSequence(seqId) {
         const session = await getSession();
-        if (!session?.user?.id) return;
+        if (!session?.user?.id) {
+            state.savedSequences = state.savedSequences.filter(s => s.id !== seqId);
+            try {
+                sessionStorage.setItem('jevexa_outreach_sequences_cache', JSON.stringify(state.savedSequences));
+            } catch (_) {}
+            renderSavedSequencesList();
+            if (typeof window.showToast === 'function') window.showToast('Sequence deleted.');
+            return;
+        }
         try {
             let deleted = false;
             try {
@@ -329,11 +355,12 @@
             } catch (_) {}
 
             if (!deleted) {
-                await window.supabaseClient
+                const { error } = await window.supabaseClient
                     .from('outreach_sequences')
                     .delete()
                     .eq('id', seqId)
                     .eq('user_id', session.user.id);
+                if (error) throw error;
             }
 
             state.savedSequences = state.savedSequences.filter(s => s.id !== seqId);
@@ -346,33 +373,40 @@
 
     function loadSequenceIntoWorkspace(seq) {
         state.currentSequenceId = seq.id;
+        state.useAlternativeSubject = false;
+        const steps = seq.steps || null;
+        const initSubject = seq.initial_subject || steps?.initial?.subject || '';
         state.currentSequence = {
             initial: {
-                subject: seq.initial_subject || '',
-                alternative_subject: seq.initial_subject ? `Alternative: ${seq.initial_subject}` : '',
-                body: seq.initial_body || ''
+                subject: initSubject,
+                alternative_subject: steps?.initial?.alternative_subject || (initSubject ? `Alternative: ${initSubject}` : ''),
+                body: seq.initial_body || steps?.initial?.body || ''
             },
             followup_1: {
                 day: 'Day 3',
-                subject: seq.followup_1_subject || (seq.initial_subject ? `Re: ${seq.initial_subject}` : ''),
-                body: seq.followup_1_body || ''
+                subject: seq.followup_1_subject || steps?.followup_1?.subject || (initSubject ? `Re: ${initSubject}` : ''),
+                body: seq.followup_1_body || steps?.followup_1?.body || ''
             },
             followup_2: {
                 day: 'Day 7',
-                subject: seq.followup_2_subject || (seq.initial_subject ? `Final note: ${seq.initial_subject}` : ''),
-                body: seq.followup_2_body || ''
+                subject: seq.followup_2_subject || steps?.followup_2?.subject || (initSubject ? `Final note: ${initSubject}` : ''),
+                body: seq.followup_2_body || steps?.followup_2?.body || ''
             }
         };
 
         if (recipientNameInput) recipientNameInput.value = seq.recipient_name || '';
         if (recipientEmailInput) recipientEmailInput.value = seq.recipient_email || '';
         if (companyInput) companyInput.value = seq.company || '';
+        if (roleInput && seq.role) roleInput.value = seq.role;
         if (valuePropInput) valuePropInput.value = seq.goal || '';
         if (toneSelect && seq.tone) toneSelect.value = seq.tone;
 
         if (seq.lead_id && leadSelect) {
             leadSelect.value = seq.lead_id;
             state.linkedLead = state.crmLeads.find(l => l.id === seq.lead_id) || null;
+        } else {
+            if (leadSelect) leadSelect.value = '';
+            state.linkedLead = null;
         }
 
         updateSequenceStatusPill(seq.status || 'Draft');
@@ -516,15 +550,23 @@
                 state.savedSequences.unshift({
                     id: state.currentSequenceId,
                     recipient_name: recipientNameInput?.value?.trim() || 'Alex Rivera',
+                    recipient_email: recipientEmailInput?.value?.trim() || '',
                     company: companyInput?.value?.trim() || 'CloudScale Inc',
                     role: roleInput?.value?.trim() || 'VP of Operations',
+                    goal: valueProp,
+                    tone: toneSelect?.value || 'professional',
                     initial_subject: seq.initial.subject,
+                    initial_body: seq.initial.body,
+                    followup_1_subject: seq.followup_1?.subject || '',
+                    followup_1_body: seq.followup_1?.body || '',
+                    followup_2_subject: seq.followup_2?.subject || '',
+                    followup_2_body: seq.followup_2?.body || '',
                     status: 'Draft',
                     created_at: new Date().toISOString(),
                     steps: seq
                 });
                 try {
-                    localStorage.setItem('jevexa_cached_outreach_sequences', JSON.stringify(state.savedSequences.slice(0, 30)));
+                    sessionStorage.setItem('jevexa_outreach_sequences_cache', JSON.stringify(state.savedSequences.slice(0, 30)));
                 } catch (_) {}
 
                 updateSequenceStatusPill('Draft');
@@ -568,14 +610,16 @@
                 body: JSON.stringify(payload)
             });
 
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                         window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'Email & Outreach AI credits');
                     }
                 }
-                throw new Error(data?.error || 'Sequence generation failed.');
+                const err = new Error(data?.error || 'Sequence generation failed.');
+                err.status = res.status;
+                throw err;
             }
 
             state.currentSequence = data.sequence;
@@ -601,6 +645,13 @@
                 window.showToast('Outreach sequence generated! Ready to review and send.');
             }
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                setStatus(err.message || 'Sequence generation failed.', 'error');
+                if (typeof window.showToast === 'function') {
+                    window.showToast(err.message || 'Sequence generation failed.');
+                }
+                return;
+            }
             console.warn('Sequence generation notice, using deterministic fallback:', err);
             const fallbackSeq = deterministicClientOutreach(
                 recipientNameInput?.value?.trim() || 'Alex Rivera',
@@ -873,7 +924,10 @@
         if (emailSubjectInput) {
             emailSubjectInput.addEventListener('input', () => {
                 if (!state.currentSequence) return;
-                if (state.activeStep === 1) state.currentSequence.initial.subject = emailSubjectInput.value;
+                if (state.activeStep === 1) {
+                    if (state.useAlternativeSubject) state.currentSequence.initial.alternative_subject = emailSubjectInput.value;
+                    else state.currentSequence.initial.subject = emailSubjectInput.value;
+                }
                 else if (state.activeStep === 2) state.currentSequence.followup_1.subject = emailSubjectInput.value;
                 else state.currentSequence.followup_2.subject = emailSubjectInput.value;
             });
@@ -924,7 +978,30 @@
         openHistoryDrawer,
         closeHistoryDrawer,
         getSequences: () => state.savedSequences,
-        getCurrentSequence: () => state.currentSequence
+        getCurrentSequence: () => state.currentSequence,
+        resetOnLogout: () => {
+            state.savedSequences = [];
+            state.crmLeads = [];
+            state.linkedLead = null;
+            state.currentSequenceId = null;
+            state.useAlternativeSubject = false;
+            state.requestInFlight = false;
+            state.currentSequence = JSON.parse(JSON.stringify(DEFAULT_SEQUENCE));
+            try {
+                sessionStorage.removeItem('jevexa_outreach_sequences_cache');
+                localStorage.removeItem('jevexa_cached_outreach_sequences');
+            } catch (_) {}
+            if (leadSelect) leadSelect.innerHTML = '<option value="">-- Manual Entry Mode --</option>';
+            if (recipientNameInput) recipientNameInput.value = 'Alex Rivera';
+            if (recipientEmailInput) recipientEmailInput.value = '';
+            if (companyInput) companyInput.value = 'CloudScale Inc';
+            if (roleInput) roleInput.value = 'VP of Operations';
+            if (websiteInput) websiteInput.value = '';
+            if (valuePropInput) valuePropInput.value = 'Scale operational productivity and qualification speed with AI automation.';
+            closeHistoryDrawer();
+            renderSavedSequencesList();
+            switchStep(1);
+        }
     };
 
     const DEFAULT_SEQUENCE = {

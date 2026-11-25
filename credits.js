@@ -394,6 +394,28 @@
         activeChatId = null;
         historyUserId = null;
         ambiguousRequestId = null;
+        currentUserPlan = 'free';
+        renamingSessionId = null;
+        openMenuSessionId = null;
+        userMemories = [];
+        chatCustomSettings = {
+            aboutUser: '',
+            responseStyle: '',
+            language: 'auto',
+            tone: 'default',
+            behavior: 'standard',
+            codeDepth: 'full',
+            density: 'comfortable',
+            theme: 'dark',
+            reducedMotion: false
+        };
+        document.querySelectorAll('.chat-history-dropdown-menu').forEach(el => el.remove());
+        const confirmModal = document.getElementById('chatConfirmModal');
+        if (confirmModal) {
+            confirmModal.classList.remove('open');
+            confirmModal.hidden = true;
+            confirmModal.setAttribute('aria-hidden', 'true');
+        }
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = false;
@@ -402,6 +424,9 @@
         pendingAttachments.length = 0;
         renderAttachments();
         lockChatTiers();
+        applyCustomSettingsToUI();
+        renderMemoriesUI();
+        renderChatHistory();
         updateChatWelcome(null);
         setStatus('Please sign in to use the AI chatbot.');
     }
@@ -512,6 +537,12 @@
             iconWrap.className = danger ? 'chat-confirm-icon-wrap' : 'chat-confirm-icon-wrap is-primary';
         }
 
+        const originalParent = modal.parentElement;
+        const originalNextSibling = modal.nextSibling;
+        if (originalParent && originalParent !== document.body) {
+            document.body.appendChild(modal);
+        }
+
         const prevFocus = document.activeElement;
 
         const closeModal = () => {
@@ -519,6 +550,13 @@
             modal.hidden = true;
             modal.setAttribute('aria-hidden', 'true');
             document.removeEventListener('keydown', handleKey);
+            if (originalParent && originalParent.isConnected && modal.parentElement !== originalParent) {
+                if (originalNextSibling && originalNextSibling.parentElement === originalParent) {
+                    originalParent.insertBefore(modal, originalNextSibling);
+                } else {
+                    originalParent.appendChild(modal);
+                }
+            }
             if (prevFocus && typeof prevFocus.focus === 'function') {
                 try { prevFocus.focus(); } catch (_) {}
             }
@@ -1188,23 +1226,36 @@
     }
 
     function loadCustomSettings(userId) {
-        try {
-            const raw = localStorage.getItem(customSettingsKey(userId)) || localStorage.getItem('jevexa_chat_settings_global');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed && typeof parsed === 'object') {
-                    chatCustomSettings = { ...chatCustomSettings, ...parsed };
+        chatCustomSettings = {
+            aboutUser: '',
+            responseStyle: '',
+            language: 'auto',
+            tone: 'default',
+            behavior: 'standard',
+            codeDepth: 'full',
+            density: 'comfortable',
+            theme: 'dark',
+            reducedMotion: false
+        };
+        if (userId) {
+            try {
+                const raw = localStorage.getItem(customSettingsKey(userId));
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === 'object') {
+                        chatCustomSettings = { ...chatCustomSettings, ...parsed };
+                    }
                 }
-            }
-        } catch (_) {}
+            } catch (_) {}
+        }
         applyCustomSettingsToUI();
     }
 
     function saveCustomSettings(userId) {
+        if (!userId) return;
         try {
             const key = customSettingsKey(userId);
             localStorage.setItem(key, JSON.stringify(chatCustomSettings));
-            localStorage.setItem('jevexa_chat_settings_global', JSON.stringify(chatCustomSettings));
         } catch (_) {}
     }
 
@@ -1248,15 +1299,18 @@
     }
 
     function loadMemories(userId) {
-        try {
-            const raw = localStorage.getItem(memoriesKey(userId)) || localStorage.getItem('jevexa_memories_global');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    userMemories = parsed.filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0);
+        userMemories = [];
+        if (userId) {
+            try {
+                const raw = localStorage.getItem(memoriesKey(userId));
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        userMemories = parsed.filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0);
+                    }
                 }
-            }
-        } catch (_) {}
+            } catch (_) {}
+        }
         renderMemoriesUI();
 
         if (userId && typeof window.supabaseClient?.auth?.getSession === 'function') {
@@ -1285,11 +1339,12 @@
     }
 
     function saveMemories(userId) {
-        try {
-            const key = memoriesKey(userId);
-            localStorage.setItem(key, JSON.stringify(userMemories));
-            localStorage.setItem('jevexa_memories_global', JSON.stringify(userMemories));
-        } catch (_) {}
+        if (userId) {
+            try {
+                const key = memoriesKey(userId);
+                localStorage.setItem(key, JSON.stringify(userMemories));
+            } catch (_) {}
+        }
         renderMemoriesUI();
     }
 
@@ -1363,14 +1418,46 @@
             editBtn.title = 'Edit memory';
             editBtn.innerHTML = '<i class="fas fa-pencil"></i>';
             bindSafe(editBtn, 'click', () => {
-                const updated = window.prompt('Edit saved memory:', mem.content);
-                if (updated === null) return;
-                const trimmed = updated.trim();
-                if (!trimmed) return;
-                mem.content = trimmed.slice(0, limits.maxMemoryChars);
-                mem.updatedAt = Date.now();
-                saveMemories(historyUserId);
-                syncMemoryToServer('PUT', { id: mem.id, content: mem.content });
+                if (item.querySelector('.chat-memory-edit-input')) return;
+                const editor = document.createElement('input');
+                editor.type = 'text';
+                editor.className = 'chat-memory-edit-input';
+                editor.value = mem.content;
+                editor.maxLength = limits.maxMemoryChars;
+                editor.setAttribute('aria-label', 'Edit saved memory');
+                editor.style.cssText = 'flex:1;min-width:0;padding:6px 10px;border-radius:8px;border:1px solid rgba(139,92,246,0.5);background:rgba(15,23,42,0.85);color:#fff;font-size:12px;';
+
+                let finished = false;
+                const commit = saveChanges => {
+                    if (finished) return;
+                    finished = true;
+                    const trimmed = editor.value.trim();
+                    if (saveChanges && trimmed && trimmed !== mem.content) {
+                        mem.content = trimmed.slice(0, limits.maxMemoryChars);
+                        mem.updatedAt = Date.now();
+                        saveMemories(historyUserId);
+                        syncMemoryToServer('PUT', { id: mem.id, content: mem.content });
+                    } else {
+                        renderMemoriesUI();
+                    }
+                };
+
+                editor.addEventListener('keydown', ev => {
+                    if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        commit(true);
+                    } else if (ev.key === 'Escape') {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        commit(false);
+                    }
+                });
+                editor.addEventListener('blur', () => commit(true));
+
+                textSpan.replaceWith(editor);
+                editor.focus();
+                editor.select();
             });
 
             const delBtn = document.createElement('button');
@@ -1456,6 +1543,7 @@
             document.body.classList.add('chat-is-resizing');
             window.addEventListener('pointermove', onPointerMove);
             window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
         };
 
         const onPointerMove = event => {
@@ -1473,6 +1561,7 @@
             document.body.classList.remove('chat-is-resizing');
             window.removeEventListener('pointermove', onPointerMove);
             window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
             try {
                 const finalWidth = parseInt(getComputedStyle(chatbotWin).getPropertyValue('--chat-sidebar-width'), 10) || DEFAULT_WIDTH;
                 localStorage.setItem('jevexa_chat_sidebar_width', String(finalWidth));
@@ -1621,6 +1710,12 @@
 
         bindSafe(toggleBtn, 'click', toggleSidebar);
         bindSafe(closeBtn, 'click', closeSidebar);
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 767) {
+                sidebar?.classList.remove('open');
+                chatbotWin?.classList.remove('chat-history-open');
+            }
+        });
 
         bindSafe(chatbotWin, 'click', (e) => {
             if (window.innerWidth <= 767 && chatbotWin?.classList.contains('chat-history-open')) {
@@ -1656,8 +1751,7 @@
                 if (historyUserId) {
                     try {
                         localStorage.removeItem(conversationKey(historyUserId));
-                        localStorage.removeItem(historyKey(historyUserId));
-                        localStorage.removeItem(sessionsKey(historyUserId));
+                        localStorage.removeItem(`jevexa_${historyUserId}_chat_history`);
                         localStorage.removeItem(activeChatKey(historyUserId));
                     } catch (error) {
                         console.warn('Could not clear chat sessions from storage:', error);
@@ -1687,16 +1781,33 @@
 
         if (!modal) return;
 
+        let closeTimer = null;
+
         const openModal = () => {
+            if (closeTimer) {
+                clearTimeout(closeTimer);
+                closeTimer = null;
+            }
             applyCustomSettingsToUI();
             renderMemoriesUI();
             modal.hidden = false;
+            modal.style.display = 'flex';
             requestAnimationFrame(() => modal.classList.add('open'));
         };
 
         const closeModal = () => {
+            if (closeTimer) {
+                clearTimeout(closeTimer);
+                closeTimer = null;
+            }
             modal.classList.remove('open');
-            setTimeout(() => { modal.hidden = true; }, 220);
+            closeTimer = setTimeout(() => {
+                if (!modal.classList.contains('open')) {
+                    modal.hidden = true;
+                    modal.style.display = 'none';
+                }
+                closeTimer = null;
+            }, 220);
         };
         window.closeChatCustomizationModal = closeModal;
 
@@ -1709,6 +1820,7 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !modal.hidden && modal.classList.contains('open')) {
                 e.preventDefault();
+                e.stopPropagation();
                 closeModal();
             }
         });
@@ -1850,14 +1962,6 @@
                 e.preventDefault();
                 handleAddMemory();
             }
-        });
-
-        bindSafe(modal, 'click', e => {
-            if (e.target === modal) closeModal();
-        });
-
-        window.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && !modal.hidden) closeModal();
         });
     }
 
@@ -2184,7 +2288,8 @@
             .replace(/`([^`\n]+)`/g, '<code>$1</code>')
             .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
             .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
-            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+|https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+            .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+)\)/g, '<a href="$2">$1</a>')
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
         // 5. Reinsert code blocks with header and copy button
         rendered = rendered.replace(/@@JEVEXA_CODE_BLOCK_(\d+)@@/g, (match, idx) => {
@@ -3461,6 +3566,8 @@
             }
         } catch (_) {}
     };
+
+    window.JEVEXA_CLEAR_ACCOUNT_STATE = clearAccountChatState;
 
     window.JEVEXA_CREDITS = {
         refreshHistory: loadCreditDetails,

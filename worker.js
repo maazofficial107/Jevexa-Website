@@ -623,6 +623,24 @@ async function reserveServiceCredits({
     };
   }
 
+  if (reservation && !reservation.ok && reservation.error === "rate_limited") {
+    return {
+      errorResponse: json({
+        error: "Too many concurrent requests. Please wait a moment before trying again.",
+        code: "rate_limited"
+      }, 429)
+    };
+  }
+
+  if (!reservationResponse?.ok || !reservation?.ok) {
+    return {
+      errorResponse: json({
+        error: `Unable to verify credit reservation for ${serviceName}. Please try again shortly.`,
+        code: "reservation_failed"
+      }, 503)
+    };
+  }
+
   return { reservation, reservationResponse };
 }
 
@@ -1629,17 +1647,63 @@ JSON Schema:
 
 function parseSimpleCsv(csvText) {
   if (!csvText || typeof csvText !== "string") return [];
-  const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^["']|["']$/g, ""));
+  const cleanText = csvText.replace(/^\uFEFF/, "").trim();
+  if (!cleanText) return [];
+
+  let firstLine = "";
+  let inHeaderQuote = false;
+  for (let i = 0; i < cleanText.length; i++) {
+    const ch = cleanText[i];
+    if (ch === '"') {
+      if (inHeaderQuote && cleanText[i + 1] === '"') { i++; continue; }
+      inHeaderQuote = !inHeaderQuote;
+    } else if ((ch === "\n" || ch === "\r") && !inHeaderQuote) {
+      firstLine = cleanText.slice(0, i);
+      break;
+    }
+  }
+  if (!firstLine) firstLine = cleanText;
+  const delimiter = firstLine.includes("\t") ? "\t" : (firstLine.includes(";") && !firstLine.includes(",") ? ";" : ",");
+
+  const parsedRows = [];
+  let row = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < cleanText.length; i++) {
+    const ch = cleanText[i];
+    if (ch === '"') {
+      if (inQuotes && cleanText[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === delimiter && !inQuotes) {
+      row.push(cur.trim());
+      cur = "";
+    } else if ((ch === "\r" || ch === "\n") && !inQuotes) {
+      if (ch === "\r" && cleanText[i + 1] === "\n") i++;
+      row.push(cur.trim());
+      if (row.some(cell => cell !== "")) parsedRows.push(row);
+      row = [];
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  row.push(cur.trim());
+  if (row.some(cell => cell !== "")) parsedRows.push(row);
+  if (parsedRows.length < 2) return [];
+
+  const headers = parsedRows[0];
   const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",").map(c => c.trim().replace(/^["']|["']$/g, ""));
-    const row = {};
+  for (let i = 1; i < parsedRows.length; i++) {
+    const cols = parsedRows[i];
+    const obj = {};
     headers.forEach((h, idx) => {
-      row[h || `col_${idx + 1}`] = cols[idx] !== undefined ? cols[idx] : "";
+      obj[h || `col_${idx + 1}`] = cols[idx] !== undefined ? cols[idx] : "";
     });
-    rows.push(row);
+    rows.push(obj);
   }
   return rows;
 }
@@ -2397,31 +2461,35 @@ async function handleChat(request, env) {
       const resRows = await readJsonResponse(resRes);
       if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
         const reservedCredits = resRows[0].reserved_credits || 1;
-        await sbRequest(
+        const releasePatchRes = await sbRequest(
           cfg,
-          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}`,
+          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}&status=eq.reserved`,
           {
             method: "PATCH",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
           }
         );
-        const balRes = await sbRequest(
-          cfg,
-          `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
-        );
-        const balRows = await readJsonResponse(balRes);
-        if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
-          const newBal = (balRows[0].balance || 0) + reservedCredits;
-          await sbRequest(
+        const releasedRows = await readJsonResponse(releasePatchRes);
+        if (releasePatchRes.ok && Array.isArray(releasedRows) && releasedRows.length > 0) {
+          const balRes = await sbRequest(
             cfg,
-            `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
-            {
-              method: "PATCH",
-              body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
-            }
+            `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
           );
+          const balRows = await readJsonResponse(balRes);
+          if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+            const newBal = (balRows[0].balance || 0) + reservedCredits;
+            await sbRequest(
+              cfg,
+              `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+              {
+                method: "PATCH",
+                body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+              }
+            );
+          }
+          released = true;
         }
-        released = true;
       }
     } catch (fbErr) {
       console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
@@ -2466,31 +2534,35 @@ async function handleChat(request, env) {
       const resRows = await readJsonResponse(resRes);
       if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
         const reservedCredits = resRows[0].reserved_credits || 1;
-        await sbRequest(
+        const releasePatchRes = await sbRequest(
           cfg,
-          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}`,
+          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}&status=eq.reserved`,
           {
             method: "PATCH",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
           }
         );
-        const balRes = await sbRequest(
-          cfg,
-          `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
-        );
-        const balRows = await readJsonResponse(balRes);
-        if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
-          const newBal = (balRows[0].balance || 0) + reservedCredits;
-          await sbRequest(
+        const releasedRows = await readJsonResponse(releasePatchRes);
+        if (releasePatchRes.ok && Array.isArray(releasedRows) && releasedRows.length > 0) {
+          const balRes = await sbRequest(
             cfg,
-            `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
-            {
-              method: "PATCH",
-              body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
-            }
+            `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
           );
+          const balRows = await readJsonResponse(balRes);
+          if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+            const newBal = (balRows[0].balance || 0) + reservedCredits;
+            await sbRequest(
+              cfg,
+              `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+              {
+                method: "PATCH",
+                body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+              }
+            );
+          }
+          released = true;
         }
-        released = true;
       }
     } catch (fbErr) {
       console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
@@ -4192,6 +4264,15 @@ async function handleCrmLeads(request, env) {
       } catch (_) {}
     }
 
+    let nextFollowupAt = null;
+    if (body?.next_followup_at) {
+      const parsedDate = new Date(body.next_followup_at);
+      if (isNaN(parsedDate.getTime())) {
+        return json({ error: "Invalid follow-up date format." }, 400);
+      }
+      nextFollowupAt = parsedDate.toISOString();
+    }
+
     const newLead = {
       user_id: user.id,
       name,
@@ -4203,7 +4284,7 @@ async function handleCrmLeads(request, env) {
       deal_value: Number(body?.deal_value) || 0,
       stage: typeof body?.stage === "string" ? body.stage.trim() : "New",
       notes: typeof body?.notes === "string" ? body.notes.trim() : null,
-      next_followup_at: body?.next_followup_at ? new Date(body.next_followup_at).toISOString() : null,
+      next_followup_at: nextFollowupAt,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -4243,9 +4324,25 @@ async function handleCrmLeads(request, env) {
       return json({ error: "Valid lead ID required." }, 400);
     }
 
-    const updates = { ...body, updated_at: new Date().toISOString() };
-    delete updates.id;
-    delete updates.user_id;
+    const allowedPatchFields = [
+      "name", "email", "phone", "company", "role", "website",
+      "deal_value", "stage", "notes", "next_followup_at",
+      "lead_score", "ai_summary", "suggested_outreach_angle"
+    ];
+    const updates = { updated_at: new Date().toISOString() };
+    for (const field of allowedPatchFields) {
+      if (Object.hasOwn(body || {}, field)) {
+        if (field === "next_followup_at" && body[field]) {
+          const parsedDate = new Date(body[field]);
+          if (isNaN(parsedDate.getTime())) {
+            return json({ error: "Invalid follow-up date format." }, 400);
+          }
+          updates[field] = parsedDate.toISOString();
+        } else {
+          updates[field] = body[field];
+        }
+      }
+    }
 
     try {
       const patchRes = await sbRequest(
@@ -4714,26 +4811,12 @@ function deterministicDataClean(records, operations = {}, dedupKey) {
 
   for (let i = 0; i < records.length; i++) {
     const row = { ...records[i] };
-    let skipRow = false;
 
-    // Deduplication by selected key
-    if (doDedup && row[foundKey] !== undefined && row[foundKey] !== null) {
-      const normKey = String(row[foundKey]).trim().toLowerCase();
-      if (seenKeys.has(normKey)) {
-        duplicatesRemoved++;
-        skipRow = true;
-      } else {
-        seenKeys.add(normKey);
-      }
-    }
-
-    if (skipRow) continue;
-
-    // Cleaning & Normalization
+    // Cleaning & Normalization first so deduplication catches normalized matches (e.g. phone/email)
     for (const [col, val] of Object.entries(row)) {
       if (typeof val === "string") {
         let str = val;
-        
+
         // Whitespace trimming
         if (operations.cleanWhitespace || operations.trimWhitespace) {
           str = str.trim().replace(/\s+/g, " ");
@@ -4746,7 +4829,7 @@ function deterministicDataClean(records, operations = {}, dedupKey) {
             emailsCleaned++;
             str = lower;
           }
-          if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(str)) {
+          if (str && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(str)) {
             anomaliesDetected++;
             anomalies.push({ row: i + 1, column: col, value: str, reason: "Malformed email syntax" });
           }
@@ -4797,6 +4880,18 @@ function deterministicDataClean(records, operations = {}, dedupKey) {
         }
 
         row[col] = str;
+      }
+    }
+
+    // Deduplication by selected key (skip blank keys so empty rows don't collide)
+    if (doDedup && row[foundKey] !== undefined && row[foundKey] !== null) {
+      const normKey = String(row[foundKey]).trim().toLowerCase();
+      if (normKey) {
+        if (seenKeys.has(normKey)) {
+          duplicatesRemoved++;
+          continue;
+        }
+        seenKeys.add(normKey);
       }
     }
 
@@ -4886,11 +4981,10 @@ async function handleOcrExtract(request, env) {
         apiKey: geminiApiKey,
         systemInstruction: OCR_SYSTEM_PROMPT,
         contents: [{ role: "user", parts: [{ text: promptText }] }],
-        maxTokens: parsed.maxTokens,
-        temperature: 0.2,
+        generationConfig: { maxOutputTokens: parsed.maxTokens, temperature: 0.2 },
         requestId: parsed.requestId,
         serviceName: "DocumentOCR",
-        userTier
+        models: getGeminiModelsForTier(userTier, env)
       });
       if (geminiRes?.ok && geminiRes?.reply) {
         extractedResult = parseLlmJson(geminiRes.reply);
@@ -5061,11 +5155,10 @@ async function handleSocialGenerate(request, env) {
         apiKey: geminiApiKey,
         systemInstruction: SOCIAL_SYSTEM_PROMPT,
         contents: [{ role: "user", parts: [{ text: promptText }] }],
-        maxTokens: parsed.maxTokens,
-        temperature: 0.7,
+        generationConfig: { maxOutputTokens: parsed.maxTokens, temperature: 0.7 },
         requestId: parsed.requestId,
         serviceName: "SocialMediaAI",
-        userTier
+        models: getGeminiModelsForTier(userTier, env)
       });
       if (geminiRes?.ok && geminiRes?.reply) {
         socialResult = parseLlmJson(geminiRes.reply);
@@ -5246,11 +5339,10 @@ Task: Synthesize an executive forecasting report strictly adhering to the JSON s
         apiKey: geminiApiKey,
         systemInstruction: ANALYTICS_SYSTEM_PROMPT,
         contents: [{ role: "user", parts: [{ text: promptText }] }],
-        maxTokens: parsed.maxTokens || 1400,
-        temperature: 0.5,
+        generationConfig: { maxOutputTokens: parsed.maxTokens || 1400, temperature: 0.5 },
         requestId: parsed.requestId,
         serviceName: "BusinessAnalyticsAI",
-        userTier
+        models: getGeminiModelsForTier(userTier, env)
       });
       if (geminiRes?.ok && geminiRes?.reply) {
         const parsedReport = parseLlmJson(geminiRes.reply);
@@ -5281,7 +5373,8 @@ Task: Synthesize an executive forecasting report strictly adhering to the JSON s
         temperature: 0.5,
         requestId: parsed.requestId,
         serviceName: "BusinessAnalyticsAI",
-        userTier
+        model: DEFAULT_OPENROUTER_MODELS[userTier] || DEFAULT_OPENROUTER_MODELS.lite,
+        fallbackModel: DEFAULT_OPENROUTER_MODELS.max
       });
       if (orRes?.ok && orRes?.reply) {
         const parsedReport = parseLlmJson(orRes.reply);
@@ -5337,6 +5430,51 @@ Task: Synthesize an executive forecasting report strictly adhering to the JSON s
 // ----------------------------------------------------------------------------
 // HANDLER: Business Analytics URL / Sheets Ingestion (/api/analytics/fetch-url)
 // ----------------------------------------------------------------------------
+function isBlockedSsrfHost(urlObj) {
+  if (!urlObj) return true;
+  if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") return true;
+  if (urlObj.username || urlObj.password) return true;
+  const host = String(urlObj.hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host) return true;
+  if (
+    host === "localhost" ||
+    host === "ip6-localhost" ||
+    host === "ip6-loopback" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".arpa")
+  ) {
+    return true;
+  }
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const octets = host.split(".").map(n => Number(n));
+    if (octets.length !== 4 || octets.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+    const [a, b] = octets;
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a >= 224) return true;
+  }
+  if (
+    host === "::" ||
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    host.startsWith("fc") ||
+    host.startsWith("fd") ||
+    host.startsWith("::ffff:127.") ||
+    host.startsWith("::ffff:10.") ||
+    host.startsWith("::ffff:169.254.") ||
+    host.startsWith("::ffff:192.168.") ||
+    host.startsWith("::ffff:172.")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function handleAnalyticsFetchUrl(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
@@ -5350,12 +5488,19 @@ async function handleAnalyticsFetchUrl(request, env) {
   if (!rawUrl) {
     return json({ error: "Please enter a valid website URL or Google Sheets link." }, 400);
   }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(rawUrl) && !/^https?:\/\//i.test(rawUrl)) {
+    return json({ error: "Blocked URL scheme. Only http:// and https:// URLs are allowed." }, 400);
+  }
 
   let targetUrl;
   try {
-    targetUrl = new URL(rawUrl.startsWith("http://") || rawUrl.startsWith("https://") ? rawUrl : `https://${rawUrl}`);
+    targetUrl = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`);
   } catch {
     return json({ error: "Invalid URL format. Please include http:// or https://" }, 400);
+  }
+
+  if (isBlockedSsrfHost(targetUrl)) {
+    return json({ error: "Blocked URL target. Only public http/https websites and Google Sheets links are allowed." }, 400);
   }
 
   // 1. Google Sheets Detection & Automated CSV Export Conversion
@@ -5448,6 +5593,14 @@ async function handleAnalyticsFetchUrl(request, env) {
     });
     clearTimeout(timeout);
     const latencyMs = Date.now() - startTime;
+
+    if (res.url) {
+      try {
+        if (isBlockedSsrfHost(new URL(res.url))) {
+          return json({ error: "Blocked redirect destination." }, 400);
+        }
+      } catch (_) {}
+    }
 
     if (!res.ok) {
       return json({
@@ -6050,12 +6203,11 @@ async function handleNewsletter(request, env) {
     return json({ error: "Method not allowed." }, 405);
   }
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Invalid request format." }, 400);
+  const parsedBody = await readRequestJson(request, 2048);
+  if (parsedBody.error) {
+    return json({ error: parsedBody.error === "Invalid JSON request body." ? "Invalid request format." : parsedBody.error }, parsedBody.status || 400);
   }
+  const body = parsedBody.body;
 
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -6096,16 +6248,20 @@ async function handleContact(request, env) {
     return json({ error: "Contact email service is not configured." }, 503);
   }
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Invalid request format." }, 400);
+  const parsedBody = await readRequestJson(request, 16384);
+  if (parsedBody.error) {
+    return json({ error: parsedBody.error === "Invalid JSON request body." ? "Invalid request format." : parsedBody.error }, parsedBody.status || 400);
+  }
+  const body = parsedBody.body || {};
+
+  if (typeof body.website === "string" && body.website.trim().length > 0) {
+    return json({ success: true, message: "Your inquiry has been submitted successfully." }, 200);
   }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const company = typeof body.company === "string" ? body.company.trim() : "";
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
   const message = typeof body.message === "string" ? body.message.trim() : "";
 
   if (!name || !email || !message) {
@@ -6154,6 +6310,21 @@ async function handleContact(request, env) {
       console.error("Resend status:", emailResponse.status);
       return json({ error: "Your inquiry could not be emailed. Please try again later." }, 502);
     }
+
+    try {
+      const cfg = getSupabaseConfig(env);
+      if (cfg) {
+        await sbRequest(cfg, "/rest/v1/Contacts", {
+          method: "POST",
+          body: JSON.stringify([{
+            Name: name,
+            Email: email,
+            Phone: phone || company || "",
+            Message: company ? `[${company}] ${message}` : message
+          }])
+        });
+      }
+    } catch (_) {}
 
     return json({
       success: true,
@@ -6919,31 +7090,35 @@ async function handleCreditReconcile(request, env) {
       const resRows = await readJsonResponse(resRes);
       if (resRes.ok && Array.isArray(resRows) && resRows.length > 0) {
         const reservedCredits = resRows[0].reserved_credits || 1;
-        await sbRequest(
+        const releasePatchRes = await sbRequest(
           cfg,
-          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}`,
+          `/rest/v1/credit_reservations?id=eq.${resRows[0].id}&status=eq.reserved`,
           {
             method: "PATCH",
+            headers: { Prefer: "return=representation" },
             body: JSON.stringify({ status: "released", updated_at: new Date().toISOString() })
           }
         );
-        const balRes = await sbRequest(
-          cfg,
-          `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
-        );
-        const balRows = await readJsonResponse(balRes);
-        if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
-          const newBal = (balRows[0].balance || 0) + reservedCredits;
-          await sbRequest(
+        const releasedRows = await readJsonResponse(releasePatchRes);
+        if (releasePatchRes.ok && Array.isArray(releasedRows) && releasedRows.length > 0) {
+          const balRes = await sbRequest(
             cfg,
-            `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
-            {
-              method: "PATCH",
-              body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
-            }
+            `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(user.id)}&limit=1`
           );
+          const balRows = await readJsonResponse(balRes);
+          if (balRes.ok && Array.isArray(balRows) && balRows.length > 0) {
+            const newBal = (balRows[0].balance || 0) + reservedCredits;
+            await sbRequest(
+              cfg,
+              `/rest/v1/user_credits?user_id=eq.${encodeURIComponent(user.id)}`,
+              {
+                method: "PATCH",
+                body: JSON.stringify({ balance: newBal, updated_at: new Date().toISOString() })
+              }
+            );
+          }
+          released = true;
         }
-        released = true;
       }
     } catch (fbErr) {
       console.warn("Direct reconcile fallback notice:", fbErr?.message || fbErr, requestId);
@@ -7314,6 +7489,9 @@ export default {
     if (url.pathname === "/api/health") {
       if (request.method === "HEAD") {
         return new Response(null, { status: 200, headers: JSON_HEADERS });
+      }
+      if (request.method !== "GET") {
+        return json({ error: "Method not allowed." }, 405);
       }
       let pricingStatus = "active";
       try {

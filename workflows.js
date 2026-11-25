@@ -304,6 +304,7 @@
     }
 
     async function runWorkflow() {
+        if (state.isRunning) return;
         if (!state.steps.length) {
             window.showToast?.('Add at least one step before running the workflow.');
             return;
@@ -396,12 +397,14 @@
                 body: JSON.stringify(payload)
             });
 
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Workflow Automation credits');
                 }
-                throw new Error(result.error || 'Workflow execution failed.');
+                const err = new Error(result.error || 'Workflow execution failed.');
+                err.status = res.status;
+                throw err;
             }
 
             if (execProgressFill) execProgressFill.style.width = '100%';
@@ -438,6 +441,16 @@
 
             window.showToast?.('Workflow executed successfully!');
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                if (execProgressFill) execProgressFill.style.width = '0%';
+                if (execProgressText) execProgressText.textContent = err.message || 'Workflow execution blocked.';
+                if (statusEl) {
+                    statusEl.textContent = err.message || 'Workflow execution failed.';
+                    statusEl.className = 'workflow-status-msg error';
+                }
+                window.showToast?.(err.message || 'Workflow execution failed.');
+                return;
+            }
             console.warn('API execution notice, completing via client engine:', err);
             await executeSimulatedSteps();
         } finally {
@@ -522,7 +535,10 @@
         window.showToast?.('Workflow run history exported to CSV!');
     }
 
+    let initialized = false;
     function init() {
+        if (initialized) return;
+        initialized = true;
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
 
@@ -557,6 +573,7 @@
             });
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && !execModal.hidden) {
+                    e.stopPropagation();
                     closeExecModal();
                 }
             });
@@ -575,6 +592,15 @@
         renderHistory,
         exportWorkflowJson,
         exportRunsCsv,
+        resetOnLogout: () => {
+            state.isRunning = false;
+            state.runs = [];
+            try { localStorage.removeItem(RUNS_STORAGE_KEY); } catch (_) {}
+            window.JEVEXA_WORKFLOWS.closeExecModal();
+            if (templateSelect) templateSelect.value = 'lead_conversion';
+            loadTemplate('lead_conversion');
+            renderHistory();
+        },
         closeExecModal: () => {
             const execModal = document.getElementById('workflowExecModal');
             if (execModal) {

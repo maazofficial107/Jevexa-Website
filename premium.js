@@ -172,29 +172,32 @@
                 } else {
                     toast(data.error || 'Subscription failed. Please try again.');
                 }
-            } catch {
-                toast('✓ Subscribed! Welcome to the JEVEXA insider list.');
-                if (input) input.value = '';
+            } catch (err) {
+                toast(err?.name === 'AbortError'
+                    ? '⚠ Subscription timed out. Please try again.'
+                    : '⚠ Could not connect to newsletter service. Please try again.');
             } finally {
                 clearTimeout(newsletterTimeoutId);
                 if (btn) btn.disabled = false;
             }
         });
     }
-    try {
-        const params = new URLSearchParams(window.location.search);
-        const payment = params.get('payment');
-        if (payment === 'return') {
-            toast('✓ Payment return received. Credits appear automatically once the payment is confirmed.');
-            setTimeout(() => { window.JEVEXA_SETTINGS?.refreshCredits?.(); }, 2500);
-            params.delete('payment');
-            history.replaceState(null, '', window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash);
-        } else if (payment === 'cancelled') {
-            toast('⚠ Checkout was cancelled. No charge was made.');
-            params.delete('payment');
-            history.replaceState(null, '', window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash);
-        }
-    } catch { /* noop */ }
+    if (!window.JEVEXA_SAFEPAY_RETURN_HANDLED) {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const payment = params.get('payment');
+            if (payment === 'return') {
+                toast('✓ Payment return received. Credits appear automatically once the payment is confirmed.');
+                setTimeout(() => { window.JEVEXA_SETTINGS?.refreshCredits?.(); }, 2500);
+                params.delete('payment');
+                history.replaceState(null, '', window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash);
+            } else if (payment === 'cancelled') {
+                toast('⚠ Checkout was cancelled. No charge was made.');
+                params.delete('payment');
+                history.replaceState(null, '', window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash);
+            }
+        } catch { /* noop */ }
+    }
     $('#contactForm')?.addEventListener('submit', (e) => {
         const hp = $('#contactWebsite');
         if (hp && hp.value) { e.stopImmediatePropagation(); e.preventDefault(); }
@@ -203,7 +206,10 @@
     if (chatWin && 'MutationObserver' in window) {
         new MutationObserver(() => { if (chatWin.classList.contains('open')) setTimeout(() => $('#chatInput')?.focus({ preventScroll: true }), 250); }).observe(chatWin, { attributes: true, attributeFilter: ['class'] });
     }
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && chatWin?.classList.contains('open')) chatWin.classList.remove('open'); });
+    document.addEventListener('keydown', (e) => {
+        if (window.JEVEXA_SAFE_INTERACTION) return;
+        if (e.key === 'Escape' && chatWin?.classList.contains('open')) chatWin.classList.remove('open');
+    });
     const yearEl = $('#year');
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 })();

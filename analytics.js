@@ -234,40 +234,63 @@
     // Helper: Parse Delimited Text (CSV, TSV)
     function parseDelimitedText(text) {
         if (!text || typeof text !== 'string') return [];
-        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) return [];
+        const cleanText = text.replace(/^\uFEFF/, '').trim();
+        if (!cleanText) return [];
 
-        const delimiter = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') ? ';' : ',');
-        const parseRow = (line) => {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"' || char === "'") {
-                    inQuotes = !inQuotes;
-                } else if (char === delimiter && !inQuotes) {
-                    result.push(current.trim().replace(/^["']|["']$/g, ''));
-                    current = '';
+        let firstLine = '';
+        let inHeaderQuote = false;
+        for (let i = 0; i < cleanText.length; i++) {
+            const ch = cleanText[i];
+            if (ch === '"') {
+                if (inHeaderQuote && cleanText[i + 1] === '"') { i++; continue; }
+                inHeaderQuote = !inHeaderQuote;
+            } else if ((ch === '\n' || ch === '\r') && !inHeaderQuote) {
+                firstLine = cleanText.slice(0, i);
+                break;
+            }
+        }
+        if (!firstLine) firstLine = cleanText;
+        const delimiter = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') && !firstLine.includes(',') ? ';' : ',');
+
+        const rows = [];
+        let row = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < cleanText.length; i++) {
+            const char = cleanText[i];
+            if (char === '"') {
+                if (inQuotes && cleanText[i + 1] === '"') {
+                    current += '"';
+                    i++;
                 } else {
-                    current += char;
+                    inQuotes = !inQuotes;
                 }
+            } else if (char === delimiter && !inQuotes) {
+                row.push(current.trim());
+                current = '';
+            } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                if (char === '\r' && cleanText[i + 1] === '\n') i++;
+                row.push(current.trim());
+                if (row.some(cell => cell !== '')) rows.push(row);
+                row = [];
+                current = '';
+            } else {
+                current += char;
             }
-            result.push(current.trim().replace(/^["']|["']$/g, ''));
-            return result;
-        };
+        }
+        row.push(current.trim());
+        if (row.some(cell => cell !== '')) rows.push(row);
+        if (rows.length < 2) return [];
 
-        const headers = parseRow(lines[0]);
+        const headers = rows[0];
         const records = [];
-        for (let i = 1; i < lines.length; i++) {
-            const cols = parseRow(lines[i]);
-            if (cols.some(c => c !== '')) {
-                const row = {};
-                headers.forEach((h, idx) => {
-                    row[h || `Column_${idx + 1}`] = cols[idx] !== undefined ? cols[idx] : '';
-                });
-                records.push(row);
-            }
+        for (let r = 1; r < rows.length; r++) {
+            const cols = rows[r];
+            const obj = {};
+            headers.forEach((h, idx) => {
+                obj[h || `Column_${idx + 1}`] = cols[idx] !== undefined ? cols[idx] : '';
+            });
+            records.push(obj);
         }
         return records;
     }
@@ -1255,6 +1278,25 @@
     // Handle File Ingestion
     function handleIngestFile(file) {
         if (!file) return;
+        const maxBytes = 15 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            if (el.status) {
+                el.status.textContent = 'File exceeds the 15 MB browser limit. Please upload a smaller export.';
+                el.status.className = 'analytics-status-msg danger';
+            }
+            window.showToast?.('File too large (max 15 MB).');
+            return;
+        }
+        const fileNameLower = (file.name || '').toLowerCase();
+        if (fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls')) {
+            const msg = 'Binary Excel (.xlsx/.xls) files are not decoded directly. Please save as CSV, TSV, or JSON first.';
+            if (el.status) {
+                el.status.textContent = msg;
+                el.status.className = 'analytics-status-msg danger';
+            }
+            window.showToast?.(msg);
+            return;
+        }
 
         if (el.status) {
             el.status.textContent = `Reading and parsing ${file.name}...`;
@@ -1267,9 +1309,14 @@
                 const text = e.target.result;
                 let records = [];
 
-                if (file.name.endsWith('.json')) {
+                if (fileNameLower.endsWith('.json')) {
                     const parsed = JSON.parse(text);
-                    records = Array.isArray(parsed) ? parsed : (parsed.records || parsed.data || [parsed]);
+                    if (Array.isArray(parsed)) {
+                        records = parsed;
+                    } else if (parsed && typeof parsed === 'object') {
+                        const nested = parsed.records || parsed.data;
+                        records = Array.isArray(nested) ? nested : (Object.keys(parsed).length ? [parsed] : []);
+                    }
                 } else {
                     records = parseDelimitedText(text);
                 }
@@ -1278,6 +1325,8 @@
                     throw new Error('The uploaded file does not contain valid data rows.');
                 }
 
+                state.websiteAudit = null;
+                state.scrapedProducts = [];
                 state.rawRows = records;
                 state.cleanedRecords = records;
                 state.detectedColumns = detectColumns(records);
@@ -1335,12 +1384,14 @@
 
     // Handle URL / Google Sheets Ingestion & Deep Website Audit
     async function handleFetchUrl() {
+        if (state.isFetchingUrl) return;
         const url = el.urlInput ? el.urlInput.value.trim() : '';
         if (!url) {
             window.showToast?.('Please enter a website or Google Sheet URL.');
             return;
         }
 
+        state.isFetchingUrl = true;
         if (el.status) {
             el.status.textContent = 'Connecting and extracting business signals from URL...';
             el.status.className = 'analytics-status-msg loading';
@@ -1350,14 +1401,17 @@
             el.fetchUrlBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingesting...';
         }
 
+        const fetchController = new AbortController();
+        const fetchTimeoutId = setTimeout(() => fetchController.abort(), 20000);
         try {
             const res = await fetch('/api/analytics/fetch-url', {
                 method: 'POST',
+                signal: fetchController.signal,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
             });
 
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             if (!res.ok) {
                 throw new Error(result.error || 'Failed to fetch data from URL.');
             }
@@ -1367,6 +1421,8 @@
                 const records = parseDelimitedText(result.csv);
                 if (!records.length) throw new Error('Google Sheet returned an empty CSV.');
 
+                state.websiteAudit = null;
+                state.scrapedProducts = [];
                 state.rawRows = records;
                 state.cleanedRecords = records;
                 state.detectedColumns = detectColumns(records);
@@ -1391,6 +1447,10 @@
             } else if (result.type === 'website') {
                 // Real Live Website Intelligence & Store Audit
                 const d = result.data;
+                state.cleanedRecords = [];
+                state.rawRows = [];
+                state.activeDatasetName = d.title || url;
+                if (el.datasetBanner) el.datasetBanner.hidden = true;
                 state.websiteAudit = d;
                 state.scrapedProducts = d.products || [];
 
@@ -1590,6 +1650,7 @@
 
     // AI Executive Forecast Call
     async function runAnalyticsReport() {
+        if (state.isAnalyzing) return;
         state.isAnalyzing = true;
         if (el.generateBtn) {
             el.generateBtn.disabled = true;
@@ -1634,9 +1695,12 @@
             }
         };
 
+        const analyticsController = new AbortController();
+        const analyticsTimeoutId = setTimeout(() => analyticsController.abort(), 35000);
         try {
             const res = await fetch('/api/analytics/report', {
                 method: 'POST',
+                signal: analyticsController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -1645,16 +1709,19 @@
                 body: JSON.stringify(payload)
             });
 
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Business Analytics credits');
                 }
-                throw new Error(result.error || 'Failed to generate analytics forecast.');
+                const err = new Error(result.error || 'Failed to generate analytics forecast.');
+                err.status = res.status;
+                throw err;
             }
 
-            renderKpiCards(result.kpis);
-            renderSvgCharts(result.kpis);
+            const activeKpis = state.cleanedRecords.length ? (state.kpis || result.kpis) : (result.kpis || state.kpis);
+            renderKpiCards(activeKpis);
+            renderSvgCharts(activeKpis);
             renderReport(result.report);
             renderDataTable();
 
@@ -1671,6 +1738,14 @@
             }
             window.showToast?.('Business Analytics forecast generated!');
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                if (el.status) {
+                    el.status.textContent = err.message || 'Could not generate analytics forecast.';
+                    el.status.className = 'analytics-status-msg danger';
+                }
+                window.showToast?.(err.message || 'Could not generate analytics forecast.');
+                return;
+            }
             console.warn('Analytics API notice, falling back to deterministic modeling:', err);
             updateAllViews();
             if (el.status) {
@@ -1679,6 +1754,7 @@
             }
             window.showToast?.('Analytics report generated!');
         } finally {
+            clearTimeout(analyticsTimeoutId);
             state.isAnalyzing = false;
             if (el.generateBtn) {
                 el.generateBtn.disabled = false;
@@ -1688,7 +1764,10 @@
     }
 
     // Initialize Controller
+    let initialized = false;
     function init() {
+        if (initialized) return;
+        initialized = true;
         bindSafe(el.backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(el.closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(el.generateBtn, 'click', runAnalyticsReport);
@@ -1757,6 +1836,7 @@
         if (el.fileInput) {
             bindSafe(el.fileInput, 'change', (e) => {
                 const file = e.target.files?.[0];
+                e.target.value = '';
                 if (file) handleIngestFile(file);
             });
         }
@@ -1955,6 +2035,7 @@
                     ? ['Product Title', 'Category', 'Price', 'Compare-At Price', 'Discount Savings', 'Discount %', 'Source']
                     : ['Period / Item', 'Orders / Users', 'Gross Revenue', 'Expenses / Spend', 'Net Profit', 'Margin %', 'Growth %'];
 
+                const escCsv = val => `"${String(val ?? '').replace(/"/g, '""')}"`;
                 const csvLines = rows.map(r => [
                     r.period,
                     r.orders,
@@ -1963,7 +2044,7 @@
                     r.profit,
                     r.margin,
                     r.growth
-                ].map(v => `"${v}"`).join(','));
+                ].map(escCsv).join(','));
 
                 const filename = isProd
                     ? `Jevexa_Scraped_Catalog_${new Date().toISOString().split('T')[0]}.csv`
@@ -1981,18 +2062,23 @@
             const curr = state.activeCurrency;
             const text = `JEVEXA EXECUTIVE REPORT\nBusiness Model: ${PRESETS[state.activePreset]?.name || 'Active Data Engine'}\nTime Horizon: ${state.kpis?.timeframe || 'Last 90 Days'}\nHealth Score: ${state.report?.health_score}/100\n\nExecutive Summary:\n${state.report?.executive_summary}\n\nKey Metrics:\n• MRR: ${formatCurrency(state.kpis?.mrr, curr)}\n• ARR: ${formatCurrency(state.kpis?.arr, curr)}\n• Trailing Revenue: ${formatCurrency(state.kpis?.revenue, curr)}\n• Net Margin: ${state.kpis?.net_margin}%\n• LTV/CAC Ratio: ${state.kpis?.ltv_cac_ratio}x\n• Logo Churn: ${state.kpis?.churn_rate}%\n\nRevenue Scenarios (30/60/90-Day):\n• Conservative: ${formatCurrency(state.report?.forecast?.conservative, curr)}\n• Expected: ${formatCurrency(state.report?.forecast?.expected, curr)}\n• Aggressive: ${formatCurrency(state.report?.forecast?.aggressive, curr)}\n\nCore Strengths:\n${(state.report?.top_strengths || []).map(s => '• ' + s).join('\n')}\n\nRisks & Bottlenecks:\n${(state.report?.top_risks || []).map(r => '• ' + r).join('\n')}\n\nStrategic Actions:\n${(state.report?.strategic_actions || []).map((a, i) => `P${i + 1}: ${a}`).join('\n')}`;
 
-            navigator.clipboard?.writeText?.(text)
-                .then(() => {
-                    window.showToast?.('Executive report copied to clipboard!');
-                    if (el.status) {
-                        el.status.textContent = 'Report copied to clipboard.';
-                        el.status.className = 'analytics-status-msg success';
-                    }
-                })
-                .catch(() => {
-                    downloadFile(`Jevexa_Executive_Report_${new Date().toISOString().split('T')[0]}.txt`, text, 'text/plain');
-                    window.showToast?.('Executive report saved as text file!');
-                });
+            const fallbackReportDownload = () => {
+                downloadFile(`Jevexa_Executive_Report_${new Date().toISOString().split('T')[0]}.txt`, text, 'text/plain');
+                window.showToast?.('Executive report saved as text file!');
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text)
+                    .then(() => {
+                        window.showToast?.('Executive report copied to clipboard!');
+                        if (el.status) {
+                            el.status.textContent = 'Report copied to clipboard.';
+                            el.status.className = 'analytics-status-msg success';
+                        }
+                    })
+                    .catch(fallbackReportDownload);
+            } else {
+                fallbackReportDownload();
+            }
         });
 
         // Export KPIs CSV
@@ -2001,6 +2087,7 @@
             const headers = ['KPI Metric', 'Value', 'Time Horizon'];
             const tf = state.kpis?.timeframe || 'Last 90 Days';
             const curr = state.activeCurrency;
+            const escCsv = val => `"${String(val ?? '').replace(/"/g, '""')}"`;
 
             const rows = [
                 ['Monthly Recurring Revenue (MRR)', formatCurrency(state.kpis?.mrr, curr), tf],
@@ -2018,7 +2105,7 @@
                 ['Scenario: Conservative', formatCurrency(state.report?.forecast?.conservative, curr), tf],
                 ['Scenario: Expected', formatCurrency(state.report?.forecast?.expected, curr), tf],
                 ['Scenario: Aggressive', formatCurrency(state.report?.forecast?.aggressive, curr), tf]
-            ].map(r => `"${r[0]}","${r[1]}","${r[2]}"`);
+            ].map(r => r.map(escCsv).join(','));
 
             const csv = [headers.join(','), ...rows].join('\n');
             downloadFile(`Jevexa_KPI_Export_${new Date().toISOString().split('T')[0]}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8;');
@@ -2074,6 +2161,22 @@
         ingestFile: handleIngestFile,
         fetchUrl: handleFetchUrl,
         downloadSampleCsv,
+        resetOnLogout: () => {
+            state.isAnalyzing = false;
+            state.isFetchingUrl = false;
+            state.rawRows = [];
+            state.cleanedRecords = [];
+            state.scrapedProducts = [];
+            state.websiteAudit = null;
+            state.activeDatasetName = '';
+            state.activeTableMode = 'records';
+            if (el.fileInput) el.fileInput.value = '';
+            if (el.urlInput) el.urlInput.value = '';
+            if (el.datasetBanner) el.datasetBanner.hidden = true;
+            if (el.urlPreviewCard) el.urlPreviewCard.hidden = true;
+            if (el.status) { el.status.textContent = ''; el.status.className = 'analytics-status-msg'; }
+            updateAllViews();
+        },
         state
     };
 

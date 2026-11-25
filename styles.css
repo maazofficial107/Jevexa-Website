@@ -256,6 +256,8 @@ button, input, textarea { font-family: inherit; }
     border-color: var(--primary);
     background: rgba(139, 92, 246, 0.1);
 }
+.btn-sm { padding: 8px 16px; font-size: 13px; border-radius: 10px; gap: 7px; }
+.btn-xs { padding: 6px 12px; font-size: 12px; border-radius: 8px; gap: 6px; }
 .btn-nav {
     padding: 10px 22px; font-size: 14px;
     background: var(--gradient);
@@ -1038,7 +1040,7 @@ section { padding: 100px 0; position: relative; }
 .faq-answer {
     max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s;
 }
-.faq-item.active .faq-answer { max-height: 300px; }
+.faq-item.active .faq-answer { max-height: 600px; }
 .faq-answer p {
     padding: 0 24px 20px; font-size: 14px; color: var(--text-muted); line-height: 1.7;
 }
@@ -1079,17 +1081,22 @@ section { padding: 100px 0; position: relative; }
     border-top: 1px solid var(--border); padding: 60px 0 30px;
     background: rgba(5,5,15,0.8);
 }
-.footer-top {
+.footer-top,
+.footer-grid {
     display: flex; justify-content: space-between; gap: 40px; margin-bottom: 40px; flex-wrap: wrap;
 }
 .footer-brand p { font-size: 14px; color: var(--text-muted); margin-top: 12px; max-width: 260px; }
-.footer-links { display: flex; gap: 60px; flex-wrap: wrap; }
-.footer-links h4 { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: var(--text); }
-.footer-links a {
+.footer-links,
+.footer-links-group { display: flex; gap: 60px; flex-wrap: wrap; }
+.footer-links h4,
+.footer-links-group h4 { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: var(--text); }
+.footer-links a,
+.footer-links-group a {
     display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 10px;
     transition: color 0.3s;
 }
-.footer-links a:hover { color: var(--primary-light); }
+.footer-links a:hover,
+.footer-links-group a:hover { color: var(--primary-light); }
 .footer-bottom {
     display: flex; justify-content: space-between; align-items: center;
     padding-top: 24px; border-top: 1px solid var(--border); flex-wrap: wrap; gap: 16px;
@@ -7604,7 +7611,7 @@ html[data-jevexa-theme="light"] .jevexa-support-btn {
 html,
 body {
     max-width: 100%;
-    overflow-x: hidden !important;
+    overflow-x: clip !important;
 }
 
 * {
@@ -7928,8 +7935,12 @@ body {
 }
 
 @media (max-width: 380px) {
-    .nav-cta-group .btn-nav { padding: 8px 10px; font-size: 12px; }
-    .nav-cta-group .btn-nav i { display: none; }
+    .nav-container { padding: 0 12px; gap: 6px; }
+    .nav-actions { gap: 6px; }
+    .nav-cta-group .btn-nav,
+    .nav-actions .btn-nav { padding: 8px 10px; font-size: 12px; min-height: 40px; }
+    .nav-cta-group .btn-nav i,
+    .nav-actions .btn-nav i { display: none; }
     .login-form-area {
         padding-left: 16px !important;
         padding-right: 16px !important;
@@ -7942,6 +7953,11 @@ body {
 }
 
 @media (max-width: 480px) {
+    .nav-actions .btn-nav {
+        padding: 8px 12px;
+        font-size: 12.5px;
+        white-space: nowrap;
+    }
     .jevexa-support-btn {
         width: 48px;
         height: 48px;
@@ -10678,9 +10694,8 @@ body.chat-is-resizing {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    height: 60px;
     min-height: 60px;
-    max-height: 60px;
+    height: auto;
     padding: max(8px, env(safe-area-inset-top)) 24px 8px;
     background: linear-gradient(180deg, rgba(16, 14, 38, 0.98), rgba(11, 12, 28, 0.95));
     border-bottom: 1px solid rgba(139, 92, 246, 0.25);
@@ -10688,6 +10703,7 @@ body.chat-is-resizing {
     z-index: 100;
     flex-shrink: 0;
     width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
 }
 
@@ -10698,18 +10714,30 @@ body.chat-is-resizing {
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
+}
+
+.workspace-top-left {
+    flex: 1 1 auto;
+}
+
+.workspace-top-right,
+.workspace-header-right {
+    flex-shrink: 0;
 }
 
 .workspace-header-center {
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
 }
 
 .workspace-title-group {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
 }
 
 .workspace-tool-name {
@@ -11182,12 +11210,36 @@ body.coming-soon-open {
         align-items: flex-start;
         gap: 10px;
     }
-    .workspace-header {
-        padding-left: 14px;
-        padding-right: 14px;
+    .workspace-header,
+    .workspace-top-bar {
+        padding: max(8px, env(safe-area-inset-top)) 10px 8px;
+        gap: 6px;
     }
-    .workspace-title-info .workspace-badge {
+    .workspace-top-left,
+    .workspace-top-right,
+    .workspace-header-left,
+    .workspace-header-right,
+    .workspace-header-center {
+        gap: 6px;
+    }
+    .workspace-title-info .workspace-badge,
+    .workspace-tool-tagline {
         display: none;
+    }
+    .workspace-tool-name {
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 125px;
+    }
+    .workspace-top-bar .workspace-avatar {
+        display: none;
+    }
+    #teamInviteModalBtn {
+        padding: 7px 10px !important;
+        font-size: 12px !important;
+        white-space: nowrap;
     }
     .workspace-back-btn span {
         display: none;
@@ -11195,7 +11247,52 @@ body.coming-soon-open {
     .workspace-back-btn {
         padding: 0 12px;
     }
-    .workspace-credits-badge span:last-child {
+    .workspace-credits-badge {
+        padding: 4px 8px;
+        font-size: 11px;
+        gap: 5px;
+        white-space: nowrap;
+    }
+    .workspace-credits-badge span:last-child:not(.credits-count) {
+        display: none;
+    }
+    .chatbot-header {
+        gap: 6px !important;
+        padding: max(8px, env(safe-area-inset-top)) 10px 8px !important;
+    }
+    .chatbot-header-left,
+    .chatbot-header-center,
+    .chatbot-header-right {
+        gap: 6px !important;
+        min-width: 0;
+    }
+    .chatbot-header-center {
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+    .chatbot-header-right {
+        flex-shrink: 0;
+    }
+    .chatbot-info {
+        min-width: 0;
+    }
+    .chatbot-info h4 {
+        font-size: 13.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .chatbot-info .status {
+        font-size: 10.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+    }
+    .chatbot-avatar {
+        display: none;
+    }
+    .chat-drawer-btn-label {
         display: none;
     }
     .workspace-panel {
@@ -11541,7 +11638,7 @@ html[data-jevexa-theme="light"] .content-skeleton-bar {
 }
 .about-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
     gap: 24px;
     margin: 36px 0;
 }
@@ -11670,6 +11767,9 @@ body.is-offline .offline-indicator {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
     pointer-events: auto;
+}
+body.is-offline .toast.show {
+    bottom: 82px;
 }
 
 
@@ -11929,6 +12029,7 @@ body.is-offline .offline-indicator {
 #crmDrawerAiScoreBox[hidden],
 #outreachAbSubjectContainer[hidden],
 #teamInviteModal[hidden],
+#workflowExecModal[hidden],
 #workflowRunModal[hidden],
 .crm-modal-backdrop[hidden],
 .crm-drawer-backdrop[hidden],
@@ -11980,11 +12081,17 @@ body.is-offline .offline-indicator {
 }
 
 #ocrWorkspace .workspace-scroll-wrap,
+#ocrWorkspace .workspace-content-scroll,
 #socialWorkspace .workspace-scroll-wrap,
+#socialWorkspace .workspace-content-scroll,
 #analyticsWorkspace .workspace-scroll-wrap,
+#analyticsWorkspace .workspace-content-scroll,
 #teamAdminWorkspace .workspace-scroll-wrap,
+#teamAdminWorkspace .workspace-content-scroll,
 #workflowsWorkspace .workspace-scroll-wrap,
-#dataWorkspace .workspace-scroll-wrap {
+#workflowsWorkspace .workspace-content-scroll,
+#dataWorkspace .workspace-scroll-wrap,
+#dataWorkspace .workspace-content-scroll {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -13865,7 +13972,7 @@ body.is-offline .offline-indicator {
 /* Social Media Assistant */
 .social-hooks-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
     gap: 14px;
     margin-top: 14px;
 }
@@ -14199,6 +14306,7 @@ body.is-offline .offline-indicator {
 .url-input-wrap {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     position: relative;
     gap: 10px;
 }
@@ -14911,7 +15019,7 @@ body.is-offline .offline-indicator {
 
 @media (max-width: 960px) {
     .tool-workspace-grid {
-        grid-template-columns: 1fr !important;
+        grid-template-columns: minmax(0, 1fr) !important;
         gap: 16px !important;
     }
 }
@@ -14923,6 +15031,9 @@ body.is-offline .offline-indicator {
     border-radius: 16px !important;
     padding: 20px !important;
     box-sizing: border-box;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -15194,6 +15305,7 @@ body.is-offline .offline-indicator {
 .calendar-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -15707,12 +15819,14 @@ body.is-offline .offline-indicator {
 
 @media (max-width: 960px) {
     .tool-workspace-grid {
-        grid-template-columns: 1fr !important;
+        grid-template-columns: minmax(0, 1fr) !important;
         gap: 16px !important;
     }
     .tool-pane-setup,
     .tool-pane-preview {
         padding: 16px !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
     }
     .data-summary-grid {
         grid-template-columns: repeat(3, 1fr) !important;
@@ -15790,6 +15904,290 @@ body.is-offline .offline-indicator {
     gap: 8px;
 }
 
+/* Override .btn-outline full-width inside workspace toolbars, action rows, and tabs */
+.ocr-tabs,
+.ocr-actions-bar,
+.calendar-actions,
+.content-output-actions,
+.content-presets-row,
+.crm-modal-actions,
+.crm-drawer-actions,
+.crm-toolbar-actions,
+.builder-controls,
+.analytics-actions,
+.analytics-table-actions,
+.analytics-setting-item,
+.dataset-banner-actions,
+.dropzone-actions,
+.audit-actions,
+.outreach-actions-bar,
+.outreach-ab-box,
+.pane-head {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ocr-tabs .btn-outline,
+.ocr-actions-bar .btn-outline,
+.calendar-actions .btn-outline,
+.content-output-actions .btn-outline,
+.content-presets-row .btn-outline,
+.crm-modal-actions .btn-outline,
+.crm-drawer-actions .btn-outline,
+.crm-toolbar-actions .btn-outline,
+.builder-controls .btn-outline,
+.analytics-actions .btn-outline,
+.analytics-table-actions .btn-outline,
+.analytics-setting-item .btn-outline,
+.dataset-banner-actions .btn-outline,
+.dropzone-actions .btn-outline,
+.audit-actions .btn-outline,
+.outreach-actions-bar .btn-outline,
+.outreach-ab-box .btn-outline,
+.pane-head .btn-outline,
+.content-history-item .btn-outline {
+    width: auto;
+}
+
+.ocr-tabs,
+.builder-controls,
+.analytics-actions,
+.analytics-table-actions,
+.dropzone-actions,
+.audit-actions,
+.outreach-actions-bar,
+.ocr-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ocr-total-row.grand {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #22d3ee;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+    margin-top: 4px;
+}
+
+/* Content History Drawer Inner Markup Styling */
+#contentHistoryDrawer.crm-lead-drawer {
+    background: transparent;
+    border-left: none;
+    box-shadow: none;
+}
+
+.crm-lead-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.65);
+    backdrop-filter: blur(4px);
+    z-index: 0;
+}
+
+.crm-lead-drawer-panel {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #0b0f19;
+    border-left: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: -16px 0 50px rgba(0, 0, 0, 0.7);
+}
+
+.crm-lead-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    gap: 12px;
+}
+
+.crm-lead-drawer-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: #f8fafc;
+}
+
+.crm-lead-drawer-close {
+    min-width: 42px;
+    min-height: 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(255, 255, 255, 0.04);
+    color: #f8fafc;
+    font-size: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.crm-lead-drawer-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Workflow Exec Modal, Team Invite Form, & Status Messages */
+.workflow-exec-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 8px;
+}
+
+.workflow-progress-track {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.workflow-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #8b5cf6, #06b6d4);
+    transition: width 0.25s ease;
+}
+
+.workflow-exec-progress-text {
+    font-size: 13px;
+    color: #cbd5e1;
+    margin: 0;
+}
+
+.workflow-exec-logs {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(6, 10, 24, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.crm-input {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.72);
+    color: #f8fafc;
+    font-size: 13.5px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.crm-input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+}
+
+.crm-modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.crm-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.crm-form-group label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #cbd5e1;
+}
+
+.crm-form-group input,
+.crm-form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.72);
+    color: #f8fafc;
+    font-size: 13.5px;
+    box-sizing: border-box;
+}
+
+.ocr-status-msg,
+.social-status-msg,
+.analytics-status-msg,
+.workflow-status-msg,
+.data-status-msg {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+    min-height: 1.2em;
+    color: #94a3b8;
+}
+
+.ocr-status-msg.success,
+.social-status-msg.success,
+.analytics-status-msg.success,
+.workflow-status-msg.success,
+.data-status-msg.success { color: #34d399; }
+
+.ocr-status-msg.error,
+.social-status-msg.error,
+.analytics-status-msg.danger,
+.workflow-status-msg.error,
+.data-status-msg.error { color: #f87171; }
+
+.ocr-status-msg.info,
+.social-status-msg.info,
+.analytics-status-msg.info,
+.workflow-status-msg.info,
+.data-status-msg.info { color: #38bdf8; }
+
+.ocr-status-msg.loading,
+.social-status-msg.loading,
+.analytics-status-msg.loading,
+.data-status-msg.loading { color: #a78bfa; }
+
+/* Strict Mobile Containment for Team, Workflows, Data, Analytics & Social Grids */
+.team-roster-card,
+.team-rbac-card,
+.team-audit-card,
+.workflows-builder-card,
+.workflow-history-card,
+.analytics-table-card,
+.social-calendar-section,
+.ocr-result-card,
+.workspace-container {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.table-responsive,
+.ocr-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.workflow-templates-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)) !important;
+}
+
+.data-rules-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)) !important;
+}
+
 @media (max-width: 640px) {
     .content-output-actions {
         flex-direction: column;
@@ -15807,6 +16205,34 @@ body.is-offline .offline-indicator {
         min-height: 36px;
         display: inline-flex;
         align-items: center;
+    }
+    .calendar-actions {
+        width: 100%;
+    }
+    .calendar-actions .social-view-toggles {
+        margin-right: 0 !important;
+    }
+    .analytics-toolbar-right {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+    .url-input-wrap .analytics-url-input {
+        min-width: 0;
+        width: 100%;
+    }
+    .url-input-wrap .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .workflow-step-card,
+    .team-seat-bar {
+        flex-wrap: wrap;
+    }
+    .workspace-content-scroll {
+        padding: 14px 10px max(28px, env(safe-area-inset-bottom)) !important;
+    }
+    .workspace-container {
+        padding: 0 6px !important;
     }
 }
 

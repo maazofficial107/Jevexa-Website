@@ -112,7 +112,7 @@
     const state = {
         members: loadCachedTeamMembers() || [...DEFAULT_MEMBERS],
         auditLogs: loadCachedAuditLogs() || [...DEFAULT_AUDIT_LOGS],
-        maxSeats: 5,
+        maxSeats: 3,
         userTier: 'free',
         isLoading: false
     };
@@ -411,12 +411,14 @@
                     },
                     body: JSON.stringify({ email, role, currentMemberCount: state.members.length })
                 });
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
                 if (!res.ok) {
                     if (res.status === 402 || res.status === 403) {
                         window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Team seat expansion');
                     }
-                    throw new Error(data.error || 'Failed to dispatch invitation.');
+                    const err = new Error(data.error || 'Failed to dispatch invitation.');
+                    err.status = res.status;
+                    throw err;
                 }
 
                 state.members.push(data.member || {
@@ -434,11 +436,16 @@
                     details: `Dispatched workspace invitation to ${email} as ${role}`,
                     status: "Success"
                 });
+                saveCachedTeam();
                 renderMembers();
                 renderAuditLogs();
                 closeInviteModal();
                 window.showToast?.(`Invitation sent to ${email} as ${role}!`);
             } catch (err) {
+                if (err?.status && err.status >= 400 && err.status < 500) {
+                    window.showToast?.(err.message || 'Could not invite team member.');
+                    return;
+                }
                 console.warn('API invite failed, using local member addition:', err);
                 const fallbackMember = {
                     id: 'mem_' + Date.now(),
@@ -456,6 +463,7 @@
                     details: `Dispatched workspace invitation to ${email} as ${role}`,
                     status: "Success"
                 });
+                saveCachedTeam();
                 renderMembers();
                 renderAuditLogs();
                 closeInviteModal();
@@ -471,7 +479,10 @@
         return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[s]);
     }
 
+    let initialized = false;
     function init() {
+        if (initialized) return;
+        initialized = true;
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
 
@@ -485,7 +496,10 @@
                 if (e.target === inviteModal) closeInviteModal();
             });
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && !inviteModal.hidden) closeInviteModal();
+                if (e.key === 'Escape' && !inviteModal.hidden) {
+                    e.stopPropagation();
+                    closeInviteModal();
+                }
             });
         }
 
@@ -508,11 +522,13 @@
             const timestamp = new Date().toISOString().split('T')[0];
             const lines = [];
 
+            const escCsv = val => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
             // 1. Team Roster Header & Rows
             lines.push('"# WORKSPACE TEAM MEMBERS"');
             lines.push('"Name","Email","Role","Status","Last Active"');
             state.members.forEach(m => {
-                lines.push(`"${m.name || ''}","${m.email || ''}","${m.role || ''}","${m.status || ''}","${m.last_active_at || ''}"`);
+                lines.push([m.name || '', m.email || '', m.role || '', m.status || '', m.last_active_at || ''].map(escCsv).join(','));
             });
 
             lines.push(''); // Blank spacer
@@ -521,7 +537,7 @@
             lines.push('"# WORKSPACE AUDIT LOG"');
             lines.push('"Timestamp","Action","Actor","Details","Status"');
             state.auditLogs.forEach(l => {
-                lines.push(`"${l.timestamp || ''}","${l.action || ''}","${l.actor || ''}","${(l.details || '').replace(/"/g, '""')}","${l.status || ''}"`);
+                lines.push([l.timestamp || '', l.action || '', l.actor || '', l.details || '', l.status || ''].map(escCsv).join(','));
             });
 
             const csvContent = lines.join('\n');
@@ -543,7 +559,20 @@
         openInvite: openInviteModal,
         closeInvite: closeInviteModal,
         renderMembers,
-        renderAuditLogs
+        renderAuditLogs,
+        resetOnLogout: () => {
+            state.members = [...DEFAULT_MEMBERS];
+            state.auditLogs = [...DEFAULT_AUDIT_LOGS];
+            state.maxSeats = 3;
+            state.userTier = 'free';
+            try {
+                localStorage.removeItem(MEMBERS_STORAGE_KEY);
+                localStorage.removeItem(AUDIT_STORAGE_KEY);
+            } catch (_) {}
+            closeInviteModal();
+            renderMembers();
+            renderAuditLogs();
+        }
     };
 
     if (document.readyState === 'loading') {

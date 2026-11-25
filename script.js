@@ -63,6 +63,31 @@ window.JEVEXA_SAFE_INTERACTION = {
     }
 };
 
+window.JEVEXA_CONFIRM = function showJevexaConfirm(options = {}) {
+    return new Promise(resolve => {
+        if (typeof window.openChatConfirmModal === 'function') {
+            let settled = false;
+            const settle = val => {
+                if (settled) return;
+                settled = true;
+                resolve(val);
+            };
+            window.openChatConfirmModal({
+                title: options.title || 'Confirm action',
+                message: options.message || 'Are you sure you want to continue?',
+                confirmText: options.confirmText || 'Confirm',
+                cancelText: options.cancelText || 'Cancel',
+                danger: options.danger !== false,
+                iconClass: options.iconClass || 'fa-triangle-exclamation',
+                onConfirm: () => settle(true),
+                onCancel: () => settle(false)
+            });
+            return;
+        }
+        resolve(false);
+    });
+};
+
 let userInteracted = false;
 window.addEventListener('pointerdown', () => { userInteracted = true; }, { once: true, passive: true });
 window.addEventListener('keydown', () => { userInteracted = true; }, { once: true, passive: true });
@@ -1689,12 +1714,12 @@ function openSettingsView(user) {
       } else if (section === 'personalization') {
         const chatCustom = (() => {
           try {
-            return JSON.parse(localStorage.getItem(`jevexa_${user.id}_chat_settings`) || localStorage.getItem('jevexa_chat_settings_global') || '{}');
+            return JSON.parse(localStorage.getItem(`jevexa_${user.id}_chat_settings`) || '{}');
           } catch (_) { return {}; }
         })();
         const memories = (() => {
           try {
-            return JSON.parse(localStorage.getItem(`jevexa_${user.id}_memories`) || localStorage.getItem('jevexa_memories_global') || '[]');
+            return JSON.parse(localStorage.getItem(`jevexa_${user.id}_memories`) || '[]');
           } catch (_) { return []; }
         })();
         content.innerHTML = `
@@ -1780,26 +1805,37 @@ function openSettingsView(user) {
       if (!actionName) return;
       if (actionName === 'logout') { await logoutUser(); backdrop.style.display = 'none'; return; }
       if (actionName === 'logout-all') {
-        if (!confirm('This will sign out all active sessions for this account. Continue?')) return;
+        const confirmed = await window.JEVEXA_CONFIRM({
+          title: 'Sign out all devices?',
+          message: 'This will sign out all active sessions for this account. Continue?',
+          confirmText: 'Sign Out All',
+          danger: true,
+          iconClass: 'fa-right-from-bracket'
+        });
+        if (!confirmed) return;
         const { error } = await supabaseClient.auth.signOut({ scope: 'global' });
         if (error) { console.error(error); showToast('Could not sign out all devices.'); }
-        else { backdrop.style.display = 'none'; showToast('Signed out of all devices.'); }
+        else {
+          applyAuthState(null);
+          backdrop.style.display = 'none';
+          showToast('Signed out of all devices.');
+        }
         return;
       }
       if (actionName === 'reset-password') {
-    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin
-    }, { getKey: event => event.target instanceof Element ? event.target.closest('button') || panel : panel });
+        const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin
+        });
 
-    if (error) {
-        console.error(error);
-        showToast('Could not send reset email. Check your Supabase email settings.');
+        if (error) {
+          console.error(error);
+          showToast('Could not send reset email. Check your Supabase email settings.');
+          return;
+        }
+
+        showToast('Password reset link sent! Please check your email inbox.');
         return;
-    }
-
-    showToast('Successfully sent! Password reset link email kar di hai. Apna inbox check karein.');
-    return;
-}
+      }
 
       if (actionName === 'refresh-credits') { await loadCredits(); return; }
       if (actionName === 'refresh-transactions') {
@@ -1897,6 +1933,16 @@ async function logoutUser() {
 
     // Always cleanly reset auth state and UI regardless of network glitches
     applyAuthState(null);
+    window.JEVEXA_CLEAR_ACCOUNT_STATE?.();
+    window.JEVEXA_CONTENT?.resetOnLogout?.();
+    window.JEVEXA_OCR?.resetOnLogout?.();
+    window.JEVEXA_SOCIAL?.resetOnLogout?.();
+    window.JEVEXA_ANALYTICS?.resetOnLogout?.();
+    window.JEVEXA_TEAM?.resetOnLogout?.();
+    window.JEVEXA_WORKFLOWS?.resetOnLogout?.();
+    window.JEVEXA_DATA_MGMT?.resetOnLogout?.();
+    window.JEVEXA_CRM?.resetOnLogout?.();
+    window.JEVEXA_OUTREACH?.resetOnLogout?.();
 
     // Clean up all modals and backdrops
     closeLogin();
@@ -1904,6 +1950,12 @@ async function logoutUser() {
     if (accountBackdrop) accountBackdrop.style.display = 'none';
     const settingsPanel = document.getElementById('settingsPanel');
     if (settingsPanel) settingsPanel.remove();
+    const chatConfirmModal = document.getElementById('chatConfirmModal');
+    if (chatConfirmModal) {
+        chatConfirmModal.hidden = true;
+        chatConfirmModal.classList.remove('open');
+        chatConfirmModal.setAttribute('aria-hidden', 'true');
+    }
     const chatCustomModal = document.getElementById('chatCustomizationModal');
     if (chatCustomModal) {
         chatCustomModal.hidden = true;
@@ -2000,6 +2052,16 @@ function applyAuthState(user) {
         try {
             localStorage.removeItem('jevexa_persisted_session');
             localStorage.removeItem('jevexa_persisted_credits');
+            localStorage.removeItem('jevexa_chat_settings_global');
+            localStorage.removeItem('jevexa_memories_global');
+            localStorage.removeItem('jevexa_team_members_cache');
+            localStorage.removeItem('jevexa_team_audit_cache');
+            localStorage.removeItem('jevexa_workflow_runs_cache');
+            localStorage.removeItem('jevexa_cached_outreach_sequences');
+            localStorage.removeItem('jevexa_content_history');
+            localStorage.removeItem('jevexa_social_calendar_cache');
+            sessionStorage.removeItem('jevexa_crm_leads_cache');
+            sessionStorage.removeItem('jevexa_outreach_sequences_cache');
             document.documentElement.classList.remove('jevexa-authenticated-pending');
         } catch (_) {}
     }
@@ -3248,8 +3310,7 @@ if (newsletterForm) {
                 showToast(data.error || 'Subscription failed. Please try again.');
             }
         } catch {
-            showToast('✓ Thank you for subscribing to Jevexa updates!');
-            newsletterForm.reset();
+            showToast('Could not connect to newsletter service. Please try again.');
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
@@ -3372,24 +3433,8 @@ window.JEVEXA_SAFE_INTERACTION.bind(chatbotToggle, 'click', () => {
     }
 });
 
-window.JEVEXA_SAFE_INTERACTION.bind(chatbotClose, 'click', () => {
-    closeChatbot();
-});
-
 document.addEventListener('keydown', event => {
     if (!chatbotWindow?.classList.contains('open')) return;
-    if (event.key === 'Escape') {
-        const confirmModal = document.getElementById('chatConfirmModal');
-        if (confirmModal && !confirmModal.hidden && confirmModal.classList.contains('open')) return;
-        const customModal = document.getElementById('chatCustomizationModal');
-        if (customModal && !customModal.hidden && customModal.classList.contains('open')) return;
-        if (document.querySelector('.chat-history-dropdown-menu')) return;
-        if (document.querySelector('.selector-menu:not([hidden])')) return;
-        if (chatbotWindow.classList.contains('chat-history-open')) return;
-        event.preventDefault();
-        closeChatbot();
-        return;
-    }
     if (event.key !== 'Tab') return;
     const focusable = Array.from(chatbotWindow.querySelectorAll(
         'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], summary'
@@ -4235,14 +4280,14 @@ const JEVEXA_PLANS = {
     const style = document.createElement('style');
     style.id = 'jevexaSettingsStyle';
     style.textContent = `
-      #settingsPanel{width:min(1040px,calc(100% - 24px));height:min(740px,90vh);display:flex;overflow:hidden;border:1px solid rgba(139,92,246,.28);border-radius:22px;background:radial-gradient(circle at top right,rgba(139,92,246,.12),transparent 35%),var(--bg-2,#0a0a1a);color:var(--text,#f0f0ff);box-shadow:0 30px 100px rgba(0,0,0,.55)}
+      #settingsPanel{position:relative;width:min(1040px,calc(100% - 24px));height:min(740px,90vh);display:flex;overflow:hidden;border:1px solid rgba(139,92,246,.28);border-radius:22px;background:radial-gradient(circle at top right,rgba(139,92,246,.12),transparent 35%),var(--bg-2,#0a0a1a);color:var(--text,#f0f0ff);box-shadow:0 30px 100px rgba(0,0,0,.55)}
       #settingsPanel>aside{width:260px;flex-shrink:0;padding:22px 14px;border-right:1px solid var(--border,rgba(255,255,255,.1));display:flex;flex-direction:column;overflow-y:auto}
       #settingsPanel .settings-brand{display:grid;gap:4px;padding:4px 10px 20px}.settings-brand span,.settings-eyebrow{font-size:10px;letter-spacing:1.5px;font-weight:800;color:var(--primary-light,#a78bfa)}.settings-brand strong{font-size:21px}.settings-brand small,.jevexa-settings-nav small{font-size:11px;color:var(--text-muted,#a0a0c0)}
       #settingsPanel #settingsNav{display:grid;gap:5px}.jevexa-settings-nav{display:flex;align-items:center;gap:11px;width:100%;padding:11px 10px;text-align:left;border:1px solid transparent;border-radius:12px;background:transparent;color:var(--text-muted,#a0a0c0);cursor:pointer}.jevexa-settings-nav.active{background:rgba(139,92,246,.14);border-color:var(--border,rgba(139,92,246,.25));color:var(--text,#fff)}.jevexa-settings-nav>span:last-child{display:grid;gap:3px}.jevexa-settings-nav strong{font-size:13px}.settings-nav-icon{font-size:18px;width:25px;text-align:center}.settings-logout-btn{margin-top:auto;margin-top:22px;padding:11px;border-radius:11px;border:1px solid rgba(248,113,113,.25);background:rgba(248,113,113,.06);color:#fca5a5;cursor:pointer}
       #settingsPanel>main{flex:1;min-width:0;overflow-y:auto;padding:26px}.settings-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.settings-topbar h2{font-size:26px;margin:5px 0 0}.settings-close{width:42px;height:42px;min-width:42px;min-height:42px;display:inline-flex;align-items:center;justify-content:center;border-radius:11px;border:1px solid var(--border,rgba(255,255,255,.12));background:rgba(255,255,255,.04);color:inherit;font-size:24px;cursor:pointer}
       .settings-card{padding:20px;margin-bottom:15px;border:1px solid var(--border,rgba(139,92,246,.2));border-radius:16px;background:rgba(255,255,255,.025)}.settings-card-heading h3{font-size:15px;margin:0 0 4px}.settings-card-heading p,.settings-muted{font-size:12px;line-height:1.6;color:var(--text-muted,#a0a0c0);margin:0 0 16px}.settings-form{display:grid;gap:13px}.settings-form label{display:grid;gap:7px;font-size:12px;color:var(--text-muted,#a0a0c0)}#settingsPanel input:not([type=checkbox]),#settingsPanel select,#settingsPanel textarea{width:100%;padding:11px 12px;border:1px solid var(--border,rgba(139,92,246,.25));border-radius:10px;background:rgba(0,0,0,.15);color:var(--text,#f0f0ff);outline:none}#settingsPanel select option{background-color:#0d111e;color:#f1f5f9}#settingsPanel input:focus,#settingsPanel select:focus,#settingsPanel textarea:focus{border-color:var(--primary,#8b5cf6)}#settingsPanel input:disabled{opacity:.65}.settings-action-btn,.settings-secondary-btn{padding:10px 13px;border-radius:10px;border:1px solid rgba(139,92,246,.35);background:rgba(139,92,246,.16);color:inherit;font-size:12px;font-weight:700;cursor:pointer}.settings-secondary-btn{background:transparent;border-color:var(--border,rgba(255,255,255,.15))}.settings-action-btn:disabled{opacity:.6;cursor:wait}.settings-info-row,.settings-transaction{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.07);font-size:12px}.settings-info-row:last-child,.settings-transaction:last-child{border-bottom:0}.settings-info-row span,.settings-transaction small{color:var(--text-muted,#a0a0c0)}.settings-choice-grid{display:flex;gap:8px;flex-wrap:wrap}.settings-choice{padding:10px 13px;border:1px solid var(--border,rgba(255,255,255,.15));border-radius:10px;background:transparent;color:inherit;cursor:pointer}.settings-choice.active{background:rgba(139,92,246,.18);border-color:var(--primary,#8b5cf6)}.settings-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.07)}.settings-toggle-row:last-of-type{border-bottom:0}.settings-toggle-row span{display:grid;gap:3px}.settings-toggle-row strong{font-size:13px}.settings-toggle-row small{font-size:11px;color:var(--text-muted,#a0a0c0)}.settings-toggle-row input{width:18px;height:18px;accent-color:var(--primary,#8b5cf6)}.settings-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.settings-stats>div{padding:13px;border-radius:12px;background:rgba(139,92,246,.08);display:grid;gap:7px}.settings-stats small{font-size:11px;color:var(--text-muted,#a0a0c0)}.settings-stats strong{font-size:21px;overflow-wrap:anywhere}.settings-transaction>span{display:grid;gap:4px}.settings-transaction strong{font-size:12px}.settings-transaction b{font-size:13px}
       html.jevexa-reduce-motion *,html.jevexa-reduce-motion *::before,html.jevexa-reduce-motion *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}html.jevexa-compact .settings-card{padding:14px}html.jevexa-compact #settingsPanel>main{padding:20px}
-      @media(max-width:700px){#settingsPanel{width:100%;height:100dvh;max-height:100dvh;border-radius:0;flex-direction:column}#settingsPanel>aside{width:100%;max-height:220px;padding:12px;border-right:0;border-bottom:1px solid var(--border,rgba(255,255,255,.1))}#settingsPanel .settings-brand{padding:3px 6px 10px}.settings-brand strong{font-size:17px}#settingsPanel #settingsNav{display:flex;overflow-x:auto;padding-bottom:4px}.jevexa-settings-nav{min-width:150px;padding:8px}.settings-logout-btn{position:absolute;right:64px;top:12px;margin:0;padding:8px 10px}#settingsPanel>main{padding:17px}.settings-stats{grid-template-columns:1fr}.settings-topbar h2{font-size:22px}}
+      @media(max-width:700px){#settingsPanel{width:100%;height:100dvh;max-height:100dvh;border-radius:0;flex-direction:column}#settingsPanel>aside{width:100%;max-height:220px;padding:12px;border-right:0;border-bottom:1px solid var(--border,rgba(255,255,255,.1))}#settingsPanel .settings-brand{padding:3px 6px 10px}.settings-brand strong{font-size:17px}#settingsPanel #settingsNav{display:flex;overflow-x:auto;padding-bottom:4px}.jevexa-settings-nav{min-width:150px;padding:8px}.settings-logout-btn{position:absolute;right:64px;top:12px;z-index:2;margin:0;padding:8px 12px;min-height:40px}#settingsPanel>main{padding:17px}.settings-stats{grid-template-columns:1fr}.settings-topbar h2{font-size:22px}}
     `;
     document.head.appendChild(style);
 })();
@@ -4253,6 +4298,7 @@ const JEVEXA_PLANS = {
     const params = new URLSearchParams(window.location.search);
     const payment = params.get('payment');
     if (!payment) return;
+    window.JEVEXA_SAFEPAY_RETURN_HANDLED = true;
     if (payment === 'cancelled') {
         if (typeof showToast === 'function') showToast('Payment cancelled. No credits were added. You can try again anytime.');
         params.delete('payment');
@@ -4532,7 +4578,7 @@ const JEVEXA_PLANS = {
         [contentWorkspace, crmWorkspace, outreachWorkspace, ocrWorkspace, socialWorkspace, analyticsWorkspace, teamAdminWorkspace, workflowsWorkspace, dataWorkspace].forEach(ws => {
             if (ws && (!except || ws.id !== `${except}Workspace`)) {
                 ws.scrollTop = 0;
-                const wrap = ws.querySelector('.workspace-scroll-wrap');
+                const wrap = ws.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
                 if (wrap) wrap.scrollTop = 0;
             }
         });
@@ -4667,7 +4713,7 @@ const JEVEXA_PLANS = {
             outreachWorkspace.classList.add('open');
             outreachWorkspace.setAttribute('aria-hidden', 'false');
             outreachWorkspace.scrollTop = 0;
-            const scrollWrap = outreachWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = outreachWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -4686,13 +4732,6 @@ const JEVEXA_PLANS = {
             } else {
                 window.addEventListener('outreach:ready', initOutreach, { once: true });
                 document.addEventListener('outreach:ready', initOutreach, { once: true });
-            }
-            if (lead) {
-                if (typeof window.JEVEXA_OUTREACH?.prefillLead === 'function') {
-                    window.JEVEXA_OUTREACH.prefillLead(lead);
-                } else if (typeof window.JEVEXA_OUTREACH?.openWithLead === 'function') {
-                    window.JEVEXA_OUTREACH.openWithLead(lead);
-                }
             }
         }
         if (pushState) {
@@ -4722,7 +4761,7 @@ const JEVEXA_PLANS = {
             ocrWorkspace.classList.add('open');
             ocrWorkspace.setAttribute('aria-hidden', 'false');
             ocrWorkspace.scrollTop = 0;
-            const scrollWrap = ocrWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = ocrWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -4754,7 +4793,7 @@ const JEVEXA_PLANS = {
             socialWorkspace.classList.add('open');
             socialWorkspace.setAttribute('aria-hidden', 'false');
             socialWorkspace.scrollTop = 0;
-            const scrollWrap = socialWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = socialWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -4786,7 +4825,7 @@ const JEVEXA_PLANS = {
             analyticsWorkspace.classList.add('open');
             analyticsWorkspace.setAttribute('aria-hidden', 'false');
             analyticsWorkspace.scrollTop = 0;
-            const scrollWrap = analyticsWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = analyticsWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -4818,7 +4857,7 @@ const JEVEXA_PLANS = {
             teamAdminWorkspace.classList.add('open');
             teamAdminWorkspace.setAttribute('aria-hidden', 'false');
             teamAdminWorkspace.scrollTop = 0;
-            const scrollWrap = teamAdminWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = teamAdminWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -4851,7 +4890,7 @@ const JEVEXA_PLANS = {
             workflowsWorkspace.classList.add('open');
             workflowsWorkspace.setAttribute('aria-hidden', 'false');
             workflowsWorkspace.scrollTop = 0;
-            const scrollWrap = workflowsWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = workflowsWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -4885,7 +4924,7 @@ const JEVEXA_PLANS = {
             dataWorkspace.classList.add('open');
             dataWorkspace.setAttribute('aria-hidden', 'false');
             dataWorkspace.scrollTop = 0;
-            const scrollWrap = dataWorkspace.querySelector('.workspace-scroll-wrap');
+            const scrollWrap = dataWorkspace.querySelector('.workspace-scroll-wrap, .workspace-content-scroll');
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
@@ -5464,8 +5503,14 @@ const JEVEXA_PLANS = {
     // Keyboard ESC handler
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' || event.key === 'Esc') {
+            const accountBackdrop = document.getElementById('jevexaAccountBackdrop');
+            if (accountBackdrop && getComputedStyle(accountBackdrop).display !== 'none') {
+                event.preventDefault();
+                accountBackdrop.style.display = 'none';
+                return;
+            }
             const hasActiveInnerModal = document.querySelector(
-                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, #contentHistoryDrawer.open, #contentHistoryDrawer:not([hidden]), .crm-lead-drawer.open, .upgrade-modal.open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #supportModal:not([hidden])'
+                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, #contentHistoryDrawer.open, #contentHistoryDrawer:not([hidden]), .crm-lead-drawer.open, .upgrade-modal.open, #upgradeModal.is-open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #chatConfirmModal:not([hidden]), #chatConfirmModal.open, .chat-history-dropdown-menu, .selector-menu:not([hidden]), .chat-select-menu:not([hidden]), #chatbotWindow.chat-history-open, #supportModal:not([hidden])'
             );
             const activeModalOrDrawer = hasActiveInnerModal;
             if (activeModalOrDrawer) {

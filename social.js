@@ -302,6 +302,7 @@
 
     async function generateSocialPost(e) {
         if (e) e.preventDefault();
+        if (state.isGenerating) return;
         const topic = topicInput ? topicInput.value.trim() : '';
         if (!topic) {
             if (statusEl) {
@@ -356,9 +357,12 @@
             cta
         };
 
+        const socialController = new AbortController();
+        const socialTimeoutId = setTimeout(() => socialController.abort(), 35000);
         try {
             const res = await fetch('/api/social/generate', {
                 method: 'POST',
+                signal: socialController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -367,12 +371,14 @@
                 body: JSON.stringify(payload)
             });
 
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Social Media Assistant credits');
                 }
-                throw new Error(result.error || 'Failed to generate social media content.');
+                const err = new Error(result.error || 'Failed to generate social media content.');
+                err.status = res.status;
+                throw err;
             }
 
             renderPostPreview(result.data);
@@ -389,6 +395,14 @@
             }
             window.showToast?.('Social post generated!');
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                if (statusEl) {
+                    statusEl.textContent = err.message || 'Could not generate social post.';
+                    statusEl.className = 'social-status-msg error';
+                }
+                window.showToast?.(err.message || 'Could not generate social post.');
+                return;
+            }
             console.warn('Social Cloud API notice, activating deterministic fallback:', err);
             const fallbackPost = deterministicClientSocial(topic, platform, tone, goal, cta);
             renderPostPreview(fallbackPost);
@@ -398,6 +412,7 @@
             }
             window.showToast?.('Social post generated!');
         } finally {
+            clearTimeout(socialTimeoutId);
             state.isGenerating = false;
             if (generateBtn) {
                 generateBtn.disabled = false;
@@ -445,8 +460,8 @@
         for (let index = 0; index < count; index++) {
             const dayCard = document.createElement('div');
             dayCard.className = `social-cal-day glass${isMonth ? ' is-month-cell' : ''}`;
-            const scheduledPost = state.scheduledCalendar[index % (state.scheduledCalendar.length || 1)];
-            const hasPost = state.scheduledCalendar.length > 0 && (index < state.scheduledCalendar.length || (!isMonth && index % 2 === 0));
+            const scheduledPost = state.scheduledCalendar[index] || null;
+            const hasPost = Boolean(scheduledPost);
             const dayLabel = isMonth ? `Day ${index + 1}` : dayNames[index % 7];
 
             dayCard.innerHTML = `
@@ -456,8 +471,8 @@
                 </div>
                 <div class="social-cal-day-body">
                     ${hasPost && scheduledPost ? `
-                        <div class="social-cal-entry status-${scheduledPost.status.toLowerCase()}" style="padding:6px 8px; border-radius:6px; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3);">
-                            <span class="social-cal-platform" style="font-size:11px; font-weight:700; color:#c084fc;"><i class="fab fa-${scheduledPost.platform}"></i> ${scheduledPost.platform}</span>
+                        <div class="social-cal-entry status-${escapeHtml(scheduledPost.status.toLowerCase())}" style="padding:6px 8px; border-radius:6px; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.3);">
+                            <span class="social-cal-platform" style="font-size:11px; font-weight:700; color:#c084fc;"><i class="fab fa-${escapeHtml(scheduledPost.platform)}"></i> ${escapeHtml(scheduledPost.platform)}</span>
                             <p class="social-cal-snippet" style="font-size:11.5px; margin:4px 0 0; line-height:1.3; color:#f1f5f9;">${escapeHtml(scheduledPost.content.slice(0, isMonth ? 45 : 75))}...</p>
                         </div>
                     ` : '<span class="social-cal-empty" style="font-size:11px; color:#64748b;">No post scheduled</span>'}
@@ -467,7 +482,10 @@
         }
     }
 
+    let initialized = false;
     function init() {
+        if (initialized) return;
+        initialized = true;
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(form, 'submit', generateSocialPost);
@@ -530,18 +548,23 @@
         bindSafe(copyPostBtn, 'click', () => {
             if (!postBodyEl) return;
             const fullContent = `${postBodyEl.value}\n\n${(state.currentPost?.hashtags || []).join(' ')}`;
-            navigator.clipboard.writeText(fullContent)
-                .then(() => {
-                    window.showToast?.('Post draft and hashtags copied to clipboard!');
-                    if (statusEl) {
-                        statusEl.textContent = 'Post copied to clipboard.';
-                        statusEl.className = 'social-status-msg success';
-                    }
-                })
-                .catch(() => {
-                    downloadFile(`Social_Post_${new Date().toISOString().split('T')[0]}.txt`, fullContent, 'text/plain');
-                    window.showToast?.('Post draft saved to file!');
-                });
+            const fallbackDownload = () => {
+                downloadFile(`Social_Post_${new Date().toISOString().split('T')[0]}.txt`, fullContent, 'text/plain');
+                window.showToast?.('Post draft saved to file!');
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(fullContent)
+                    .then(() => {
+                        window.showToast?.('Post draft and hashtags copied to clipboard!');
+                        if (statusEl) {
+                            statusEl.textContent = 'Post copied to clipboard.';
+                            statusEl.className = 'social-status-msg success';
+                        }
+                    })
+                    .catch(fallbackDownload);
+            } else {
+                fallbackDownload();
+            }
         });
 
         // Export Draft directly
@@ -562,7 +585,7 @@
         // Reactive Platform change
         if (platformSelect) {
             bindSafe(platformSelect, 'change', () => {
-                const limits = { twitter: 280, linkedin: 3000, instagram: 2200, facebook: 63206 };
+                const limits = { twitter: 280, threads: 500, linkedin: 3000, instagram: 2200, facebook: 63206 };
                 const plat = platformSelect.value;
                 if (state.currentPost) {
                     state.currentPost.platform = plat;
@@ -618,7 +641,15 @@
         generatePost: generateSocialPost,
         addToCalendar,
         renderCalendar,
-        renderPostPreview
+        renderPostPreview,
+        resetOnLogout: () => {
+            state.isGenerating = false;
+            state.scheduledCalendar = [];
+            try { localStorage.removeItem('jevexa_social_calendar_cache'); } catch (_) {}
+            if (statusEl) { statusEl.textContent = ''; statusEl.className = 'social-status-msg'; }
+            renderPostPreview(DEFAULT_POST);
+            renderCalendar();
+        }
     };
 
     if (document.readyState === 'loading') {

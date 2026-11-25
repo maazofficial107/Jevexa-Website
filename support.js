@@ -125,17 +125,17 @@
         if (/think|reasoning|model|upload|attachment|pdf|zip|file/i.test(q)) {
             return "JEVEXA AI Chat provides tailored models and plan-based file upload capabilities:\n• Free Plan: Allows up to 5 images per message (JPEG, PNG, WebP, GIF; max 5 MB each). PDF, ZIP, and non-image files are locked on Free.\n• Paid Plans (Lite, Pro, Max, Ultra): ALL paid plans unlock Images + PDF + ZIP + files, with progressive scaling across tiers (Lite: 5 files/10MB; Pro: 8 files/25MB; Max: 12 files/50MB; Ultra: 20 files/100MB).\n• Thinking Levels: Lite includes Low thinking; Pro includes Standard thinking; Max and Ultra unlock full Deep Reasoning (Max thinking).\nUpgrade to any paid plan starting from Lite ($4/mo annual or $5 monthly) from the chat header or #pricing section to unlock PDF & ZIP uploads!";
         }
-        if (/tool|feature|capabilities|model|ocr|crm|email|content|social|analytics|workflow/i.test(q)) {
-            return "JEVEXA AI Studio features 10 business tools: AI Chat and Content Generation are live today! The remaining 8 tools (Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management) are rolling out across upcoming releases. You can test live tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
+        if (/tool|feature|capabilities|model|ocr|crm|email|content|social|analytics|workflow|data/i.test(q)) {
+            return "JEVEXA AI Studio features 10 live business tools: AI Chat, Content Generation, Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, User & Admin Management, Workflow Automation, and Data Management. You can test all 10 tools right now with your 100 free credits, or click 'Talk to Human' for custom support.";
         }
         if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
             return "You can connect with our human support team directly! Click the 'Talk to Human' button in this dialog to submit a ticket that alerts Maaz and our engineering team immediately, or reach us at maazofficial107@gmail.com.";
         }
         if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
-            return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across AI Chat and Content Generation. If you forgot your password, use the 'Forgot password?' link in the login dialog.";
+            return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across all 10 AI tools. If you forgot your password, use the 'Forgot password?' link in the login dialog.";
         }
         if (/^(hi|hello|hey|greetings|howdy|salam|aoa)\b/i.test(q)) {
-            return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools (AI Chat & Content Generation), token-weighted credit rates (1 credit per 500 tokens), progressive file upload rules, pricing plans (Lite, Pro, Max, Ultra with 20% annual discount), or account setup. You can also click 'Talk to Human' to reach Maaz directly!";
+            return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our 10 live AI tools (AI Chat, Content Generation, Outreach, CRM, OCR, Social, Analytics, Team Admin, Workflows, Data Management), token-weighted credit rates (1 credit per 500 tokens), progressive file upload rules, pricing plans (Lite, Pro, Max, Ultra with 20% annual discount), or account setup. You can also click 'Talk to Human' to reach Maaz directly!";
         }
         return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools, credit packages (Lite, Pro, Max, Ultra with 20% annual discount), platform features, and account setup. For complex queries or direct account assistance, feel free to click 'Talk to Human' to reach Maaz and our team!";
     }

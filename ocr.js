@@ -365,8 +365,9 @@ Terms: Net 30`
     }
 
     async function extractDocument() {
+        if (state.isProcessing) return;
         const text = textInput ? textInput.value.trim() : '';
-        if (!text) {
+        if (!text && !state.uploadedFileData) {
             if (statusEl) {
                 statusEl.textContent = 'Please paste document text or choose a sample document above.';
                 statusEl.className = 'ocr-status-msg error';
@@ -418,9 +419,12 @@ Terms: Net 30`
             fileSizeBytes: state.uploadedFileSize || undefined
         };
 
+        const ocrController = new AbortController();
+        const ocrTimeoutId = setTimeout(() => ocrController.abort(), 35000);
         try {
             const res = await fetch('/api/ocr/extract', {
                 method: 'POST',
+                signal: ocrController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -429,12 +433,14 @@ Terms: Net 30`
                 body: JSON.stringify(payload)
             });
 
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             if (!res.ok) {
                 if (res.status === 402) {
                     window.JEVEXA_SHOW_UPGRADE_MODAL?.('Pro', 'Document AI & OCR credits');
                 }
-                throw new Error(result.error || 'Failed to extract document data.');
+                const err = new Error(result.error || 'Failed to extract document data.');
+                err.status = res.status;
+                throw err;
             }
 
             renderExtraction(result.data, text);
@@ -451,6 +457,14 @@ Terms: Net 30`
             }
             window.showToast?.('Document data extracted successfully!');
         } catch (err) {
+            if (err?.status && err.status >= 400 && err.status < 500) {
+                if (statusEl) {
+                    statusEl.textContent = err.message || 'Could not process document request.';
+                    statusEl.className = 'ocr-status-msg error';
+                }
+                window.showToast?.(err.message || 'Could not process document request.');
+                return;
+            }
             console.warn('OCR Cloud API notice, activating deterministic fallback:', err);
             const fallbackData = deterministicClientOcr(text, docType, curr);
             renderExtraction(fallbackData, text);
@@ -460,6 +474,7 @@ Terms: Net 30`
             }
             window.showToast?.('Document data extracted successfully!');
         } finally {
+            clearTimeout(ocrTimeoutId);
             state.isProcessing = false;
             if (extractBtn) {
                 extractBtn.disabled = false;
@@ -470,23 +485,38 @@ Terms: Net 30`
 
     function handleOcrFile(file) {
         if (!file) return;
+        const maxBytes = 10 * 1024 * 1024;
+        if (file.size > maxBytes) {
+            if (statusEl) {
+                statusEl.textContent = 'File exceeds the 10 MB upload limit. Please choose a smaller document.';
+                statusEl.className = 'ocr-status-msg error';
+            }
+            window.showToast?.('File too large (max 10 MB).');
+            return;
+        }
         state.uploadedFileName = file.name;
         state.uploadedFileSize = file.size;
         const nameLower = file.name.toLowerCase();
         const isBinary = file.type.startsWith('image/') || file.type === 'application/pdf' || nameLower.endsWith('.pdf');
         const reader = new FileReader();
+        reader.onerror = () => {
+            if (statusEl) {
+                statusEl.textContent = `Could not read "${file.name}". Please try another file.`;
+                statusEl.className = 'ocr-status-msg error';
+            }
+            window.showToast?.('Failed to read uploaded file.');
+        };
 
         if (isBinary) {
             reader.onload = (e) => {
                 state.uploadedFileData = e.target?.result || null;
                 if (textInput) {
-                    textInput.value = `[Uploaded Binary File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\nVendor: ${file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')}\nInvoice #: INV-${Math.floor(1000 + Math.random() * 9000)}\nDate: ${new Date().toISOString().split('T')[0]}\nDue Date: Net 30\n\nItems:\n1. Enterprise Document Processing Services - Qty: 1 - Unit Price: $350.00 - Total: $350.00\n\nSubtotal: $350.00\nTax (8.25%): $28.88\nGrand Total: $378.88\nPayment Status: Paid`;
+                    textInput.value = `[Uploaded Binary File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)]\nVendor: ${file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')}\nDate: ${new Date().toISOString().split('T')[0]}\nPaste extracted text or additional line-item notes below before re-running if needed.`;
                 }
                 if (statusEl) {
-                    statusEl.textContent = `Document "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Ready to extract.`;
+                    statusEl.textContent = `Document "${file.name}" loaded (${(file.size / 1024).toFixed(1)} KB). Analyzing...`;
                     statusEl.className = 'ocr-status-msg info';
                 }
-                // Automatically run extraction on file load
                 extractDocument();
                 window.showToast?.(`Loaded "${file.name}" for OCR analysis.`);
             };
@@ -508,7 +538,10 @@ Terms: Net 30`
         }
     }
 
+    let initialized = false;
     function init() {
+        if (initialized) return;
+        initialized = true;
         bindSafe(backBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(closeBtn, 'click', () => window.JEVEXA_STUDIO?.closeWorkspaces?.());
         bindSafe(extractBtn, 'click', extractDocument);
@@ -573,6 +606,7 @@ Terms: Net 30`
 
             bindSafe(fileInput, 'change', () => {
                 const file = fileInput.files?.[0];
+                fileInput.value = '';
                 if (file) handleOcrFile(file);
             });
         }
@@ -590,18 +624,23 @@ Terms: Net 30`
                 renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
             }
             const jsonStr = JSON.stringify(state.currentResult, null, 2);
-            navigator.clipboard.writeText(jsonStr)
-                .then(() => {
-                    window.showToast?.('Extracted JSON copied to clipboard!');
-                    if (statusEl) {
-                        statusEl.textContent = 'JSON copied to clipboard.';
-                        statusEl.className = 'ocr-status-msg success';
-                    }
-                })
-                .catch(() => {
-                    downloadFile(`OCR_${state.currentResult.invoice_number || 'document'}.json`, jsonStr, 'application/json');
-                    window.showToast?.('Extracted JSON downloaded as file!');
-                });
+            const fallbackDownload = () => {
+                downloadFile(`OCR_${state.currentResult.invoice_number || 'document'}.json`, jsonStr, 'application/json');
+                window.showToast?.('Extracted JSON downloaded as file!');
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(jsonStr)
+                    .then(() => {
+                        window.showToast?.('Extracted JSON copied to clipboard!');
+                        if (statusEl) {
+                            statusEl.textContent = 'JSON copied to clipboard.';
+                            statusEl.className = 'ocr-status-msg success';
+                        }
+                    })
+                    .catch(fallbackDownload);
+            } else {
+                fallbackDownload();
+            }
         });
 
         // Download JSON file action
@@ -630,18 +669,23 @@ Terms: Net 30`
                 renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
             }
             const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: $${state.currentResult.subtotal}\nTax: $${state.currentResult.tax_amount}\nTotal: $${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
-            navigator.clipboard.writeText(summary)
-                .then(() => {
-                    window.showToast?.('Formatted summary copied to clipboard!');
-                    if (statusEl) {
-                        statusEl.textContent = 'Summary copied to clipboard.';
-                        statusEl.className = 'ocr-status-msg success';
-                    }
-                })
-                .catch(() => {
-                    downloadFile(`OCR_Summary_${state.currentResult.invoice_number || 'document'}.txt`, summary, 'text/plain');
-                    window.showToast?.('Summary downloaded as text file!');
-                });
+            const fallbackDownload = () => {
+                downloadFile(`OCR_Summary_${state.currentResult.invoice_number || 'document'}.txt`, summary, 'text/plain');
+                window.showToast?.('Summary downloaded as text file!');
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(summary)
+                    .then(() => {
+                        window.showToast?.('Formatted summary copied to clipboard!');
+                        if (statusEl) {
+                            statusEl.textContent = 'Summary copied to clipboard.';
+                            statusEl.className = 'ocr-status-msg success';
+                        }
+                    })
+                    .catch(fallbackDownload);
+            } else {
+                fallbackDownload();
+            }
         });
 
         // Download TXT file action
@@ -708,6 +752,17 @@ Terms: Net 30`
                 if (textInput) textInput.value = SAMPLE_DOCS[key];
                 if (SAMPLE_PARSED[key]) renderExtraction(SAMPLE_PARSED[key], SAMPLE_DOCS[key]);
             }
+        },
+        resetOnLogout: () => {
+            state.isProcessing = false;
+            state.uploadedFileData = null;
+            state.uploadedFileName = null;
+            state.uploadedFileSize = null;
+            if (fileInput) fileInput.value = '';
+            if (sampleSelect) sampleSelect.value = 'saas_invoice';
+            if (textInput) textInput.value = SAMPLE_DOCS.saas_invoice;
+            if (statusEl) { statusEl.textContent = ''; statusEl.className = 'ocr-status-msg'; }
+            renderExtraction(SAMPLE_PARSED.saas_invoice, SAMPLE_DOCS.saas_invoice);
         }
     };
 

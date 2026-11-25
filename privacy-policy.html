@@ -130,7 +130,7 @@
                     <p>Our billing engine employs atomic two-phase reservations and automatic release mechanics:</p>
                     <ul>
                         <li><strong>Zero-Lock Guarantees:</strong> If an upstream AI provider times out or returns an error, reserved credits are automatically restored or reconciled. Users are never charged for unanswered requests.</li>
-                        <li><strong>Fixed Rates &amp; Token Metering:</strong> Chat messages are billed at transparent, fixed tier credits (1 Lite / 2 Pro / 4 Max / 8 Ultra), while content generation is metered transparently by token consumption.</li>
+                        <li><strong>Token-Weighted Usage Billing:</strong> AI Chat and Studio AI tools meter credits transparently based on processed tokens and task complexity (starting at 1 credit per 500 tokens on AI Chat with tier multipliers across Lite, Pro, Max, and Ultra).</li>
                         <li><strong>Non-Expiring Active Credits:</strong> Paid credit packages are one-time additions to your account wallet and do not force surprise recurring subscription rebills.</li>
                     </ul>
                 </section>

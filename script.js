@@ -499,15 +499,70 @@ const SUPABASE_KEY = supabaseConfig?.anonKey;
 const hasSupabaseConfig = Boolean(supabaseConfig?.url && supabaseConfig?.anonKey);
 const isStaticPreview = location.port !== '8788' && !hasSupabaseConfig;
 const hasSupabaseSdk = typeof window.supabase?.createClient === 'function';
-let supabaseClient = null;
-if (hasSupabaseConfig && hasSupabaseSdk) {
-    try {
-        supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
-    } catch {
-        console.error('Supabase client initialization failed.');
+
+function getCanonicalAuthRedirectUrl() {
+    const host = (window.location.hostname || '').toLowerCase();
+    if (host === 'jevexa.net' || host === 'www.jevexa.net') {
+        return 'https://jevexa.net';
     }
+    if (host.endsWith('.workers.dev')) {
+        return `https://${window.location.host}`;
+    }
+    return window.location.origin;
 }
+window.JEVEXA_AUTH_REDIRECT_URL = getCanonicalAuthRedirectUrl;
+
+let supabaseClient = null;
+function createSupabaseClientInstance() {
+    if (supabaseClient) return supabaseClient;
+    const cfg = window.JEVEXA_SUPABASE_CONFIG;
+    if (cfg?.url && cfg?.anonKey && typeof window.supabase?.createClient === 'function') {
+        try {
+            supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey, {
+                auth: {
+                    persistSession: true,
+                    autoRefreshToken: true,
+                    detectSessionInUrl: true
+                }
+            });
+            window.supabaseClient = supabaseClient;
+            window.JEVEXA_SUPABASE_READY = Boolean(supabaseClient);
+        } catch {
+            console.error('Supabase client initialization failed.');
+        }
+    }
+    return supabaseClient;
+}
+createSupabaseClientInstance();
 window.JEVEXA_SUPABASE_READY = Boolean(supabaseClient);
+
+async function fetchSessionWithTimeoutAndRetry({ timeoutMs = 4000, maxRetries = 2 } = {}) {
+    const client = createSupabaseClientInstance();
+    if (!client?.auth?.getSession) {
+        return { data: { session: null }, error: new Error('Supabase auth unavailable') };
+    }
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        let timerId = null;
+        try {
+            const timeoutPromise = new Promise((_, reject) => {
+                timerId = setTimeout(() => reject(new Error('Session check timed out')), timeoutMs);
+            });
+            const res = await Promise.race([client.auth.getSession(), timeoutPromise]);
+            clearTimeout(timerId);
+            if (!res?.error) return res;
+            lastError = res.error;
+        } catch (err) {
+            clearTimeout(timerId);
+            lastError = err;
+        }
+        if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        }
+    }
+    return { data: { session: null }, error: lastError };
+}
+window.JEVEXA_GET_SESSION = fetchSessionWithTimeoutAndRetry;
 if (!window.JEVEXA_SUPABASE_READY) {
     if (isStaticPreview) {
         const previewNotice = document.getElementById('staticPreviewNotice');
@@ -802,14 +857,76 @@ function showAuthMessage(message, type = 'error') {
     box.style.color = type === 'success' ? '#6ee7b7' : '#fca5a5';
 }
 
+function setFieldError(inputId, errorId, message) {
+    const inputEl = document.getElementById(inputId);
+    const errEl = document.getElementById(errorId);
+    if (inputEl) {
+        inputEl.setAttribute('aria-invalid', message ? 'true' : 'false');
+        inputEl.closest('.login-input-wrapper')?.classList.toggle('has-error', Boolean(message));
+    }
+    if (errEl) {
+        errEl.textContent = message || '';
+        errEl.hidden = !message;
+    }
+}
+
+function clearAllFieldErrors() {
+    setFieldError('signupName', 'signupNameError', '');
+    setFieldError('loginEmail', 'loginEmailError', '');
+    setFieldError('loginPassword', 'loginPasswordError', '');
+}
+
+function validateAuthField(fieldId) {
+    const el = document.getElementById(fieldId);
+    if (!el) return true;
+    const val = el.value;
+    if (fieldId === 'signupName') {
+        if (!isSignupMode) { setFieldError('signupName', 'signupNameError', ''); return true; }
+        const trimmed = val.trim();
+        if (!trimmed) { setFieldError('signupName', 'signupNameError', 'Please enter your full name.'); return false; }
+        if (trimmed.length < 2) { setFieldError('signupName', 'signupNameError', 'Name must be at least 2 characters.'); return false; }
+        setFieldError('signupName', 'signupNameError', '');
+        return true;
+    }
+    if (fieldId === 'loginEmail') {
+        const trimmed = val.trim();
+        if (!trimmed) { setFieldError('loginEmail', 'loginEmailError', 'Please enter your email address.'); return false; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { setFieldError('loginEmail', 'loginEmailError', 'Please enter a valid email address (e.g. you@company.com).'); return false; }
+        setFieldError('loginEmail', 'loginEmailError', '');
+        return true;
+    }
+    if (fieldId === 'loginPassword') {
+        if (!val) { setFieldError('loginPassword', 'loginPasswordError', isSignupMode ? 'Please create a password.' : 'Please enter your password.'); return false; }
+        if (isSignupMode && val.length < 6) { setFieldError('loginPassword', 'loginPasswordError', 'Password must be at least 6 characters.'); return false; }
+        setFieldError('loginPassword', 'loginPasswordError', '');
+        return true;
+    }
+    return true;
+}
+
+document.addEventListener('focusout', event => {
+    const id = event.target?.id;
+    if (id === 'signupName' || id === 'loginEmail' || id === 'loginPassword') {
+        validateAuthField(id);
+    }
+});
+document.addEventListener('input', event => {
+    const id = event.target?.id;
+    if (id === 'signupName' || id === 'loginEmail' || id === 'loginPassword') {
+        const errEl = document.getElementById(`${id}Error`);
+        if (errEl && !errEl.hidden) validateAuthField(id);
+    }
+});
+
 function clearAuthMessage() {
     document.getElementById('authInlineMessage')?.remove();
+    clearAllFieldErrors();
 }
 
 async function loginWithGoogle() {
     if (authBusy) return;
     clearAuthMessage();
-    if (!supabaseClient) return showSupabaseUnavailable();
+    if (!createSupabaseClientInstance()) return showSupabaseUnavailable();
     authBusy = true;
     try {
         const { error } = await supabaseClient.auth.signInWithOAuth({
@@ -831,7 +948,7 @@ async function loginWithGoogle() {
 async function loginWithGithub() {
     if (authBusy) return;
     clearAuthMessage();
-    if (!supabaseClient) return showSupabaseUnavailable();
+    if (!createSupabaseClientInstance()) return showSupabaseUnavailable();
     authBusy = true;
     try {
         const { error } = await supabaseClient.auth.signInWithOAuth({
@@ -852,26 +969,21 @@ async function loginWithGithub() {
 
 async function loginWithEmail() {
     if (authBusy) return;
-    if (!supabaseClient) return showSupabaseUnavailable();
+    if (!createSupabaseClientInstance()) return showSupabaseUnavailable();
 
     const email = document.getElementById('loginEmail')?.value.trim() || '';
     const password = document.getElementById('loginPassword')?.value || '';
 
     clearAuthMessage();
 
-    if (!email) {
-        showAuthMessage('Please enter your email address.');
-        document.getElementById('loginEmail')?.focus();
-        return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const emailOk = validateAuthField('loginEmail');
+    const passOk = validateAuthField('loginPassword');
+    if (!emailOk) {
         showAuthMessage('Please enter a valid email address.');
         document.getElementById('loginEmail')?.focus();
         return;
     }
-
-    if (!password) {
+    if (!passOk) {
         showAuthMessage('Please enter your password.');
         document.getElementById('loginPassword')?.focus();
         return;
@@ -907,7 +1019,7 @@ async function loginWithEmail() {
 
 async function createAccountWithEmail() {
     if (authBusy) return;
-    if (!supabaseClient) return showSupabaseUnavailable();
+    if (!createSupabaseClientInstance()) return showSupabaseUnavailable();
 
     const name = document.getElementById('signupName')?.value.trim() || '';
     const email = document.getElementById('loginEmail')?.value.trim() || '';
@@ -915,31 +1027,23 @@ async function createAccountWithEmail() {
 
     clearAuthMessage();
 
-    if (!name) {
-        showAuthMessage('Please enter your full name.');
+    const nameOk = validateAuthField('signupName');
+    const emailOk = validateAuthField('loginEmail');
+    const passOk = validateAuthField('loginPassword');
+
+    if (!nameOk) {
+        showAuthMessage('Please enter your full name (at least 2 characters).');
         document.getElementById('signupName')?.focus();
         return;
     }
-
-    if (name.length < 2) {
-        showAuthMessage('Please enter your full name.');
-        return;
-    }
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!emailOk) {
         showAuthMessage('Please enter a valid email address.');
         document.getElementById('loginEmail')?.focus();
         return;
     }
-
-    if (!password) {
-        showAuthMessage('Please create a password.');
-        document.getElementById('loginPassword')?.focus();
-        return;
-    }
-
-    if (password.length < 6) {
+    if (!passOk) {
         showAuthMessage('Password must be at least 6 characters.');
+        document.getElementById('loginPassword')?.focus();
         return;
     }
 
@@ -995,6 +1099,17 @@ function syncAuthModeUI() {
     const footerText = document.getElementById('authFooterText');
     const welcomeText = document.querySelector('.login-welcome p');
     const passwordInput = document.getElementById('loginPassword');
+    const tabLogin = document.getElementById('authTabLogin');
+    const tabSignup = document.getElementById('authTabSignup');
+
+    if (tabLogin) {
+        tabLogin.classList.toggle('active', !isSignupMode);
+        tabLogin.setAttribute('aria-selected', String(!isSignupMode));
+    }
+    if (tabSignup) {
+        tabSignup.classList.toggle('active', isSignupMode);
+        tabSignup.setAttribute('aria-selected', String(isSignupMode));
+    }
 
     if (isSignupMode) {
         if (nameWrapper) nameWrapper.style.setProperty('display', 'block', 'important');
@@ -1003,7 +1118,7 @@ function syncAuthModeUI() {
         if (submitButton) submitButton.innerHTML = 'Create Account <span>→</span>';
         if (footerText) footerText.textContent = 'Already have an account?';
         if (modeToggle) modeToggle.textContent = 'Login →';
-        if (welcomeText) welcomeText.textContent = 'Create your JEVEXA account to get started.';
+        if (welcomeText) welcomeText.textContent = 'Create your JEVEXA account to get started with 100 free credits.';
     } else {
         if (nameWrapper) nameWrapper.style.setProperty('display', 'none', 'important');
         if (nameInput) nameInput.required = false;
@@ -1014,6 +1129,22 @@ function syncAuthModeUI() {
         if (welcomeText) welcomeText.textContent = 'Login to continue your AI automation journey.';
     }
 }
+
+window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
+    const tab = event.target instanceof Element ? event.target.closest('[data-auth-tab]') : null;
+    if (!tab) return;
+    event.preventDefault();
+    const mode = tab.dataset.authTab === 'signup';
+    if (isSignupMode === mode) return;
+    isSignupMode = mode;
+    clearAuthMessage();
+    syncAuthModeUI();
+    document.getElementById(isSignupMode ? 'signupName' : 'loginEmail')?.focus({ preventScroll: true });
+}, {
+    matches: event => event.target instanceof Element && Boolean(event.target.closest('[data-auth-tab]')),
+    getKey: event => event.target instanceof Element ? event.target.closest('[data-auth-tab]') || document : document,
+    debounceMs: 80
+});
 
 function toggleAuthMode() {
     isSignupMode = !isSignupMode;
@@ -2105,19 +2236,25 @@ if (currentUser) {
 }
 
 if (supabaseClient) {
-    if (supabaseClient.auth?.getSession) {
-        supabaseClient.auth.getSession().then(({ data, error }) => {
-            if (!error && data?.session?.user) {
-                applyAuthState(data.session.user);
-            }
-        }).catch(err => {
-            console.warn('Initial session restore notice:', err);
-        });
-    }
+    fetchSessionWithTimeoutAndRetry({ timeoutMs: 4000, maxRetries: 2 }).then(({ data, error }) => {
+        if (!error && data?.session?.user) {
+            applyAuthState(data.session.user);
+        } else if (!error && !data?.session && earlyPersistedAuth?.user) {
+            // Verified explicitly no active session on this device
+            applyAuthState(null);
+        }
+    }).catch(err => {
+        console.warn('Initial session restore notice:', err);
+    });
     supabaseClient.auth.onAuthStateChange((event, session) => {
         applyAuthState(session?.user || null);
         if (event === 'SIGNED_IN') {
             closeLogin();
+            if (window.location.search.includes('code=') || window.location.hash.includes('access_token=')) {
+                try {
+                    window.history.replaceState(null, '', window.location.pathname === '/login' || window.location.pathname === '/signup' ? '/' : window.location.pathname);
+                } catch (_) {}
+            }
             checkAndOpenPendingService();
         }
     });
@@ -2465,6 +2602,21 @@ navLinks.forEach(link => {
 
 document.querySelectorAll('.nav-actions [data-auth-action], .hero-ctas [data-auth-action]')
     .forEach(link => window.JEVEXA_SAFE_INTERACTION.bind(link, 'click', handleAuthNavigation));
+
+// Delegated global handler covering Pricing cards, Footer links, and any dynamically rendered auth triggers
+window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
+    const trigger = event.target instanceof Element ? event.target.closest('[data-auth-action]') : null;
+    if (!trigger) return;
+    if (trigger.closest('.nav-actions, .hero-ctas') || trigger.classList.contains('nav-link')) return;
+    const action = trigger.dataset.authAction;
+    if (action !== 'login' && action !== 'signup') return;
+    event.preventDefault();
+    if (currentUser) return;
+    openAuthModal(action);
+}, {
+    matches: event => event.target instanceof Element && Boolean(event.target.closest('[data-auth-action]')),
+    getKey: event => event.target instanceof Element ? event.target.closest('[data-auth-action]') || document : document
+});
 
 window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
     const target = event.target instanceof Element ? event.target : null;
@@ -4499,6 +4651,74 @@ const JEVEXA_PLANS = {
 
     // Helper: Capture landing-page scroll position before entering a workspace
     let lastReturnHandledAt = 0;
+
+    // On-Demand Workspace Module Code-Splitting Loader
+    const WORKSPACE_MODULE_MAP = {
+        crm: { src: '/crm.js', globalCheck: () => Boolean(window.JEVEXA_CRM) },
+        outreach: { src: '/outreach.js', globalCheck: () => Boolean(window.JEVEXA_OUTREACH) },
+        ocr: { src: '/ocr.js', globalCheck: () => Boolean(window.JEVEXA_OCR) },
+        social: { src: '/social.js', globalCheck: () => Boolean(window.JEVEXA_SOCIAL) },
+        analytics: { src: '/analytics.js', globalCheck: () => Boolean(window.JEVEXA_ANALYTICS) },
+        admin: { src: '/team.js', globalCheck: () => Boolean(window.JEVEXA_TEAM) },
+        workflows: { src: '/workflows.js', globalCheck: () => Boolean(window.JEVEXA_WORKFLOWS) },
+        data: { src: '/data-mgmt.js', globalCheck: () => Boolean(window.JEVEXA_DATA_MGMT || window.JEVEXA_DATA) }
+    };
+    const workspaceModulePromises = new Map();
+
+    function ensureWorkspaceModule(key, workspaceEl = null) {
+        const entry = WORKSPACE_MODULE_MAP[key];
+        if (!entry) return Promise.resolve(false);
+        if (entry.globalCheck()) return Promise.resolve(true);
+        if (workspaceModulePromises.has(key)) return workspaceModulePromises.get(key);
+
+        if (workspaceEl) workspaceEl.classList.add('is-module-loading');
+        const promise = new Promise(resolve => {
+            const existing = document.querySelector(`script[src="${entry.src}"]`);
+            if (existing && entry.globalCheck()) {
+                if (workspaceEl) workspaceEl.classList.remove('is-module-loading');
+                resolve(true);
+                return;
+            }
+            const script = existing || document.createElement('script');
+            const finish = (ok) => {
+                if (workspaceEl) workspaceEl.classList.remove('is-module-loading');
+                resolve(ok);
+            };
+            script.addEventListener('load', () => finish(true), { once: true });
+            script.addEventListener('error', () => {
+                workspaceModulePromises.delete(key);
+                finish(false);
+            }, { once: true });
+            if (!existing) {
+                script.src = entry.src;
+                script.async = true;
+                document.body.appendChild(script);
+            }
+        });
+        workspaceModulePromises.set(key, promise);
+        return promise;
+    }
+    window.JEVEXA_LOAD_WORKSPACE_MODULE = ensureWorkspaceModule;
+
+    // Low-priority idle prefetch of workspace modules after initial render
+    const scheduleIdlePrefetch = () => {
+        if (navigator.connection?.saveData) return;
+        const keys = Object.keys(WORKSPACE_MODULE_MAP);
+        const prefetchNext = (idx) => {
+            if (idx >= keys.length) return;
+            const run = () => {
+                ensureWorkspaceModule(keys[idx]).finally(() => prefetchNext(idx + 1));
+            };
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(run, { timeout: 2500 });
+            } else {
+                setTimeout(run, 350);
+            }
+        };
+        setTimeout(() => prefetchNext(0), 2200);
+    };
+    if (document.readyState === 'complete') scheduleIdlePrefetch();
+    else window.addEventListener('load', scheduleIdlePrefetch, { once: true });
     function captureStudioScroll(pushState = true) {
         if (!pushState) return;
         const alreadyInWorkspace = document.body.classList.contains('workspace-open')
@@ -4704,12 +4924,14 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            if (window.JEVEXA_CRM?.fetchLeads) {
-                window.JEVEXA_CRM.fetchLeads();
-            } else {
-                window.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
-                document.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
-            }
+            ensureWorkspaceModule('crm', crmWorkspace).then(() => {
+                if (window.JEVEXA_CRM?.fetchLeads) {
+                    window.JEVEXA_CRM.fetchLeads();
+                } else {
+                    window.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
+                    document.addEventListener('crm:ready', () => window.JEVEXA_CRM?.fetchLeads?.(), { once: true });
+                }
+            });
         }
         if (pushState) {
             navigateToRoute('/tools/crm');
@@ -4754,12 +4976,14 @@ const JEVEXA_PLANS = {
                     }
                 }
             };
-            if (window.JEVEXA_OUTREACH?.init) {
-                initOutreach();
-            } else {
-                window.addEventListener('outreach:ready', initOutreach, { once: true });
-                document.addEventListener('outreach:ready', initOutreach, { once: true });
-            }
+            ensureWorkspaceModule('outreach', outreachWorkspace).then(() => {
+                if (window.JEVEXA_OUTREACH?.init) {
+                    initOutreach();
+                } else {
+                    window.addEventListener('outreach:ready', initOutreach, { once: true });
+                    document.addEventListener('outreach:ready', initOutreach, { once: true });
+                }
+            });
         }
         if (pushState) {
             navigateToRoute('/tools/outreach');
@@ -4793,7 +5017,7 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_OCR?.init?.();
+            ensureWorkspaceModule('ocr', ocrWorkspace).then(() => window.JEVEXA_OCR?.init?.());
         }
         if (pushState) {
             navigateToRoute('/tools/ocr');
@@ -4826,7 +5050,7 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_SOCIAL?.init?.();
+            ensureWorkspaceModule('social', socialWorkspace).then(() => window.JEVEXA_SOCIAL?.init?.());
         }
         if (pushState) {
             navigateToRoute('/tools/social');
@@ -4859,7 +5083,7 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_ANALYTICS?.init?.();
+            ensureWorkspaceModule('analytics', analyticsWorkspace).then(() => window.JEVEXA_ANALYTICS?.init?.());
         }
         if (pushState) {
             navigateToRoute('/tools/analytics');
@@ -4892,7 +5116,7 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_TEAM?.init?.();
+            ensureWorkspaceModule('admin', teamAdminWorkspace).then(() => window.JEVEXA_TEAM?.init?.());
         }
         if (pushState) {
             navigateToRoute('/tools/admin');
@@ -4926,7 +5150,7 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_WORKFLOWS?.init?.();
+            ensureWorkspaceModule('workflows', workflowsWorkspace).then(() => window.JEVEXA_WORKFLOWS?.init?.());
         }
         if (pushState) {
             navigateToRoute('/tools/workflows');
@@ -4961,7 +5185,7 @@ const JEVEXA_PLANS = {
             if (scrollWrap) scrollWrap.scrollTop = 0;
             document.body.classList.add('workspace-open');
             syncWorkspaceCredits();
-            window.JEVEXA_DATA_MGMT?.init?.();
+            ensureWorkspaceModule('data', dataWorkspace).then(() => window.JEVEXA_DATA_MGMT?.init?.());
         }
         if (pushState) {
             navigateToRoute('/tools/data');
@@ -5056,6 +5280,15 @@ const JEVEXA_PLANS = {
         const cleanHash = hash.length > 1 && hash.endsWith('/') ? hash.slice(0, -1) : hash;
 
 
+
+        if (cleanPath === '/login' || cleanHash === '#login') {
+            if (!currentUser) openAuthModal('login');
+            return;
+        }
+        if (cleanPath === '/signup' || cleanHash === '#signup') {
+            if (!currentUser) openAuthModal('signup');
+            return;
+        }
 
         if (cleanPath === '/pricing' || cleanHash === '#pricing') {
             const pricingEl = document.getElementById('pricing');

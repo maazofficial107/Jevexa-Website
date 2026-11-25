@@ -41,12 +41,21 @@
     <link rel="manifest" href="/site.webmanifest">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
-
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://byopcuspgnhwsrmsxqvm.supabase.co" crossorigin>
+    <link rel="dns-prefetch" href="https://api.groq.com">
+    <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com">
+
+    <link rel="preload" as="style" href="/styles.css">
+    <link rel="preload" as="script" href="/config.js">
+    <link rel="preload" as="script" href="/script.js">
 
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"></noscript>
 
     <link rel="stylesheet" href="/styles.css">
 
@@ -3360,6 +3369,10 @@
 
                         <a href="#faq">FAQ</a>
 
+                        <a href="#" data-auth-action="login">Login</a>
+
+                        <a href="#" data-auth-action="signup">Get Started</a>
+
                     </div>
 
                     <div>
@@ -3812,7 +3825,7 @@
 
  <script async src="https://unpkg.com/aos@2.3.1/dist/aos.js" onload="window.JEVEXA_INIT_AOS?.()"></script>
 
- <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+ <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" crossorigin="anonymous" onerror="window.__jevexaSupabaseCdnFailed=true"></script>
 
  <div id="staticPreviewNotice" class="app-config-error" role="status" aria-live="polite" hidden>
      Static preview: sign-in, credits, AI chat, and content generation are disabled. Use the configured JEVEXA Worker for account features.
@@ -3821,21 +3834,20 @@
      JEVEXA account features could not load because this Worker is missing its environment-specific public Supabase configuration. Please try again later.
  </div>
  <script>
-     if (location.port === '8788' || location.hostname === 'jevexa.net' || location.hostname === 'www.jevexa.net' || location.hostname.endsWith('.workers.dev')) {
-         document.write('<script src="/config.js"><\/script>');
-     }
+     window.__JEVEXA_IS_HOSTED = (location.port === '8788' || location.hostname === 'jevexa.net' || location.hostname === 'www.jevexa.net' || location.hostname.endsWith('.workers.dev') || location.protocol.startsWith('http'));
  </script>
+ <script src="/config.js" onerror="this.remove()"></script>
  <script src="/script.js"></script>
  <script src="/credits.js"></script>
  <script src="/content.js"></script>
- <script src="/crm.js"></script>
- <script src="/outreach.js"></script>
- <script src="/ocr.js"></script>
- <script src="/social.js"></script>
- <script src="/analytics.js"></script>
- <script src="/team.js"></script>
- <script src="/workflows.js"></script>
- <script src="/data-mgmt.js"></script>
+ <script defer src="/crm.js"></script>
+ <script defer src="/outreach.js"></script>
+ <script defer src="/ocr.js"></script>
+ <script defer src="/social.js"></script>
+ <script defer src="/analytics.js"></script>
+ <script defer src="/team.js"></script>
+ <script defer src="/workflows.js"></script>
+ <script defer src="/data-mgmt.js"></script>
  <button id="backToTop" class="back-to-top" type="button" aria-label="Back to top"><i class="fas fa-arrow-up"></i></button>
 <!-- ===============================
 
@@ -4034,6 +4046,11 @@
 
 
 
+                <div class="auth-mode-tabs" role="tablist" aria-label="Authentication mode">
+                    <button type="button" id="authTabLogin" class="auth-mode-tab active" role="tab" aria-selected="true" data-auth-tab="login">Login</button>
+                    <button type="button" id="authTabSignup" class="auth-mode-tab" role="tab" aria-selected="false" data-auth-tab="signup">Create Account</button>
+                </div>
+
                 <h3 id="loginDialogTitle">
 
                     Welcome to
@@ -4138,6 +4155,7 @@
                 <input type="text" id="signupName" name="name" placeholder="Full name" autocomplete="name" aria-label="Full name">
 
             </div>
+            <p class="auth-field-error" id="signupNameError" role="alert" hidden></p>
 
 
 
@@ -4150,6 +4168,7 @@
                 <input type="email" id="loginEmail" name="email" placeholder="Email address" autocomplete="email" aria-label="Email address" required>
 
             </div>
+            <p class="auth-field-error" id="loginEmailError" role="alert" hidden></p>
 
 
 
@@ -4164,6 +4183,7 @@
                 <button type="button" id="passwordToggle" class="password-toggle" aria-label="Show password" aria-pressed="false"><i class="fas fa-eye"></i></button>
 
             </div>
+            <p class="auth-field-error" id="loginPasswordError" role="alert" hidden></p>
 
             <div class="login-options"><a href="#" id="forgotPasswordLink" class="forgot-link">Forgot password?</a></div>
 

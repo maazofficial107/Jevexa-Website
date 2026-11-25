@@ -772,6 +772,7 @@
                         updateChatWelcome();
                     }
                     saveChatSessions();
+                    void syncChatSessionToServer('DELETE', { id: session.id });
                     if (typeof window.showToast === 'function') window.showToast('Chat deleted');
                 }
             });
@@ -1060,6 +1061,70 @@
         }
     }
 
+    // Serialized per-session Supabase sync queue to prevent out-of-order race conditions
+    const sessionSyncQueue = new Map();
+    async function syncChatSessionToServer(method, payload) {
+        if (!historyUserId || typeof window.supabaseClient?.auth?.getSession !== 'function') return;
+        const queueKey = payload?.id || '__all__';
+        const prev = sessionSyncQueue.get(queueKey) || Promise.resolve();
+        const next = prev.then(async () => {
+            try {
+                const session = await getSession().catch(() => null);
+                if (!session?.access_token) return;
+                const url = method === 'DELETE'
+                    ? (payload?.all ? '/api/chat/sessions?all=true' : `/api/chat/sessions?id=${encodeURIComponent(payload.id)}`)
+                    : '/api/chat/sessions';
+                await fetch(url, {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: method === 'DELETE' ? undefined : JSON.stringify({ session: payload })
+                }).catch(() => {});
+            } catch (_) {}
+        });
+        sessionSyncQueue.set(queueKey, next.catch(() => {}));
+        return next;
+    }
+
+    async function fetchRemoteChatSessions(userId) {
+        if (!userId) return;
+        try {
+            const session = await getSession().catch(() => null);
+            if (!session?.access_token || historyUserId !== userId) return;
+            const res = await fetch('/api/chat/sessions', {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (!res.ok) return;
+            const data = await res.json().catch(() => null);
+            if (!data?.ok || !Array.isArray(data.sessions) || data.sessions.length === 0) return;
+            if (historyUserId !== userId) return;
+
+            const byId = new Map(chatSessions.map(s => [s.id, s]));
+            let changed = false;
+            for (const remote of data.sessions) {
+                if (!remote?.id || !Array.isArray(remote.messages)) continue;
+                const local = byId.get(remote.id);
+                if (!local || (Number(remote.updatedAt) > Number(local.updatedAt || 0))) {
+                    byId.set(remote.id, {
+                        id: remote.id,
+                        title: typeof remote.title === 'string' ? remote.title.slice(0, 48) : 'New chat',
+                        updatedAt: Number(remote.updatedAt) || Date.now(),
+                        pinned: Boolean(remote.pinned),
+                        languageOverride: remote.languageOverride || null,
+                        messages: remote.messages.slice(-100).filter(m => m && ['user', 'assistant'].includes(m.role) && typeof m.text === 'string')
+                    });
+                    changed = true;
+                }
+            }
+            if (changed) {
+                chatSessions = Array.from(byId.values()).slice(0, 30);
+                saveChatSessions();
+            }
+        } catch (_) {}
+    }
+
     function persistConversation(userId) {
         try {
             if (!activeChatId) {
@@ -1079,7 +1144,9 @@
                     localStorage.setItem(activeChatKey(userId), activeChatId);
                 } catch (_) {}
             }
-            return saveChatSessions();
+            const saved = saveChatSessions();
+            if (userId) void syncChatSessionToServer('PUT', session);
+            return saved;
         } catch (error) {
             console.error('Could not save chat history:', error);
             return false;
@@ -1771,6 +1838,7 @@
                 }
                 createChatSession();
                 renderChatHistory();
+                void syncChatSessionToServer('DELETE', { all: true });
                 if (typeof window.showToast === 'function') window.showToast('All conversations cleared');
             }
         });
@@ -1989,6 +2057,7 @@
             updateChatWelcome(session.user);
             await refreshTierAccess(session);
             void reconcilePendingRequest(session);
+            void fetchRemoteChatSessions(session.user.id);
             try {
                 const savedTheme = localStorage.getItem(`jevexa_${session.user.id}_chat_theme`);
                 const theme = ['dark', 'light', 'system'].includes(savedTheme)
@@ -2277,6 +2346,29 @@
         });
     }
 
+    function highlightCodeTokens(escapedCode, lang) {
+        const cleanLang = String(lang || '').toLowerCase();
+        if (!escapedCode || !cleanLang || cleanLang === 'text' || cleanLang === 'txt' || cleanLang === 'plain' || cleanLang === 'plaintext') {
+            return escapedCode;
+        }
+        const tokenPlaceholders = [];
+        const saveToken = (cls, text) => {
+            const idx = tokenPlaceholders.length;
+            tokenPlaceholders.push(`<span class="${cls}">${text}</span>`);
+            return `@@JEV_TOK_${idx}@@`;
+        };
+        let out = escapedCode
+            // Strings (HTML-escaped quotes are &quot; or &#39; or backticks)
+            .replace(/(&quot;(?:\\.|(?!&quot;)[^\\\n])*?&quot;|&#39;(?:\\.|(?!&#39;)[^\\\n])*?&#39;|`[^`\n]*?`)/g, m => saveToken('tok-str', m))
+            // Line comments (// or # or --)
+            .replace(/(\/\/[^\n]*|(?<=^|\s)#[^\n]*|--[^\n]*)/gm, m => saveToken('tok-com', m));
+        // Keywords
+        out = out.replace(/\b(const|let|var|function|async|await|return|if|else|for|while|switch|case|break|continue|import|export|from|default|class|extends|new|try|catch|finally|throw|typeof|instanceof|def|elif|with|as|pass|yield|lambda|SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|ALTER|JOIN|ON|GROUP|BY|ORDER|LIMIT|AND|OR|NOT|NULL|TRUE|FALSE|true|false|null|undefined|None|True|False)\b/g, '<span class="tok-kw">$1</span>');
+        // Numbers
+        out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+        return out.replace(/@@JEV_TOK_(\d+)@@/g, (_m, idx) => tokenPlaceholders[Number(idx)] || '');
+    }
+
     function renderMarkdown(text, { streaming = false } = {}) {
         if (!text) return '';
         const codeBlocks = [];
@@ -2455,7 +2547,8 @@
             if (!block) return '';
             const safeCode = escapeMarkdownHtml(block.code);
             const langLabel = escapeMarkdownHtml(block.lang || 'code');
-            return `<div class="chat-code-block"><div class="chat-code-header"><span class="chat-code-lang">${langLabel}</span><button type="button" class="chat-code-copy" aria-label="Copy code">Copy</button></div><pre><code class="language-${langLabel}">${safeCode}</code></pre></div>`;
+            const highlighted = streaming ? safeCode : highlightCodeTokens(safeCode, block.lang);
+            return `<div class="chat-code-block"><div class="chat-code-header"><span class="chat-code-lang">${langLabel}</span><button type="button" class="chat-code-copy" aria-label="Copy code"><i class="far fa-copy" aria-hidden="true"></i> <span>Copy</span></button></div><pre><code class="language-${langLabel}">${highlighted}</code></pre></div>`;
         });
 
         return rendered;
@@ -2479,19 +2572,44 @@
         });
     }
 
-    function buildBotActionButtons() {
+    function buildUserActionButtons() {
         const actions = document.createElement('div');
-        actions.className = 'chat-message-actions';
+        actions.className = 'chat-message-actions chat-user-actions';
         const copy = document.createElement('button');
         copy.type = 'button';
+        copy.className = 'chat-action-btn';
+        copy.dataset.chatAction = 'copy-user';
+        copy.setAttribute('aria-label', 'Copy message');
+        copy.title = 'Copy prompt';
+        copy.innerHTML = '<i class="far fa-copy" aria-hidden="true"></i><span>Copy</span>';
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'chat-action-btn';
+        edit.dataset.chatAction = 'edit-user';
+        edit.setAttribute('aria-label', 'Edit message');
+        edit.title = 'Edit & resubmit';
+        edit.innerHTML = '<i class="fas fa-pen" aria-hidden="true"></i><span>Edit</span>';
+        actions.append(copy, edit);
+        return actions;
+    }
+
+    function buildBotActionButtons() {
+        const actions = document.createElement('div');
+        actions.className = 'chat-message-actions chat-bot-actions';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'chat-action-btn';
         copy.dataset.chatAction = 'copy';
         copy.setAttribute('aria-label', 'Copy response');
-        copy.textContent = 'Copy';
+        copy.title = 'Copy response';
+        copy.innerHTML = '<i class="far fa-copy" aria-hidden="true"></i><span>Copy</span>';
         const regenerate = document.createElement('button');
         regenerate.type = 'button';
+        regenerate.className = 'chat-action-btn';
         regenerate.dataset.chatAction = 'regenerate';
         regenerate.setAttribute('aria-label', 'Regenerate response');
-        regenerate.textContent = 'Regenerate';
+        regenerate.title = 'Regenerate response';
+        regenerate.innerHTML = '<i class="fas fa-rotate-right" aria-hidden="true"></i><span>Regenerate</span>';
         actions.append(copy, regenerate);
         return actions;
     }
@@ -2558,11 +2676,16 @@
         body.className = 'msg-body';
         body.innerHTML = renderMarkdown(text);
         content.appendChild(body);
-        if (!user) {
+        if (user) {
+            const col = document.createElement('div');
+            col.className = 'msg-user-col';
+            col.append(content, buildUserActionButtons());
+            row.append(avatar, col);
+        } else {
             applyBotMetaStatus(content, meta);
             content.appendChild(buildBotActionButtons());
+            row.append(avatar, content);
         }
-        row.append(avatar, content);
         messages.appendChild(row);
         const renderedMessages = messages.querySelectorAll('.message:not([data-chat-welcome])');
         for (let idx = 0; idx < renderedMessages.length - maxRenderedMessages; idx += 1) {
@@ -2697,7 +2820,9 @@
         if (!window.JEVEXA_SUPABASE_READY) {
             throw new Error('Account and AI chat features are temporarily unavailable. Please try again later.');
         }
-        const { data, error } = await supabaseClient.auth.getSession();
+        const { data, error } = typeof window.JEVEXA_GET_SESSION === 'function'
+            ? await window.JEVEXA_GET_SESSION({ timeoutMs: 4000, maxRetries: 2 })
+            : await supabaseClient.auth.getSession();
         if (error) throw new Error('Could not verify your sign-in. Please sign in again.');
         if (!data?.session?.access_token) return null;
         return data.session;
@@ -2938,17 +3063,37 @@
         resetIdle();
 
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                signal: controller.signal,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'text/event-stream, application/json',
-                    'Idempotency-Key': requestId,
-                    Authorization: session?.access_token ? `Bearer ${session.access_token}` : ''
-                },
-                body: JSON.stringify({ ...bodyObj, requestId, stream: true })
-            });
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: 'POST',
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream, application/json',
+                        'Idempotency-Key': requestId,
+                        Authorization: session?.access_token ? `Bearer ${session.access_token}` : ''
+                    },
+                    body: JSON.stringify({ ...bodyObj, requestId, stream: true })
+                });
+            } catch (netErr) {
+                if (netErr?.name === 'AbortError' || signal?.aborted || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+                    throw netErr;
+                }
+                await new Promise(r => setTimeout(r, 350));
+                resetIdle();
+                response = await fetch(url, {
+                    method: 'POST',
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream, application/json',
+                        'Idempotency-Key': requestId,
+                        Authorization: session?.access_token ? `Bearer ${session.access_token}` : ''
+                    },
+                    body: JSON.stringify({ ...bodyObj, requestId, stream: true })
+                });
+            }
             resetIdle();
 
             const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
@@ -3535,6 +3680,140 @@
         input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
     });
 
+    async function writeClipboardText(text) {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (_) {}
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) {}
+        ta.remove();
+        if (!ok) throw new Error('Clipboard unavailable');
+        return true;
+    }
+
+    async function copyButtonWithFeedback(button, text, statusMsg, copiedHtml = '<i class="fas fa-check" aria-hidden="true"></i><span>Copied!</span>') {
+        const originalHtml = button.dataset.origHtml || button.innerHTML;
+        button.dataset.origHtml = originalHtml;
+        await writeClipboardText(text);
+        button.innerHTML = copiedHtml;
+        button.classList.add('copied', 'is-copied');
+        if (button._copyTimer) clearTimeout(button._copyTimer);
+        button._copyTimer = setTimeout(() => {
+            button.innerHTML = originalHtml;
+            button.classList.remove('copied', 'is-copied');
+            button._copyTimer = null;
+        }, 2000);
+        if (statusMsg) setStatus(statusMsg);
+    }
+
+    function startInlineUserEdit(row, index) {
+        if (!row || !Number.isInteger(index) || index < 0) return;
+        const msgContent = row.querySelector('.msg-content');
+        const msgBody = row.querySelector('.msg-body');
+        const userActions = row.querySelector('.chat-user-actions');
+        if (!msgContent || !msgBody) return;
+        if (row.querySelector('.chat-user-edit-box')) return;
+
+        const rawText = typeof conversation[index]?.text === 'string'
+            ? conversation[index].text
+            : (msgBody.textContent || '');
+
+        row.classList.add('is-editing');
+        msgBody.hidden = true;
+        if (userActions) userActions.hidden = true;
+
+        const editBox = document.createElement('div');
+        editBox.className = 'chat-user-edit-box';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'chat-user-edit-textarea';
+        textarea.rows = 2;
+        textarea.value = rawText;
+        textarea.setAttribute('aria-label', 'Edit your message');
+
+        const controls = document.createElement('div');
+        controls.className = 'chat-user-edit-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'chat-user-edit-cancel';
+        cancelBtn.textContent = 'Cancel';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'chat-user-edit-save';
+        saveBtn.innerHTML = '<i class="fas fa-paper-plane" aria-hidden="true"></i> <span>Save &amp; Submit</span>';
+
+        const autoSize = () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${Math.min(260, Math.max(52, textarea.scrollHeight))}px`;
+        };
+
+        const cleanupEdit = () => {
+            editBox.remove();
+            msgBody.hidden = false;
+            if (userActions) userActions.hidden = false;
+            row.classList.remove('is-editing');
+        };
+
+        const commitEdit = () => {
+            const editedText = textarea.value.trim();
+            if (!editedText) {
+                setStatus('Message cannot be empty.', true);
+                textarea.focus();
+                return;
+            }
+            cleanupEdit();
+            abortInFlightChatRequest();
+            conversation.splice(index);
+            messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => {
+                if (Number(message.dataset.messageIndex) >= index) message.remove();
+            });
+            persistConversation(historyUserId);
+            if (input) input.value = editedText;
+            handleSend();
+        };
+
+        textarea.addEventListener('input', autoSize);
+        textarea.addEventListener('keydown', ev => {
+            if (ev.key === 'Escape') {
+                ev.preventDefault();
+                ev.stopPropagation();
+                cleanupEdit();
+            } else if (ev.key === 'Enter' && (!ev.shiftKey || ev.ctrlKey || ev.metaKey) && !ev.isComposing) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                commitEdit();
+            }
+        });
+        bindSafe(cancelBtn, 'click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            cleanupEdit();
+        });
+        bindSafe(saveBtn, 'click', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            commitEdit();
+        });
+
+        controls.append(cancelBtn, saveBtn);
+        editBox.append(textarea, controls);
+        msgContent.appendChild(editBox);
+        autoSize();
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
+
     bindSafe(messages, 'click', async event => {
         const copyCodeBtn = event.target.closest('.chat-code-copy');
         if (copyCodeBtn) {
@@ -3542,14 +3821,12 @@
             const codeEl = block?.querySelector('code');
             if (codeEl) {
                 try {
-                    await navigator.clipboard.writeText(codeEl.textContent || '');
-                    copyCodeBtn.textContent = 'Copied!';
-                    copyCodeBtn.classList.add('copied');
-                    setTimeout(() => {
-                        copyCodeBtn.textContent = 'Copy';
-                        copyCodeBtn.classList.remove('copied');
-                    }, 2000);
-                    setStatus('Code copied to clipboard.');
+                    await copyButtonWithFeedback(
+                        copyCodeBtn,
+                        codeEl.textContent || '',
+                        'Code copied to clipboard.',
+                        '<i class="fas fa-check" aria-hidden="true"></i> <span>Copied!</span>'
+                    );
                 } catch {
                     setStatus('Could not copy code on your device.');
                 }
@@ -3560,17 +3837,33 @@
         if (!button) return;
         const row = button.closest('.message');
         const index = Number(row?.dataset.messageIndex);
-        if (button.dataset.chatAction === 'copy') {
+        const action = button.dataset.chatAction;
+
+        if (action === 'copy-user') {
+            const rawPrompt = conversation[index]?.text || row?.querySelector('.msg-body')?.textContent || '';
             try {
-                await navigator.clipboard.writeText(conversation[index]?.text || row.querySelector('.msg-body, .msg-content p, .msg-content')?.textContent || '');
-                setStatus('Response copied.');
+                await copyButtonWithFeedback(button, rawPrompt, 'Prompt copied to clipboard.');
+            } catch (error) {
+                console.error('Could not copy user prompt:', error);
+                setStatus('Could not copy this prompt on your device.');
+            }
+            return;
+        }
+        if (action === 'edit-user') {
+            startInlineUserEdit(row, index);
+            return;
+        }
+        if (action === 'copy') {
+            const rawReply = conversation[index]?.text || row?.querySelector('.msg-body, .msg-content p, .msg-content')?.textContent || '';
+            try {
+                await copyButtonWithFeedback(button, rawReply, 'Response copied.');
             } catch (error) {
                 console.error('Could not copy chat response:', error);
                 setStatus('Could not copy this response on your device.');
             }
             return;
         }
-        if (button.dataset.chatAction === 'regenerate' && Number.isInteger(index) && index > 0) {
+        if (action === 'regenerate' && Number.isInteger(index) && index > 0) {
             abortInFlightChatRequest();
             const userIndex = index - 1;
             const userMessage = conversation[userIndex];
@@ -3586,7 +3879,7 @@
         }
     }, {
         getKey: event => event.target instanceof Element
-            ? event.target.closest('[data-chat-action]') || messages
+            ? event.target.closest('[data-chat-action], .chat-code-copy') || messages
             : messages
     });
 

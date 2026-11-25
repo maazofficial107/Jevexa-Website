@@ -1,0 +1,22 @@
+# Edge static asset caching & security headers for Cloudflare Workers Static Assets
+/assets/*
+  Cache-Control: public, max-age=2592000, stale-while-revalidate=604800
+  X-Content-Type-Options: nosniff
+
+/*.css
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+  X-Content-Type-Options: nosniff
+
+/*.js
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+  X-Content-Type-Options: nosniff
+
+/site.webmanifest
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+  X-Content-Type-Options: nosniff
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin

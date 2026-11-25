@@ -141,7 +141,10 @@
         const link = e.currentTarget;
         link.style.pointerEvents = 'none'; link.textContent = 'Sending reset link…';
         try {
-            const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+            const redirectTo = typeof window.JEVEXA_AUTH_REDIRECT_URL === 'function'
+                ? window.JEVEXA_AUTH_REDIRECT_URL()
+                : window.location.origin;
+            const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
             if (error) { if (typeof showAuthMessage === 'function') showAuthMessage('Could not send the reset email. Please try again in a moment.'); }
             else if (typeof showAuthMessage === 'function') showAuthMessage('✓ Reset link sent! Check your inbox (and spam folder).', 'success');
         } catch { if (typeof showAuthMessage === 'function') showAuthMessage('Connection problem. Please try again.'); }

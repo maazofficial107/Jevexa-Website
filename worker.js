@@ -1130,10 +1130,14 @@ function createStreamTimeoutController({
   };
 }
 
-function getProviderTimeoutProfile(tier = "lite", thinkingLevel = "low", hasAttachments = false) {
+function getProviderTimeoutProfile(tier = "lite", thinkingLevel = "low", hasAttachments = false, provider = "default") {
   const deep = tier === "max" || tier === "ultra" || thinkingLevel === "max";
+  let ttfbMs = (deep || hasAttachments) ? 18000 : 12000;
+  if (provider === "groq" && !deep && !hasAttachments) {
+    ttfbMs = 5500;
+  }
   return {
-    ttfbMs: (deep || hasAttachments) ? 18000 : 12000,
+    ttfbMs,
     idleMs: 18000,
     totalMs: deep ? 60000 : 45000
   };
@@ -1681,7 +1685,7 @@ async function executeGroqWithFallback({
   let lastStatus = 0;
   let lastData = null;
   let lastErrorMsg = "";
-  const timeoutProfile = getProviderTimeoutProfile(tier, thinkingLevel, false);
+  const timeoutProfile = getProviderTimeoutProfile(tier, thinkingLevel, false, "groq");
 
   const groqMessages = [];
   if (systemInstruction) {
@@ -8542,6 +8546,110 @@ async function handleMemories(request, env) {
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleChatSessions(request, env) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: JSON_HEADERS });
+  }
+
+  let cfg;
+  try {
+    cfg = getSupabaseConfig(env);
+  } catch {
+    return json({ error: "Service configuration error." }, 503);
+  }
+
+  let user;
+  try {
+    user = await getAuthenticatedUser(request, cfg);
+  } catch {
+    return json({ error: "Could not verify your session. Please sign in again." }, 503);
+  }
+  if (!user) return json({ error: "Please sign in to sync conversations." }, 401);
+
+  if (request.method === "GET" || request.method === "HEAD") {
+    if (request.method === "HEAD") {
+      return new Response(null, { status: 200, headers: JSON_HEADERS });
+    }
+    try {
+      const res = await sbRequest(
+        cfg,
+        `/rest/v1/chat_sessions?select=id,title,pinned,language_override,messages,updated_at&user_id=eq.${encodeURIComponent(user.id)}&order=updated_at.desc&limit=30`
+      );
+      const rows = await readJsonResponse(res);
+      if (res.ok && Array.isArray(rows)) {
+        const sessions = rows.map(row => ({
+          id: String(row.id),
+          title: typeof row.title === "string" ? row.title.slice(0, 48) : "New chat",
+          pinned: Boolean(row.pinned),
+          languageOverride: row.language_override || null,
+          messages: Array.isArray(row.messages) ? row.messages.slice(-100) : [],
+          updatedAt: typeof row.updated_at === "number"
+            ? row.updated_at
+            : (row.updated_at ? new Date(row.updated_at).getTime() : Date.now())
+        }));
+        return json({ ok: true, sessions, storage: "supabase" });
+      }
+    } catch (_) {}
+    return json({ ok: true, sessions: [], storage: "local" });
+  }
+
+  if (request.method === "POST" || request.method === "PUT") {
+    const parsed = await readRequestJson(request, 2 * 1024 * 1024);
+    if (parsed.error) return json({ error: parsed.error }, parsed.status || 400);
+    const s = parsed.body?.session || parsed.body;
+    const id = typeof s?.id === "string" ? s.id.trim().slice(0, 80) : "";
+    if (!id) return json({ error: "Session ID is required." }, 400);
+    const title = typeof s.title === "string" && s.title.trim() ? s.title.trim().slice(0, 48) : "New chat";
+    const pinned = Boolean(s.pinned);
+    const languageOverride = typeof s.languageOverride === "string" ? s.languageOverride.slice(0, 24) : null;
+    const rawMessages = Array.isArray(s.messages) ? s.messages.slice(-100) : [];
+    const messages = rawMessages
+      .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.text === "string")
+      .map(m => ({ role: m.role, text: m.text.slice(0, 16000) }));
+    const updatedAtIso = new Date(Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now()).toISOString();
+
+    try {
+      const upsertRes = await sbRequest(
+        cfg,
+        `/rest/v1/chat_sessions?on_conflict=id`,
+        {
+          method: "POST",
+          headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+          body: JSON.stringify({
+            id,
+            user_id: user.id,
+            title,
+            pinned,
+            language_override: languageOverride,
+            messages,
+            updated_at: updatedAtIso
+          })
+        }
+      );
+      if (upsertRes.ok) {
+        return json({ ok: true, id, storage: "supabase" });
+      }
+    } catch (_) {}
+    return json({ ok: true, id, storage: "local" });
+  }
+
+  if (request.method === "DELETE") {
+    const url = new URL(request.url);
+    const clearAll = url.searchParams.get("all") === "true";
+    const id = url.searchParams.get("id")?.trim();
+    if (!clearAll && !id) return json({ error: "Session ID or all=true is required." }, 400);
+    try {
+      const query = clearAll
+        ? `/rest/v1/chat_sessions?user_id=eq.${encodeURIComponent(user.id)}`
+        : `/rest/v1/chat_sessions?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`;
+      await sbRequest(cfg, query, { method: "DELETE" });
+    } catch (_) {}
+    return json({ ok: true, deleted: clearAll ? "all" : id });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 function getAssetMimeType(pathname) {
   const clean = String(pathname || "").split("?")[0].split("#")[0].toLowerCase();
   if (clean.endsWith(".html") || clean === "/" || !clean.includes(".")) return "text/html; charset=utf-8";
@@ -8616,6 +8724,12 @@ export default {
     try {
     const url = new URL(request.url);
 
+    // Canonicalize www / plain HTTP on production custom domain for GET/HEAD to prevent auth/redirect mismatches
+    if ((request.method === "GET" || request.method === "HEAD")
+      && (url.hostname === "www.jevexa.net" || (url.protocol === "http:" && url.hostname === "jevexa.net"))) {
+      return Response.redirect(`https://jevexa.net${url.pathname}${url.search}`, 301);
+    }
+
     // Handle CORS preflight for everything
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: JSON_HEADERS });
@@ -8623,6 +8737,10 @@ export default {
 
     if (url.pathname === "/api/chat" || url.pathname === "/api/ai/chat") {
       return handleChat(request, env, ctx);
+    }
+
+    if (url.pathname === "/api/chat/sessions") {
+      return handleChatSessions(request, env);
     }
 
     if (url.pathname === "/api/credits/reconcile" || url.pathname === "/api/credits/release") {
@@ -8861,12 +8979,18 @@ export default {
       }
       const mime = getAssetMimeType(url.pathname);
       const isHtml = url.pathname.endsWith(".html") || url.pathname === "/" || !url.pathname.includes(".");
+      const isLongCacheMedia = /^\/assets\//i.test(url.pathname) || /\.(png|jpg|jpeg|webp|gif|svg|ico|woff2?|ttf)$/i.test(url.pathname);
+      const cacheControl = isHtml
+        ? "public, max-age=0, must-revalidate"
+        : isLongCacheMedia
+          ? "public, max-age=2592000, stale-while-revalidate=604800"
+          : "public, max-age=86400, stale-while-revalidate=604800";
       return secureAssetResponse(assetResponse, {
         isStaticAsset: !isHtml,
         isHead: request.method === "HEAD",
         mime,
         isHtml,
-        cacheControl: isHtml ? "public, max-age=0, must-revalidate" : "public, max-age=86400, stale-while-revalidate=604800"
+        cacheControl
       });
     }
 

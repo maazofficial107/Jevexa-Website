@@ -5486,8 +5486,8 @@ test("Flagship upgrade: Single unified settings and bottom-end credit detail in 
   assert.match(credits, /function formatMinimalStatus\(/);
   assert.match(credits, /credits remaining/);
 
-  // Chat bubbles clean without clutter (.chat-credit-receipt hidden from message bubbles)
-  assert.match(styles, /\.chat-credit-receipt\s*\{[\s\S]*?display:\s*none\s*!important;/);
+  // Subtle bottom receipt inside message bubbles renders cleanly without obscuring text
+  assert.match(styles, /\.chat-credit-receipt\s*\{[\s\S]*?display:\s*flex;/);
 
   // Bottom notice styled with generous breathing room
   assert.match(styles, /\.chat-credit-notice\s*\{[\s\S]*?display:\s*flex;/);

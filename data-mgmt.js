@@ -447,9 +447,13 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             dedupKey
         };
 
+        const dataController = new AbortController();
+        const dataTimeoutId = setTimeout(() => dataController.abort(), 35000);
+        const dataPreviewContainer = document.querySelector('#dataWorkspace .tool-pane-preview');
         try {
             const res = await fetch('/api/data/clean', {
                 method: 'POST',
+                signal: dataController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -469,6 +473,12 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
 
             renderResults(result, text);
+            const dataCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(dataPreviewContainer, dataCharged, {
+                id: 'dataCreditReceipt',
+                remaining: result.remaining_credits,
+                tier: result.tier
+            });
             if (result.remaining_credits !== undefined) {
                 window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
             }
@@ -476,12 +486,13 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
-                const costText = result.charged_credits ? ` • ${result.charged_credits} credits used` : '';
+                const costText = dataCharged ? ` • ${dataCharged} credits used` : '';
                 statusEl.textContent = `Cleaned ${result.summary?.cleanedCount || 0} records (${result.summary?.duplicatesRemoved || 0} duplicates purged)${costText}.`;
                 statusEl.className = 'data-status-msg success';
             }
             window.showToast?.('Dataset cleaned and normalized successfully!');
         } catch (err) {
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(dataPreviewContainer, 'dataCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
                 if (statusEl) {
                     statusEl.textContent = err.message || 'Could not clean dataset.';
@@ -499,6 +510,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
             window.showToast?.('Dataset cleaned locally (no credits charged).');
         } finally {
+            clearTimeout(dataTimeoutId);
             state.isProcessing = false;
             if (processBtn) {
                 processBtn.disabled = false;
@@ -740,6 +752,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         renderResults,
         loadSample: (key) => {
             if (SAMPLE_DATASETS[key] && pasteInput) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#dataWorkspace .tool-pane-preview'), 'dataCreditReceipt');
                 pasteInput.value = SAMPLE_DATASETS[key];
                 processData();
             }
@@ -747,6 +760,7 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         resetOnLogout: () => {
             state.isProcessing = false;
             if (fileInput) fileInput.value = '';
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#dataWorkspace .tool-pane-preview'), 'dataCreditReceipt');
             const sample = SAMPLE_DATASETS.messy_leads;
             if (presetSelect) presetSelect.value = 'messy_leads';
             if (pasteInput) pasteInput.value = sample;

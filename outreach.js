@@ -310,6 +310,7 @@
             btn.addEventListener('click', () => {
                 const seq = state.savedSequences.find(s => s.id === btn.dataset.seqId);
                 if (seq) {
+                    window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#outreachWorkspace .outreach-pane-preview'), 'outreachCreditReceipt');
                     loadSequenceIntoWorkspace(seq);
                     closeHistoryDrawer();
                 }
@@ -599,9 +600,13 @@
             requestId
         };
 
+        const outreachController = new AbortController();
+        const outreachTimeoutId = setTimeout(() => outreachController.abort(), 35000);
+        const outreachPreview = document.querySelector('#outreachWorkspace .outreach-pane-preview');
         try {
             const res = await fetch('/api/outreach/generate', {
                 method: 'POST',
+                signal: outreachController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -625,6 +630,11 @@
             state.currentSequence = data.sequence;
             state.currentSequenceId = data.sequence_id || null;
             state.useAlternativeSubject = false;
+            const outreachCharged = Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(outreachPreview, outreachCharged, {
+                id: 'outreachCreditReceipt',
+                remaining: data.remaining_credits
+            });
 
             // Immediately update credits in UI
             if (typeof data.remaining_credits === 'number') {
@@ -638,13 +648,15 @@
 
             updateSequenceStatusPill('Draft');
             switchStep(1);
-            setStatus('3-step outreach sequence generated successfully!', 'success');
+            const costText = outreachCharged ? ` (${outreachCharged} credits used)` : '';
+            setStatus(`3-step outreach sequence generated successfully!${costText}`, 'success');
             await loadSavedSequences();
 
             if (typeof window.showToast === 'function') {
                 window.showToast('Outreach sequence generated! Ready to review and send.');
             }
         } catch (err) {
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(outreachPreview, 'outreachCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
                 setStatus(err.message || 'Sequence generation failed.', 'error');
                 if (typeof window.showToast === 'function') {
@@ -671,6 +683,7 @@
                 window.showToast('Sequence drafted locally (no credits charged).');
             }
         } finally {
+            clearTimeout(outreachTimeoutId);
             state.requestInFlight = false;
             if (generateBtn) {
                 generateBtn.disabled = false;
@@ -1016,6 +1029,7 @@
                 sessionStorage.removeItem('jevexa_outreach_sequences_cache');
                 localStorage.removeItem('jevexa_cached_outreach_sequences');
             } catch (_) {}
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#outreachWorkspace .outreach-pane-preview'), 'outreachCreditReceipt');
             if (leadSelect) leadSelect.innerHTML = '<option value="">-- Manual Entry Mode --</option>';
             if (recipientNameInput) recipientNameInput.value = 'Alex Rivera';
             if (recipientEmailInput) recipientEmailInput.value = '';

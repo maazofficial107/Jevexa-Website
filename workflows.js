@@ -186,6 +186,7 @@
         state.editingStepIndex = null;
         if (templateSelect && templateSelect.value !== resolvedKey) templateSelect.value = resolvedKey;
         if (workflowTitleEl) workflowTitleEl.textContent = tmpl.name;
+        window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
         renderSteps();
         if (persist) saveCachedWorkflowState();
         if (statusEl) {
@@ -488,6 +489,8 @@
 
         if (!session) {
             // Local simulation for guest / demo
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowExecModal .workflow-exec-body'), 'workflowExecCreditReceipt');
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
             await executeSimulatedSteps();
             state.isRunning = false;
             if (runWorkflowBtn) {
@@ -497,9 +500,12 @@
             return;
         }
 
+        const wfController = new AbortController();
+        const wfTimeoutId = setTimeout(() => wfController.abort(), 35000);
         try {
             const res = await fetch('/api/workflows/run', {
                 method: 'POST',
+                signal: wfController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -519,7 +525,8 @@
             }
 
             if (execProgressFill) execProgressFill.style.width = '100%';
-            const chargedNote = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+            const wfCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            const chargedNote = wfCharged ? ` (${wfCharged} credits used)` : '';
             if (execProgressText) execProgressText.textContent = `Sequence completed successfully in ${result.durationMs || 120}ms!${chargedNote}`;
 
             if (result.remaining_credits !== undefined) {
@@ -538,6 +545,17 @@
                 });
             }
 
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowExecModal .workflow-exec-body'),
+                wfCharged,
+                { id: 'workflowExecCreditReceipt', remaining: result.remaining_credits, tier: result.tier }
+            );
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowsWorkspace .workflows-builder-card'),
+                wfCharged,
+                { id: 'workflowCreditReceipt', remaining: result.remaining_credits, tier: result.tier }
+            );
+
             // Record to history
             const historyEntry = {
                 id: requestId,
@@ -552,6 +570,8 @@
 
             window.showToast?.('Workflow executed successfully!');
         } catch (err) {
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowExecModal .workflow-exec-body'), 'workflowExecCreditReceipt');
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
                 if (execProgressFill) execProgressFill.style.width = '0%';
                 if (execProgressText) execProgressText.textContent = err.message || 'Workflow execution blocked.';
@@ -569,6 +589,7 @@
                 statusEl.className = 'workflow-status-msg info';
             }
         } finally {
+            clearTimeout(wfTimeoutId);
             state.isRunning = false;
             if (runWorkflowBtn) {
                 runWorkflowBtn.disabled = false;
@@ -733,6 +754,8 @@
                 localStorage.removeItem(WORKFLOW_STATE_STORAGE_KEY);
             } catch (_) {}
             window.JEVEXA_WORKFLOWS.closeExecModal();
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowExecModal .workflow-exec-body'), 'workflowExecCreditReceipt');
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
             if (templateSelect) templateSelect.value = 'lead_conversion';
             loadTemplate('lead_conversion', false);
             renderHistory();

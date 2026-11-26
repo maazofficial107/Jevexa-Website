@@ -324,6 +324,8 @@
         copyButton.disabled = true;
         downloadButton.disabled = true;
         if (downloadMdButton) downloadMdButton.disabled = true;
+        const existingReceipt = document.getElementById('contentCreditReceipt');
+        if (existingReceipt) existingReceipt.hidden = true;
         showContentProcessing();
         setStatus('Generating content…', 'info');
         rememberPendingRequest(session, requestId);
@@ -728,6 +730,19 @@
                     const charCount = document.getElementById('contentCharCount');
                     if (charCount) charCount.textContent = `${topicInput.value.length} / 1000`;
                     output.textContent = item.content || '';
+                    let receipt = document.getElementById('contentCreditReceipt');
+                    if (Number.isInteger(item.creditsUsed) && item.creditsUsed > 0) {
+                        if (!receipt) {
+                            receipt = document.createElement('div');
+                            receipt.id = 'contentCreditReceipt';
+                            receipt.className = 'content-credit-receipt';
+                            output.parentNode.appendChild(receipt);
+                        }
+                        receipt.innerHTML = `<span>⚡ Credits used: <strong>${item.creditsUsed}</strong> &nbsp;•&nbsp; Remaining: <strong>${document.getElementById('creditsCount')?.textContent || '—'}</strong></span>`;
+                        receipt.hidden = false;
+                    } else if (receipt) {
+                        receipt.hidden = true;
+                    }
                     copyButton.disabled = false;
                     downloadButton.disabled = false;
                     if (downloadMdButton) downloadMdButton.disabled = false;
@@ -782,6 +797,8 @@
             const charCount = document.getElementById('contentCharCount');
             if (charCount) charCount.textContent = '0 / 1000';
             if (output) output.textContent = '';
+            const contentReceipt = document.getElementById('contentCreditReceipt');
+            if (contentReceipt) contentReceipt.hidden = true;
             if (copyButton) copyButton.disabled = true;
             if (downloadButton) downloadButton.disabled = true;
             if (downloadMdButton) downloadMdButton.disabled = true;

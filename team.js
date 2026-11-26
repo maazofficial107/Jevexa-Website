@@ -157,6 +157,16 @@
         }
     }
 
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
     async function getSession() {
         if (typeof window.supabaseClient === 'undefined' || !window.supabaseClient?.auth?.getSession) {
             return null;
@@ -174,7 +184,7 @@
         if (!session) return;
 
         try {
-            const res = await fetch('/api/team/members', {
+            const res = await fetchWithTimeout('/api/team/members', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             const data = await res.json().catch(() => ({}));
@@ -184,6 +194,11 @@
                 state.userTier = data.tier || 'free';
                 saveCachedTeam();
                 renderMembers();
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                    document.querySelector('#teamAdminWorkspace .team-roster-card'),
+                    0,
+                    { id: 'teamCreditReceipt', allowZero: true, note: 'Included in plan' }
+                );
             } else if (!res.ok) {
                 setAdminStatus(data.error || 'Could not load team members from server.', 'error');
             }
@@ -197,7 +212,7 @@
         if (!session) return;
 
         try {
-            const res = await fetch('/api/team/audit', {
+            const res = await fetchWithTimeout('/api/team/audit', {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
             const data = await res.json().catch(() => ({}));
@@ -216,7 +231,7 @@
         const session = await getSession();
         if (!session) return { localOnly: true };
         try {
-            const res = await fetch(`/api/team/members${query}`, {
+            const res = await fetchWithTimeout(`/api/team/members${query}`, {
                 method,
                 headers: {
                     'Content-Type': 'application/json',
@@ -541,7 +556,7 @@
             }
 
             try {
-                const res = await fetch('/api/team/invite', {
+                const res = await fetchWithTimeout('/api/team/invite', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -710,6 +725,10 @@
                 localStorage.removeItem(MEMBERS_STORAGE_KEY);
                 localStorage.removeItem(AUDIT_STORAGE_KEY);
             } catch (_) {}
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(
+                document.querySelector('#teamAdminWorkspace .team-roster-card'),
+                'teamCreditReceipt'
+            );
             closeInviteModal();
             renderMembers();
             renderAuditLogs();

@@ -581,6 +581,13 @@ Terms: Net 30`
             }
 
             renderExtraction(result.data, text);
+            const ocrCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(resultCard, ocrCharged, {
+                id: 'ocrCreditReceipt',
+                remaining: result.remaining_credits,
+                tier: result.tier,
+                insertBefore: '.ocr-actions-bar'
+            });
             if (result.remaining_credits !== undefined) {
                 window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
             }
@@ -588,13 +595,14 @@ Terms: Net 30`
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
-                const costText = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+                const costText = ocrCharged ? ` (${ocrCharged} credits used)` : '';
                 statusEl.textContent = `Data extracted successfully!${costText}`;
                 statusEl.className = 'ocr-status-msg success';
             }
             window.showToast?.('Document data extracted successfully!');
         } catch (err) {
             if (err?.status && err.status >= 400 && err.status < 500) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(resultCard, 'ocrCreditReceipt');
                 if (statusEl) {
                     statusEl.textContent = err.message || 'Could not process document request.';
                     statusEl.className = 'ocr-status-msg error';
@@ -605,6 +613,7 @@ Terms: Net 30`
             console.warn('OCR Cloud API notice, activating deterministic fallback:', err);
             const fallbackData = deterministicClientOcr(text, docType, curr);
             renderExtraction(fallbackData, text);
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(resultCard, 'ocrCreditReceipt');
             if (statusEl) {
                 statusEl.textContent = 'Cloud AI unavailable — parsed locally via deterministic engine (no credits charged).';
                 statusEl.className = 'ocr-status-msg info';
@@ -1011,6 +1020,7 @@ Terms: Net 30`
         renderExtraction,
         loadSample: (key) => {
             if (SAMPLE_DOCS[key]) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(resultCard, 'ocrCreditReceipt');
                 if (textInput) textInput.value = SAMPLE_DOCS[key];
                 if (SAMPLE_PARSED[key]) renderExtraction(SAMPLE_PARSED[key], SAMPLE_DOCS[key]);
             }
@@ -1024,6 +1034,7 @@ Terms: Net 30`
             state.textIsAutoLoaded = true;
             if (fileInput) fileInput.value = '';
             updateFileBadge();
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(resultCard, 'ocrCreditReceipt');
             if (sampleSelect) sampleSelect.value = 'saas_invoice';
             if (textInput) textInput.value = SAMPLE_DOCS.saas_invoice;
             if (statusEl) { statusEl.textContent = ''; statusEl.className = 'ocr-status-msg'; }

@@ -30,8 +30,9 @@
         .pricing-standalone-hero { padding: 132px 0 42px; text-align: center; }
         .pricing-standalone-hero h1 { font-size: clamp(2.1rem, 4.5vw, 3.2rem); margin-bottom: 14px; }
         .pricing-standalone-hero p { max-width: 680px; margin: 0 auto 24px; color: var(--text-secondary); font-size: 1.05rem; line-height: 1.65; }
-        .billing-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
-        .billing-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.22s ease; }
+        .billing-toggle { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; padding: 5px; border-radius: 999px; max-width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+        .billing-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 10px 18px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.22s ease; }
+        @media (max-width: 540px) { .billing-toggle { border-radius: 16px; width: 100%; } .billing-btn { flex: 1 1 140px; padding: 10px 12px; font-size: 0.84rem; } .routing-matrix-wrap { padding: 18px 14px; } }
         .billing-btn.active { background: var(--gradient); color: #fff; box-shadow: 0 6px 20px rgba(139,92,246,0.35); }
         .pricing-card { position: relative; display: flex; flex-direction: column; padding: 32px 22px; border-radius: 22px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); backdrop-filter: blur(18px); transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease; }
         .pricing-card:hover { transform: translateY(-8px); box-shadow: 0 24px 55px rgba(139,92,246,0.22); border-color: rgba(167,139,250,0.4); }
@@ -72,17 +73,23 @@
                     <span class="logo-sub">AI STUDIO</span>
                 </div>
             </a>
-            <div class="nav-links" id="navLinks">
-                <a href="/#tools">Tools</a>
-                <a href="/#features">Features</a>
-                <a href="/pricing" class="active">Pricing</a>
-                <a href="/about">About Us</a>
-                <a href="/contact">Contact</a>
-                <a href="/login" class="btn btn-primary" style="padding: 8px 18px; border-radius: 10px;">Sign In</a>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/#features" class="nav-link">Features</a></li>
+                <li><a href="/pricing" class="nav-link active">Pricing</a></li>
+                <li><a href="/about" class="nav-link">About</a></li>
+                <li><a href="/contact" class="nav-link">Contact</a></li>
+                <li class="nav-link-mobile"><a href="/login" id="pricingMobileAuthLink" class="nav-link nav-link-cta nav-link-cta-primary">Sign In</a></li>
+            </ul>
+            <div class="nav-actions">
+                <a href="/login" id="pricingNavAuthBtn" class="btn btn-nav">
+                    <span id="pricingNavAuthLabel">Sign In</span>
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+                <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Open navigation menu" aria-controls="navLinks" aria-expanded="false">
+                    <span></span><span></span><span></span>
+                </button>
             </div>
-            <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Toggle Menu" aria-expanded="false">
-                <span></span><span></span><span></span>
-            </button>
         </div>
     </nav>
 
@@ -323,6 +330,11 @@
         (function() {
             const toggle = document.getElementById('mobileToggle');
             const navLinks = document.getElementById('navLinks');
+            const closeMobileDrawer = () => {
+                navLinks?.classList.remove('open');
+                toggle?.classList.remove('active');
+                toggle?.setAttribute('aria-expanded', 'false');
+            };
             if (toggle && navLinks) {
                 toggle.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -330,7 +342,36 @@
                     toggle.classList.toggle('active', isOpen);
                     toggle.setAttribute('aria-expanded', String(isOpen));
                 });
+                document.addEventListener('click', (e) => {
+                    if (navLinks.classList.contains('open') && !navLinks.contains(e.target) && !toggle.contains(e.target)) {
+                        closeMobileDrawer();
+                    }
+                });
+                navLinks.querySelectorAll('a').forEach(link => {
+                    link.addEventListener('click', closeMobileDrawer);
+                });
             }
+
+            try {
+                let hasSession = Boolean(localStorage.getItem('jevexa_persisted_session'));
+                if (!hasSession) {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const k = localStorage.key(i);
+                        if (k && k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1) {
+                            const v = localStorage.getItem(k);
+                            if (v && v.indexOf('"user"') !== -1) { hasSession = true; break; }
+                        }
+                    }
+                }
+                if (hasSession) {
+                    const navBtn = document.getElementById('pricingNavAuthBtn');
+                    const navLabel = document.getElementById('pricingNavAuthLabel');
+                    const mobLink = document.getElementById('pricingMobileAuthLink');
+                    if (navBtn) navBtn.href = '/';
+                    if (navLabel) navLabel.textContent = 'Open Studio';
+                    if (mobLink) { mobLink.href = '/'; mobLink.textContent = 'Open Studio'; }
+                }
+            } catch (_) {}
 
             let billingCycle = 'monthly';
             const toggleBtns = document.querySelectorAll('.billing-btn');
@@ -353,9 +394,17 @@
             const statusBox = document.getElementById('pricingActStatus');
             const form = document.getElementById('pricingActivationForm');
             const submitBtn = document.getElementById('pricingActSubmit');
+            let modalReturnFocus = null;
+            const closePricingModal = () => {
+                if (!modal) return;
+                modal.classList.add('hidden');
+                if (modalReturnFocus instanceof HTMLElement) modalReturnFocus.focus({ preventScroll: true });
+                modalReturnFocus = null;
+            };
 
             document.querySelectorAll('.js-plan-trigger').forEach(btn => {
                 btn.addEventListener('click', () => {
+                    modalReturnFocus = document.activeElement;
                     const plan = btn.getAttribute('data-plan') || 'pro';
                     const isAnnual = billingCycle === 'annual';
                     const price = isAnnual ? btn.getAttribute('data-annual-price') : btn.getAttribute('data-monthly-price');
@@ -365,11 +414,18 @@
                     desc.textContent = `Selected: ${label} (${isAnnual ? 'Annual Package — $' + price : 'Monthly Package — $' + price}). Submit your email or WhatsApp to receive your payment link.`;
                     statusBox.style.display = 'none';
                     modal.classList.remove('hidden');
+                    closeBtn?.focus({ preventScroll: true });
                 });
             });
 
-            closeBtn?.addEventListener('click', () => modal.classList.add('hidden'));
-            modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+            closeBtn?.addEventListener('click', closePricingModal);
+            modal?.addEventListener('click', (e) => { if (e.target === modal) closePricingModal(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    if (navLinks?.classList.contains('open')) closeMobileDrawer();
+                    if (modal && !modal.classList.contains('hidden')) closePricingModal();
+                }
+            });
 
             form?.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -416,15 +472,16 @@
                 const params = new URLSearchParams(window.location.search || '');
                 const requestedPlan = (params.get('plan') || '').trim().toLowerCase();
                 const cardSelectorMap = {
-                    free: 'starter', starter: 'lite', lite: 'lite',
+                    free: 'free', welcome: 'free', starter: 'lite', lite: 'lite',
                     pro: 'pro',
                     business: 'max', max: 'max',
                     ultra: 'ultra'
                 };
                 const targetPlan = cardSelectorMap[requestedPlan];
                 if (targetPlan) {
-                    const dataPlan = targetPlan === 'lite' ? 'starter' : (targetPlan === 'max' ? 'business' : targetPlan);
-                    const targetTrigger = document.querySelector(`.js-plan-trigger[data-plan="${dataPlan}"]`);
+                    const targetTrigger = targetPlan === 'free'
+                        ? document.querySelector('.pricing-card a[href="/signup"]')
+                        : document.querySelector(`.js-plan-trigger[data-plan="${targetPlan}"]`);
                     const targetCard = targetTrigger?.closest('.pricing-card');
                     if (targetCard) {
                         setTimeout(() => {

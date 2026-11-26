@@ -74,11 +74,52 @@
         returnFocus?.focus?.();
     }
 
+    function appendFormattedSupportText(parent, text) {
+        const lines = String(text || '').split(/\r?\n/);
+        lines.forEach((line, lineIdx) => {
+            if (lineIdx > 0) parent.appendChild(document.createElement('br'));
+            const tokenPattern = /(\*\*[^*\n]+\*\*|\/(?:pricing|refund-policy|about|contact|terms|privacy-policy)\b|hello@jevexa\.net)/g;
+            let lastIndex = 0;
+            let match;
+            while ((match = tokenPattern.exec(line)) !== null) {
+                if (match.index > lastIndex) {
+                    parent.appendChild(document.createTextNode(line.slice(lastIndex, match.index)));
+                }
+                const tok = match[0];
+                if (tok.startsWith('**') && tok.endsWith('**')) {
+                    const strong = document.createElement('strong');
+                    strong.textContent = tok.slice(2, -2);
+                    parent.appendChild(strong);
+                } else if (tok === 'hello@jevexa.net') {
+                    const link = document.createElement('a');
+                    link.href = 'mailto:hello@jevexa.net';
+                    link.textContent = tok;
+                    link.style.cssText = 'color:#22d3ee; text-decoration:underline;';
+                    parent.appendChild(link);
+                } else if (tok.startsWith('/')) {
+                    const link = document.createElement('a');
+                    link.href = tok;
+                    link.textContent = tok;
+                    link.style.cssText = 'color:#22d3ee; text-decoration:underline;';
+                    parent.appendChild(link);
+                }
+                lastIndex = tokenPattern.lastIndex;
+            }
+            if (lastIndex < line.length) {
+                parent.appendChild(document.createTextNode(line.slice(lastIndex)));
+            }
+        });
+    }
+
     function addAiMessage(text, user = false) {
         const message = document.createElement('p');
         message.className = `support-ai-message${user ? ' user' : ''}`;
         message.style.whiteSpace = 'pre-line';
-        message.textContent = text;
+        if (user) {
+            message.textContent = text;
+        } else {
+            appendFormattedSupportText(message, text);
+        }
         aiMessages.appendChild(message);
         aiMessages.scrollTop = aiMessages.scrollHeight;
         return message;
@@ -114,9 +155,15 @@
         const q = raw.toLowerCase();
         if (/\b(?:kya|kaise|kese|hai|hain|hoon|mujhe|batao|samjhao|karo|krdo|kar\s+do|shukriya|salam|bhai|madad)\b/i.test(q)) {
             if (/price|pricing|plan|pro|max|ultra|lite|cost|kharch|kitna/i.test(q)) {
-                return "JEVEXA ke 5 transparent plans hain (20% annual discount ke saath):\n• Free ($0): 100 welcome credits, Core Engine (1.0x)\n• Lite ($5/mo): 2,500 credits/mo, Pro Engine (3.0x), PDF/ZIP uploads\n• Pro ($15/mo): 10,000 credits/mo, Low/Medium thinking, Web Search (15/day)\n• Max ($29/mo): 22,000 credits/mo, Deep Reasoning (18.0x), High thinking, Web Search (50/day)\n• Ultra ($49/mo): 40,000 credits/mo, Ultra Reasoning, Web Search (150/day)\nDetails ke liye /pricing dekhein ya 'Talk to Human' click karein.";
+                return "JEVEXA ke 5 transparent plans hain (20% annual discount ke saath):\n• Free ($0): 100 welcome credits, Core Engine (1.0x)\n• Lite ($5/mo): 2,500 credits/mo, Pro Engine (3.0x), PDF/ZIP uploads\n• Pro ($15/mo): 10,000 credits/mo, Low/Medium thinking, Web Search (15/day)\n• Max ($29/mo): 22,000 credits/mo, Deep Reasoning (18.0x), High thinking, Web Search (50/day)\n• Ultra ($49/mo): 40,000 credits/mo, Ultra Reasoning, Web Search (150/day)\nDetails ke liye /pricing dekhein ya 'Talk to Human Agent' click karein.";
             }
-            return "Assalam-o-Alaikum! Main JEVEXA Support Assistant hoon. Aap mujhse pricing (/pricing), 100 free credits, 10 AI tools, Web Search ya Thinking levels ke baare mein pooch sakte hain. Agar account issue ho toh 'Talk to Human' par click karein.";
+            if (/credit|token|balance|refund/i.test(q)) {
+                return "Naye accounts ko 100 free welcome credits milte hain. AI Chat token-weighted billing use karta hai (Core 1.0x, Pro 3.0x, Deep Reasoning 18.0x; Web Search +5 cr; Image +2 / PDF +4 / ZIP +5). 7-day refund policy (/refund-policy) <10% usage par laagu hoti hai.";
+            }
+            if (/tool|feature|ocr|crm|content|social|analytics|workflow/i.test(q)) {
+                return "JEVEXA AI Studio mein 10 live business tools shamil hain: AI Chat, Content Generation, Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, Team Admin, Workflow Automation, aur Data Management.";
+            }
+            return "Assalam-o-Alaikum! Main JEVEXA Support Assistant hoon. Aap mujhse pricing (/pricing), 100 free credits, 10 AI tools, Web Search ya Thinking levels ke baare mein pooch sakte hain. Agar account issue ho toh 'Talk to Human Agent' par click karein.";
         }
         if (/reconcil|stuck|hold|held|awaiting safe|locked|unlock/i.test(q)) {
             return "If an AI message or credit reservation ever displays 'awaiting reconciliation', our system automatically releases any stale pending hold older than 15–30 seconds and restores the held credits to your wallet. You can also click 'Clear & Unlock Chat' in the chat header to reset your session immediately. If you need any manual account adjustment, click 'Talk to Human' below!";

@@ -392,6 +392,12 @@
             }
 
             renderPostPreview(result.data);
+            const socialCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(previewContainer, socialCharged, {
+                id: 'socialCreditReceipt',
+                remaining: result.remaining_credits,
+                tier: result.tier
+            });
             if (result.remaining_credits !== undefined) {
                 window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
             }
@@ -399,13 +405,14 @@
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
-                const costText = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+                const costText = socialCharged ? ` (${socialCharged} credits used)` : '';
                 statusEl.textContent = `Post draft and viral hooks generated!${costText}`;
                 statusEl.className = 'social-status-msg success';
             }
             window.showToast?.('Social post generated!');
         } catch (err) {
             if (err?.status && err.status >= 400 && err.status < 500) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(previewContainer, 'socialCreditReceipt');
                 if (statusEl) {
                     statusEl.textContent = err.message || 'Could not generate social post.';
                     statusEl.className = 'social-status-msg error';
@@ -416,6 +423,7 @@
             console.warn('Social Cloud API notice, activating deterministic fallback:', err);
             const fallbackPost = deterministicClientSocial(topic, platform, tone, goal, cta);
             renderPostPreview(fallbackPost);
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(previewContainer, 'socialCreditReceipt');
             if (statusEl) {
                 statusEl.textContent = 'Cloud AI unavailable — generated locally via deterministic engine (no credits charged).';
                 statusEl.className = 'social-status-msg info';
@@ -667,6 +675,7 @@
             state.isGenerating = false;
             state.scheduledCalendar = [];
             try { localStorage.removeItem('jevexa_social_calendar_cache'); } catch (_) {}
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(previewContainer, 'socialCreditReceipt');
             if (statusEl) { statusEl.textContent = ''; statusEl.className = 'social-status-msg'; }
             renderPostPreview(DEFAULT_POST);
             renderCalendar();

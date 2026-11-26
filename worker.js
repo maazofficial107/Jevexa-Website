@@ -1213,6 +1213,23 @@ async function reserveServiceCredits({
   return { reservation, reservationResponse };
 }
 
+/**
+ * Return consistent credit & token telemetry keys across all metered service responses.
+ */
+function buildCreditUsageFields(chargedCredits, remainingCredits, totalTokens) {
+  return {
+    charged_credits: chargedCredits,
+    credits_used: chargedCredits,
+    creditsUsed: chargedCredits,
+    creditsCharged: chargedCredits,
+    remaining_credits: remainingCredits,
+    remainingCredits,
+    creditsRemaining: remainingCredits,
+    tokens: totalTokens,
+    tokensUsed: totalTokens
+  };
+}
+
 async function settleServiceCredits({
   cfg,
   user,
@@ -5216,11 +5233,7 @@ async function handleCrmScore(request, env) {
     pain_points: safePainPoints,
     recommended_action: safeRecommendedAction,
     suggested_outreach_angle: safeOutreachAngle,
-    charged_credits: chargedCredits,
-    remaining_credits: remainingCredits,
-    creditsCharged: chargedCredits,
-    creditsRemaining: remainingCredits,
-    tokensUsed: totalTokens,
+    ...buildCreditUsageFields(chargedCredits, remainingCredits, totalTokens),
     requestId: parsed.requestId
   });
 }
@@ -5666,11 +5679,7 @@ async function handleOutreachGenerate(request, env) {
     ok: true,
     sequence_id: sequenceId,
     sequence: safeSequence,
-    charged_credits: chargedCredits,
-    remaining_credits: remainingCredits,
-    creditsCharged: chargedCredits,
-    creditsRemaining: remainingCredits,
-    tokensUsed: totalTokens,
+    ...buildCreditUsageFields(chargedCredits, remainingCredits, totalTokens),
     requestId: parsed.requestId
   });
 }
@@ -6568,9 +6577,7 @@ async function handleOcrExtract(request, env) {
     data: extractedResult,
     tier: userTier,
     requestId: parsed.requestId,
-    charged_credits: settlement.chargedCredits,
-    remaining_credits: settlement.remainingCredits,
-    tokens: usage.totalTokens
+    ...buildCreditUsageFields(settlement.chargedCredits, settlement.remainingCredits, usage.totalTokens)
   });
 }
 
@@ -6719,9 +6726,7 @@ async function handleSocialGenerate(request, env) {
     data: socialResult,
     tier: userTier,
     requestId: parsed.requestId,
-    charged_credits: settlement.chargedCredits,
-    remaining_credits: settlement.remainingCredits,
-    tokens: usage.totalTokens
+    ...buildCreditUsageFields(settlement.chargedCredits, settlement.remainingCredits, usage.totalTokens)
   });
 }
 
@@ -6921,9 +6926,7 @@ Task: Synthesize an executive forecasting report strictly adhering to the JSON s
     report: finalReport,
     tier: userTier,
     requestId: parsed.requestId,
-    charged_credits: settlement.chargedCredits,
-    remaining_credits: settlement.remainingCredits,
-    tokens: usage.totalTokens
+    ...buildCreditUsageFields(settlement.chargedCredits, settlement.remainingCredits, usage.totalTokens)
   });
 }
 
@@ -7831,9 +7834,7 @@ async function handleWorkflowsRun(request, env) {
     status: runResult.status,
     tier: userTier,
     requestId: parsed.requestId,
-    charged_credits: settlement.chargedCredits,
-    remaining_credits: settlement.remainingCredits,
-    tokens: usage.totalTokens
+    ...buildCreditUsageFields(settlement.chargedCredits, settlement.remainingCredits, usage.totalTokens)
   });
 }
 
@@ -7918,9 +7919,7 @@ async function handleDataClean(request, env) {
     csv: cleanResult.csv,
     tier: userTier,
     requestId: parsed.requestId,
-    charged_credits: settlement.chargedCredits,
-    remaining_credits: settlement.remainingCredits,
-    tokens: usage.totalTokens
+    ...buildCreditUsageFields(settlement.chargedCredits, settlement.remainingCredits, usage.totalTokens)
   });
 }
 
@@ -8220,10 +8219,22 @@ function allowSupportAiRequest(request) {
 }
 
 function generateContextualSupportResponse(message, history = []) {
-  const q = String(message || "").toLowerCase().trim();
+  const raw = String(message || "").trim();
+  const q = raw.toLowerCase();
+  const detectedLang = detectScriptAndLanguage(raw);
+
+  if (detectedLang.code === "roman_urdu") {
+    if (/price|pricing|\bplans?\b|ultra|pro|lite|max|cost|kitna|annual|discount/i.test(q)) {
+      return "JEVEXA ke 5 transparent plans hain (20% annual discount aur one-time credit packages ke saath):\n• Free ($0): 100 welcome credits, Core Engine (1.0x), Thinking OFF\n• Lite ($5/mo, $48/yr): 2,500 credits/month, Pro Engine (3.0x), PDF/ZIP uploads\n• Pro ($15/mo, $144/yr): 10,000 credits/month, Low/Medium thinking, Live Web Search (15/day)\n• Max ($29/mo, $278.40/yr): 22,000 credits/month, Deep Reasoning (18.0x), High thinking, Web Search (50/day)\n• Ultra ($49/mo, $470.40/yr): 40,000 credits/month, Ultra Reasoning priority, Web Search (150/day)\nMazeed maloomat ke liye /pricing dekhein ya 'Talk to Human Agent' click karein.";
+    }
+    if (/credit|token|balance|cost|refund/i.test(q)) {
+      return "Naye accounts ko 100 free welcome credits milte hain. AI Chat token-weighted billing use karta hai (Core 1.0x, Pro 3.0x, Deep Reasoning 18.0x; Web Search +5 cr; Image +2 / PDF +4 / ZIP +5). 7-day refund policy (/refund-policy) <10% usage par laagu hoti hai.";
+    }
+    return "Assalam-o-Alaikum! Main JEVEXA Support Assistant hoon. Aap mujhse 10 AI tools, credits, pricing (/pricing), ya 7-day refund policy (/refund-policy) ke baare mein pooch sakte hain. Account help ke liye 'Talk to Human Agent' par click karein ya hello@jevexa.net par email karein.";
+  }
 
   if (/reconcil|stuck|hold|held|awaiting safe|locked|unlock/i.test(q)) {
-    return "If an AI message or credit reservation ever displays 'awaiting reconciliation', our system automatically releases any stale pending hold older than 15–30 seconds and restores the held credits to your wallet. You can also click 'Clear & Unlock Chat' in the chat header to reset your session immediately. If you need any manual account adjustment, click 'Talk to Human' below!";
+    return "If an AI message or credit reservation ever displays 'awaiting reconciliation', our system automatically releases any stale pending hold older than 15–30 seconds and restores the held credits to your wallet. You can also click 'Clear & Unlock Chat' in the chat header to reset your session immediately. If you need any manual account adjustment, click 'Talk to Human Agent' below!";
   }
 
   if (/\b(tools?|features?|capabilities|ocr|crm|content|social|analytics|workflow)\b/i.test(q)) {
@@ -8243,7 +8254,7 @@ function generateContextualSupportResponse(message, history = []) {
   }
 
   if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
-    return "Email Support: Response within 24 hours (Mon–Sat). Click 'Talk to Human' below to submit a ticket directly to our team, or email maazofficial107@gmail.com.";
+    return "Email Support: Response within 24 hours (Mon–Sat). Click 'Talk to Human Agent' below to submit a ticket directly to our team, or email hello@jevexa.net.";
   }
 
   if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
@@ -9095,6 +9106,27 @@ async function handleMemories(request, env) {
   return json({ error: "Method not allowed." }, 405);
 }
 
+function sanitizeSessionMessages(rawMessages) {
+  if (!Array.isArray(rawMessages)) return [];
+  return rawMessages
+    .slice(-100)
+    .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.text === "string")
+    .map(m => {
+      const entry = { role: m.role, text: m.text.slice(0, 16000) };
+      if (m.role === "assistant" && m.meta && typeof m.meta === "object") {
+        const cleanMeta = {};
+        if (Number.isInteger(m.meta.creditsUsed) && m.meta.creditsUsed >= 0) cleanMeta.creditsUsed = m.meta.creditsUsed;
+        if (Number.isInteger(m.meta.remainingCredits) && m.meta.remainingCredits >= 0) cleanMeta.remainingCredits = m.meta.remainingCredits;
+        if (typeof m.meta.tier === "string") cleanMeta.tier = m.meta.tier.slice(0, 24);
+        if (typeof m.meta.modelName === "string") cleanMeta.modelName = m.meta.modelName.slice(0, 64);
+        if (m.meta.webSearch === true) cleanMeta.webSearch = true;
+        if (Number.isInteger(m.meta.webSearchSurcharge) && m.meta.webSearchSurcharge > 0) cleanMeta.webSearchSurcharge = m.meta.webSearchSurcharge;
+        if (Object.keys(cleanMeta).length > 0) entry.meta = cleanMeta;
+      }
+      return entry;
+    });
+}
+
 async function handleChatSessions(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: JSON_HEADERS });
@@ -9131,7 +9163,7 @@ async function handleChatSessions(request, env) {
           title: typeof row.title === "string" ? row.title.slice(0, 48) : "New chat",
           pinned: Boolean(row.pinned),
           languageOverride: row.language_override || null,
-          messages: Array.isArray(row.messages) ? row.messages.slice(-100) : [],
+          messages: sanitizeSessionMessages(row.messages),
           updatedAt: typeof row.updated_at === "number"
             ? row.updated_at
             : (row.updated_at ? new Date(row.updated_at).getTime() : Date.now())
@@ -9151,10 +9183,7 @@ async function handleChatSessions(request, env) {
     const title = typeof s.title === "string" && s.title.trim() ? s.title.trim().slice(0, 48) : "New chat";
     const pinned = Boolean(s.pinned);
     const languageOverride = typeof s.languageOverride === "string" ? s.languageOverride.slice(0, 24) : null;
-    const rawMessages = Array.isArray(s.messages) ? s.messages.slice(-100) : [];
-    const messages = rawMessages
-      .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.text === "string")
-      .map(m => ({ role: m.role, text: m.text.slice(0, 16000) }));
+    const messages = sanitizeSessionMessages(s.messages);
     const updatedAtIso = new Date(Number.isFinite(s.updatedAt) ? s.updatedAt : Date.now()).toISOString();
 
     try {
@@ -9380,6 +9409,7 @@ const TOOL_SEO_ROUTES = Object.freeze({
     h1: "Team Admin &amp; <span class=\"text-gradient\">Access Control</span>"
   },
   "/tools/team": { alias: "/tools/team-admin" },
+  "/tools/admin": { alias: "/tools/team-admin" },
   "/tools/workflow-automation": {
     canonical: "/tools/workflow-automation",
     title: "AI Workflow Automation Builder | JEVEXA",
@@ -9407,7 +9437,8 @@ const TOOL_SEO_ROUTES = Object.freeze({
     description: "Build personalized multi-touch cold email sequences, follow-ups, and objection replies designed for B2B conversion.",
     h1: "AI Outreach <span class=\"text-gradient\">Sequence Generator</span>"
   },
-  "/tools/outreach": { alias: "/tools/outreach-generator" }
+  "/tools/outreach": { alias: "/tools/outreach-generator" },
+  "/tools/email-outreach": { alias: "/tools/outreach-generator" }
 });
 
 function resolveToolSeoMeta(pathname) {

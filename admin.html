@@ -856,16 +856,23 @@ async function loadContacts(session){
 
     let response;
     let result;
+    const contactsController = new AbortController();
+    const contactsTimeoutId = setTimeout(() => contactsController.abort(), 12000);
     try {
         response = await fetch('/api/admin/contacts', {
+            signal: contactsController.signal,
             headers: { Authorization: `Bearer ${data.session.access_token}` }
         });
         result = await response.json().catch(() => ({}));
     } catch (error) {
         console.error('Admin contacts request failed:', error);
-        emptyMessage.textContent = 'Contact submissions are temporarily unavailable.';
+        emptyMessage.textContent = error?.name === 'AbortError'
+            ? 'Loading contacts timed out. Please refresh to try again.'
+            : 'Contact submissions are temporarily unavailable.';
         loginError.textContent = 'Could not verify admin access. Please try again.';
         return false;
+    } finally {
+        clearTimeout(contactsTimeoutId);
     }
     if (!response.ok || !Array.isArray(result.contacts)) {
         const message = result.error || 'Contact submissions are temporarily unavailable.';
@@ -926,12 +933,15 @@ adminLogoutButton?.addEventListener('click', async () => {
     adminLogoutInFlight = true;
     adminLogoutButton.disabled = true;
     try {
-        const { error } = await supabaseClient.auth.signOut();
-        if (error) throw error;
+        const { error } = await Promise.race([
+            supabaseClient.auth.signOut(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Sign-out timed out')), 3000))
+        ]);
+        if (error) console.warn('Admin sign-out notice:', error);
         location.reload();
     } catch (error) {
-        loginError.textContent = 'Could not sign out. Please try again.';
-        console.error('Admin sign-out failed:', error);
+        console.warn('Admin sign-out notice:', error);
+        location.reload();
     } finally {
         adminLogoutInFlight = false;
         adminLogoutButton.disabled = false;

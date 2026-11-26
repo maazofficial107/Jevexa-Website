@@ -1734,6 +1734,13 @@
             renderSvgCharts(activeKpis);
             renderReport(result.report);
             renderDataTable();
+            const reportCard = document.getElementById('analyticsReportCard');
+            const analyticsCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(reportCard, analyticsCharged, {
+                id: 'analyticsCreditReceipt',
+                remaining: result.remaining_credits,
+                tier: result.tier
+            });
 
             if (result.remaining_credits !== undefined) {
                 window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
@@ -1742,12 +1749,14 @@
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (el.status) {
-                const costText = result.charged_credits ? ` (${result.charged_credits} credits used)` : '';
+                const costText = analyticsCharged ? ` (${analyticsCharged} credits used)` : '';
                 el.status.textContent = `KPIs and scenario forecasts updated!${costText}`;
                 el.status.className = 'analytics-status-msg success';
             }
             window.showToast?.('Business Analytics forecast generated!');
         } catch (err) {
+            const reportCard = document.getElementById('analyticsReportCard');
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(reportCard, 'analyticsCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
                 if (el.status) {
                     el.status.textContent = err.message || 'Could not generate analytics forecast.';
@@ -2167,6 +2176,7 @@
                 state.cleanedRecords = [];
                 state.scrapedProducts = [];
                 state.activeTableMode = 'records';
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.getElementById('analyticsReportCard'), 'analyticsCreditReceipt');
                 updateAllViews();
             }
         },
@@ -2187,6 +2197,7 @@
             if (el.datasetBanner) el.datasetBanner.hidden = true;
             if (el.urlPreviewCard) el.urlPreviewCard.hidden = true;
             if (el.status) { el.status.textContent = ''; el.status.className = 'analytics-status-msg'; }
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.getElementById('analyticsReportCard'), 'analyticsCreditReceipt');
             updateAllViews();
         },
         state

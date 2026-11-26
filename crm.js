@@ -1109,7 +1109,12 @@
             if (drawerAiAction) {
                 drawerAiAction.textContent = lead.suggested_outreach_angle || 'Follow up with personalized outreach sequence.';
             }
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(drawerAiScoreBox, lead.ai_score_credits, {
+                id: 'crmScoreCreditReceipt',
+                remaining: lead.ai_score_remaining
+            });
         } else {
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(drawerAiScoreBox, 'crmScoreCreditReceipt');
             drawerAiScoreBox.hidden = true;
             drawerAiScoreBox.setAttribute('hidden', '');
         }
@@ -1262,9 +1267,12 @@
 
         const requestId = generateUuid();
 
+        const crmScoreController = new AbortController();
+        const crmScoreTimeoutId = setTimeout(() => crmScoreController.abort(), 35000);
         try {
             const res = await fetch('/api/crm/score', {
                 method: 'POST',
+                signal: crmScoreController.signal,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session.access_token}`,
@@ -1299,6 +1307,8 @@
 
             lead.lead_score = data.lead_score;
             lead.ai_summary = data.summary;
+            lead.ai_score_credits = Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null);
+            lead.ai_score_remaining = Number.isInteger(data.remaining_credits) ? data.remaining_credits : undefined;
             if (data.suggested_outreach_angle) {
                 lead.suggested_outreach_angle = data.suggested_outreach_angle;
             }
@@ -1333,6 +1343,8 @@
             lead.lead_score = fallback.lead_score;
             lead.ai_summary = fallback.summary;
             lead.suggested_outreach_angle = fallback.suggested_outreach_angle;
+            lead.ai_score_credits = null;
+            lead.ai_score_remaining = undefined;
 
             renderAiStrategyBox(lead);
             renderAll();
@@ -1342,6 +1354,7 @@
                 window.showToast(`AI Score generated (Offline Fallback): ${fallback.lead_score}/100 (${fallback.conversion_likelihood})`);
             }
         } finally {
+            clearTimeout(crmScoreTimeoutId);
             state.isAiScoring = false;
             if (drawerAiScoreBtn) {
                 drawerAiScoreBtn.disabled = false;
@@ -1498,6 +1511,7 @@
             state.isLoadingLeads = false;
             state.isAiScoring = false;
             try { sessionStorage.removeItem('jevexa_crm_leads_cache'); } catch (_) {}
+            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(drawerAiScoreBox, 'crmScoreCreditReceipt');
             closeLeadModal();
             closeLeadDrawer();
             renderAll();

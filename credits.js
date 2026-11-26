@@ -1317,7 +1317,7 @@
                     ...(typeof item.webSearch === 'boolean' ? { webSearch: item.webSearch } : {}),
                     messages: item.messages.slice(-100).filter(message =>
                         message && ['user', 'assistant'].includes(message.role)
-                        && typeof message.text === 'string' && message.text.length <= 4000
+                        && typeof message.text === 'string' && message.text.length <= 16000
                     )
                 }));
             const legacy = JSON.parse(localStorage.getItem(`jevexa_${userId}_chat_history`) || '[]');
@@ -1328,7 +1328,7 @@
                     updatedAt: Date.now(),
                     pinned: false,
                     messages: legacy.filter(item => item && ['user', 'assistant'].includes(item.role)
-                        && typeof item.text === 'string' && item.text.length <= 4000).slice(-100)
+                        && typeof item.text === 'string' && item.text.length <= 16000).slice(-100)
                 }];
             }
             // FRESH CHAT ON REOPEN:
@@ -2790,12 +2790,17 @@
             webBadge.innerHTML = `<i class="fas fa-globe" aria-hidden="true"></i><span>Web Grounded</span>`;
             content.appendChild(webBadge);
         }
-        const receipt = document.createElement('div');
-        receipt.className = 'chat-credit-receipt';
-        receipt.setAttribute('role', 'status');
-        receipt.hidden = true;
-        receipt.innerHTML = `<span class="chat-receipt-tier">${activeModel}</span> <span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
-        content.appendChild(receipt);
+        if (used !== null && used >= 0) {
+            const receipt = document.createElement('div');
+            receipt.className = 'chat-credit-receipt';
+            receipt.setAttribute('role', 'status');
+            receipt.dataset.usedCredits = String(used);
+            const remHtml = (remaining !== null && remaining >= 0)
+                ? ` &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong>`
+                : '';
+            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span>⚡ Credits used: <strong>${used}</strong>${remHtml}</span>`;
+            content.appendChild(receipt);
+        }
     }
 
     function createStreamingMessageRow(index = conversation.length) {
@@ -3652,10 +3657,26 @@
 
                 removeTyping();
                 const replyText = String(result.reply || streamedText || '').trim();
-                const replyMeta = result?.webSearch
-                    ? { webSearch: true, webSearchSurcharge: Number(result.webSearchSurcharge) || 5 }
-                    : null;
-                conversation.push({ role: 'assistant', text: replyText, ...(replyMeta ? { meta: replyMeta } : {}) });
+                const usedCreditsMeta = Number.isInteger(result?.creditsUsed)
+                    ? result.creditsUsed
+                    : (Number.isInteger(result?.credits_used) ? result.credits_used : (Number.isInteger(result?.creditsCharged) ? result.creditsCharged : null));
+                const remCreditsMeta = Number.isInteger(result?.remainingCredits)
+                    ? result.remainingCredits
+                    : (Number.isInteger(result?.remaining_credits) ? result.remaining_credits : (Number.isInteger(result?.creditsRemaining) ? result.creditsRemaining : null));
+                const replyMeta = {};
+                if (usedCreditsMeta !== null && usedCreditsMeta >= 0) replyMeta.creditsUsed = usedCreditsMeta;
+                if (remCreditsMeta !== null && remCreditsMeta >= 0) replyMeta.remainingCredits = remCreditsMeta;
+                if (result?.tier || selectedTier) replyMeta.tier = String(result?.tier || selectedTier);
+                if (result?.modelName || result?.model) replyMeta.modelName = String(result.modelName || result.model);
+                if (result?.webSearch) {
+                    replyMeta.webSearch = true;
+                    replyMeta.webSearchSurcharge = Number(result.webSearchSurcharge) || 5;
+                }
+                conversation.push({
+                    role: 'assistant',
+                    text: replyText,
+                    ...(Object.keys(replyMeta).length ? { meta: replyMeta } : {})
+                });
                 trimConversationToMax(100);
                 const assistantMsgIndex = conversation.length - 1;
 
@@ -4055,7 +4076,7 @@
             return;
         }
         if (action === 'copy') {
-            const rawReply = conversation[index]?.text || row?.querySelector('.msg-body, .msg-content p, .msg-content')?.textContent || '';
+            const rawReply = conversation[index]?.text || row?.querySelector('.msg-body, .msg-content p')?.textContent || '';
             try {
                 await copyButtonWithFeedback(button, rawReply, 'Response copied.');
             } catch (error) {

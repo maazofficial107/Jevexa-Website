@@ -11921,31 +11921,89 @@ body.is-offline .toast.show {
    ========================================================================== */
 
 .chat-credit-receipt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    color: #94a3b8;
+    user-select: none;
+    width: 100%;
+    animation: fadeInReceipt 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chat-credit-receipt[hidden],
+.service-used-credits-footer[hidden],
+.content-credit-receipt[hidden] {
     display: none !important;
 }
 
-.content-credit-receipt {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 10px;
-    padding: 6px 14px;
-    border-radius: 9999px;
-    font-size: 0.78rem;
+.chat-receipt-tier {
+    color: #a5b4fc;
     font-weight: 600;
-    letter-spacing: 0.02em;
-    color: #38bdf8;
-    background: rgba(14, 165, 233, 0.12);
-    border: 1px solid rgba(56, 189, 248, 0.3);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-    user-select: none;
-    width: fit-content;
-    animation: fadeInReceipt 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.content-credit-receipt {
-    margin-top: 14px;
+.content-credit-receipt,
+.service-used-credits-footer {
     display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin-top: 12px;
+    padding: 5px 12px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.08);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    user-select: none;
+    width: fit-content;
+    max-width: 100%;
+    animation: fadeInReceipt 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.service-used-credits-footer .used-credits-label i {
+    color: #38bdf8;
+    font-size: 0.7rem;
+    margin-right: 3px;
+}
+
+.service-used-credits-footer .used-credits-sep {
+    opacity: 0.5;
+}
+
+.chat-credit-receipt strong,
+.content-credit-receipt strong,
+.service-used-credits-footer strong {
+    color: #e2e8f0;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.chatbot-window[data-chat-theme="light"] .chat-credit-receipt,
+html[data-jevexa-theme="light"] .content-credit-receipt,
+html[data-jevexa-theme="light"] .service-used-credits-footer {
+    color: #475569;
+    border-color: rgba(100, 116, 139, 0.22);
+}
+
+.chatbot-window[data-chat-theme="light"] .chat-credit-receipt strong,
+html[data-jevexa-theme="light"] .content-credit-receipt strong,
+html[data-jevexa-theme="light"] .service-used-credits-footer strong {
+    color: #0f172a;
+}
+
+.chatbot-window[data-chat-theme="light"] .chat-receipt-tier {
+    color: #4f46e5;
 }
 
 @keyframes fadeInReceipt {
@@ -11957,12 +12015,6 @@ body.is-offline .toast.show {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-.chat-credit-receipt strong,
-.content-credit-receipt strong {
-    color: #f0fdf4;
-    font-weight: 700;
 }
 
 /* Enhanced File Attachment Chips */
@@ -17499,6 +17551,80 @@ html.jevexa-reduce-motion *::after {
     font-family: inherit;
 }
 .auth-mode-toggle-btn:hover { text-decoration: underline; }
+
+/* Cross-device Laptop & Mobile Stabilization across Navbar, Workspaces & Cards */
+@media (max-width: 1180px) {
+    .hero {
+        gap: 28px;
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+    .outreach-actions-bar,
+    .ocr-actions-bar {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 640px) {
+    #creditsBadge span:last-child {
+        display: none;
+    }
+    #creditsBadge {
+        padding: 5px 10px;
+        gap: 5px;
+        font-size: 12px;
+    }
+    .tool-workspace .workspace-top-bar {
+        padding: 10px 12px;
+        gap: 8px;
+        min-height: 56px;
+    }
+    .tool-workspace .workspace-back-btn {
+        padding: 0 10px;
+        min-height: 40px;
+    }
+    .tool-workspace .workspace-back-btn span,
+    .tool-workspace .workspace-tool-tagline,
+    .tool-workspace .workspace-credits-badge span:last-child {
+        display: none;
+    }
+    .tool-workspace .workspace-tool-name {
+        font-size: 0.95rem;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 46vw;
+    }
+    .tool-workspace .workspace-credits-badge {
+        padding: 5px 9px;
+        font-size: 12px;
+        gap: 5px;
+    }
+    .ocr-actions-bar button,
+    .workflow-history-card .pane-head {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .ocr-actions-bar .btn {
+        flex: 1 1 calc(50% - 4px);
+        min-height: 42px;
+        justify-content: center;
+    }
+    .builder-controls {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .builder-controls .crm-select,
+    .builder-controls button {
+        width: 100%;
+        min-height: 42px;
+    }
+    .data-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
 
 
 

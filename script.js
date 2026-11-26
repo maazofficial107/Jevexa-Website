@@ -572,6 +572,20 @@ function createSupabaseClientInstance() {
 createSupabaseClientInstance();
 window.JEVEXA_SUPABASE_READY = Boolean(supabaseClient);
 
+/**
+ * Race a promise against a deadline so slow networks never stall UI transitions.
+ */
+function withTimeout(promise, timeoutMs = 4000, errorMessage = 'Operation timed out') {
+    let timerId = null;
+    const timeoutPromise = new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+    });
+    return Promise.race([Promise.resolve(promise), timeoutPromise]).finally(() => {
+        if (timerId !== null) clearTimeout(timerId);
+    });
+}
+window.JEVEXA_WITH_TIMEOUT = withTimeout;
+
 async function fetchSessionWithTimeoutAndRetry({ timeoutMs = 4000, maxRetries = 2 } = {}) {
     const client = createSupabaseClientInstance();
     if (!client?.auth?.getSession) {
@@ -579,17 +593,11 @@ async function fetchSessionWithTimeoutAndRetry({ timeoutMs = 4000, maxRetries = 
     }
     let lastError = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        let timerId = null;
         try {
-            const timeoutPromise = new Promise((_, reject) => {
-                timerId = setTimeout(() => reject(new Error('Session check timed out')), timeoutMs);
-            });
-            const res = await Promise.race([client.auth.getSession(), timeoutPromise]);
-            clearTimeout(timerId);
+            const res = await withTimeout(client.auth.getSession(), timeoutMs, 'Session check timed out');
             if (!res?.error) return res;
             lastError = res.error;
         } catch (err) {
-            clearTimeout(timerId);
             lastError = err;
         }
         if (attempt < maxRetries) {
@@ -599,6 +607,82 @@ async function fetchSessionWithTimeoutAndRetry({ timeoutMs = 4000, maxRetries = 
     return { data: { session: null }, error: lastError };
 }
 window.JEVEXA_GET_SESSION = fetchSessionWithTimeoutAndRetry;
+
+/**
+ * Render or hide a subtle "Used credits" footer on any metered service output container.
+ */
+window.JEVEXA_CLEAR_USED_CREDITS_FOOTER = function clearUsedCreditsFooter(container, elementId = '') {
+    const existing = elementId
+        ? document.getElementById(elementId)
+        : container?.querySelector?.('.service-used-credits-footer');
+    if (existing) {
+        existing.hidden = true;
+        existing.setAttribute('hidden', '');
+    }
+};
+
+window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(container, creditsUsed, options = {}) {
+    const elId = options.id || '';
+    const numericUsed = Number(creditsUsed);
+    if (!container || creditsUsed === null || creditsUsed === undefined || !Number.isFinite(numericUsed) || (!options.allowZero && numericUsed < 1) || numericUsed < 0) {
+        window.JEVEXA_CLEAR_USED_CREDITS_FOOTER(container, elId);
+        return null;
+    }
+    let footer = elId ? document.getElementById(elId) : container.querySelector('.service-used-credits-footer');
+    if (!footer) {
+        footer = document.createElement('div');
+        if (elId) footer.id = elId;
+        footer.className = options.className ? `service-used-credits-footer ${options.className}` : 'service-used-credits-footer';
+        footer.setAttribute('role', 'status');
+        footer.setAttribute('aria-live', 'polite');
+        const anchor = options.insertBefore ? container.querySelector(options.insertBefore) : null;
+        if (anchor && anchor.parentNode === container) {
+            container.insertBefore(footer, anchor);
+        } else {
+            container.appendChild(footer);
+        }
+    }
+    const usedVal = Math.round(numericUsed);
+    footer.dataset.usedCredits = String(usedVal);
+    footer.replaceChildren();
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'used-credits-label';
+    const boltIcon = document.createElement('i');
+    boltIcon.className = 'fas fa-bolt';
+    boltIcon.setAttribute('aria-hidden', 'true');
+    const usedStrong = document.createElement('strong');
+    usedStrong.textContent = String(usedVal);
+    labelSpan.append(boltIcon, document.createTextNode(' Used credits: '), usedStrong);
+    footer.appendChild(labelSpan);
+
+    const appendPart = (text, strongVal = null, cls = 'used-credits-meta') => {
+        const sep = document.createElement('span');
+        sep.className = 'used-credits-sep';
+        sep.setAttribute('aria-hidden', 'true');
+        sep.textContent = '·';
+        const part = document.createElement('span');
+        part.className = cls;
+        part.append(document.createTextNode(text));
+        if (strongVal !== null) {
+            const strong = document.createElement('strong');
+            strong.textContent = String(strongVal);
+            part.appendChild(strong);
+        }
+        footer.append(sep, part);
+    };
+
+    if (options.model) appendPart(String(options.model));
+    if (Number.isInteger(options.remaining) && options.remaining >= 0) {
+        appendPart('Remaining: ', options.remaining, 'used-credits-rem');
+    } else if (options.note) {
+        appendPart(String(options.note));
+    }
+
+    footer.hidden = false;
+    footer.removeAttribute('hidden');
+    return footer;
+};
 if (!window.JEVEXA_SUPABASE_READY) {
     if (isStaticPreview) {
         const previewNotice = document.getElementById('staticPreviewNotice');
@@ -712,25 +796,31 @@ function openLogin() {
 
 function closeLogin() {
     const modal = document.getElementById('loginModal');
-    if (!modal) return;
-    modal.classList.remove('open');
-    document.body.classList.remove('login-open');
-    document.documentElement.classList.remove('login-open');
-    document.body.style.top = '';
-    window.scrollTo(0, window.__jevexaScrollY || 0);
-    const pw = document.getElementById('loginPassword');
-    if (pw) pw.value = '';
-    const email = document.getElementById('loginEmail');
-    if (email) email.value = '';
-    const name = document.getElementById('signupName');
-    if (name) name.value = '';
-    const err = document.getElementById('loginError');
-    if (err) { err.textContent = ''; err.style.display = 'none'; }
-    clearAuthMessage();
-    const submitBtn = modal.querySelector('.login-submit');
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('loading'); }
-    if (previousLoginFocus instanceof HTMLElement) previousLoginFocus.focus({ preventScroll: true });
-    previousLoginFocus = null;
+    if (modal) {
+        modal.classList.remove('open');
+        document.body.classList.remove('login-open');
+        document.documentElement.classList.remove('login-open');
+        document.body.style.top = '';
+        window.scrollTo(0, window.__jevexaScrollY || 0);
+        const pw = document.getElementById('loginPassword');
+        if (pw) pw.value = '';
+        const email = document.getElementById('loginEmail');
+        if (email) email.value = '';
+        const name = document.getElementById('signupName');
+        if (name) name.value = '';
+        const err = document.getElementById('loginError');
+        if (err) { err.textContent = ''; err.style.display = 'none'; }
+        clearAuthMessage();
+        const submitBtn = modal.querySelector('.login-submit');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('loading'); }
+        if (previousLoginFocus instanceof HTMLElement) previousLoginFocus.focus({ preventScroll: true });
+        previousLoginFocus = null;
+    }
+    if (window.location.pathname === '/login' || window.location.pathname === '/signup') {
+        try {
+            window.history.replaceState(null, '', '/');
+        } catch (_) {}
+    }
 }
 
 const loginModalBackdropTarget = document.getElementById('loginModal');
@@ -1294,7 +1384,7 @@ function openJevexaSupport() {
         subject: '[JEVEXA Support] ',
         body: body.join('\n\n')
     });
-    window.location.href = `mailto:hello@jevexa.ai?${query.toString()}`;
+    window.location.href = `mailto:hello@jevexa.net?${query.toString()}`;
 }
 
 window.JEVEXA_OPEN_SUPPORT = openJevexaSupport;
@@ -1579,7 +1669,7 @@ function openProfileView(user) {
                     ${escapeHtml(email)}
                 </p>
 
-                <div style="
+                <div id="profileTierBadge" style="
                     display:inline-flex;
                     align-items:center;
                     gap:6px;
@@ -1592,7 +1682,12 @@ function openProfileView(user) {
                     font-size:12px;
                     font-weight:700;
                 ">
-                    ✦ Free Trial
+                    ${(() => {
+                        const planMap = { free: '✦ Free Trial', lite: '✦ Lite Plan', starter: '✦ Lite Plan', pro: '✦ Pro Plan', max: '✦ Max Plan', business: '✦ Max Plan', ultra: '✦ Ultra Plan' };
+                        let cached = 'free';
+                        try { cached = (localStorage.getItem('jevexa_persisted_plan') || 'free').toLowerCase(); } catch (_) {}
+                        return planMap[cached] || '✦ Free Trial';
+                    })()}
                 </div>
             </div>
 
@@ -1760,8 +1855,13 @@ function openProfileView(user) {
                     rawPlan = profData.plan.trim().toLowerCase();
                 }
                 const planLabels = { free: 'Free', starter: 'Lite', lite: 'Lite', pro: 'Pro', business: 'Max', max: 'Max', ultra: 'Ultra' };
-                profilePlanValue.textContent = planLabels[rawPlan]
-                    || (rawPlan ? rawPlan.replace(/[_-]+/g, ' ') : 'Free');
+                const resolvedLabel = planLabels[rawPlan] || (rawPlan ? rawPlan.replace(/[_-]+/g, ' ') : 'Free');
+                profilePlanValue.textContent = resolvedLabel;
+                try { localStorage.setItem('jevexa_persisted_plan', rawPlan); } catch (_) {}
+                const tierBadge = backdrop.querySelector('#profileTierBadge');
+                if (tierBadge) {
+                    tierBadge.textContent = rawPlan === 'free' ? '✦ Free Trial' : `✦ ${resolvedLabel} Plan`;
+                }
             }
         }).catch(error => {
             console.error('Profile account summary error:', error);
@@ -2097,13 +2197,18 @@ function openSettingsView(user) {
 async function logoutUser() {
     if (!supabaseClient) return showSupabaseUnavailable();
     try {
-        const { error } = await supabaseClient.auth.signOut();
+        const { error } = await withTimeout(
+            supabaseClient.auth.signOut(),
+            3000,
+            'Sign-out request timed out'
+        );
         if (error) console.warn('Supabase signOut notice:', error);
     } catch (error) {
         console.warn('Logout notice:', error);
     }
 
     // Always cleanly reset auth state and UI regardless of network glitches
+    try { localStorage.removeItem('jevexa_persisted_plan'); } catch (_) {}
     applyAuthState(null);
     window.JEVEXA_CLEAR_ACCOUNT_STATE?.();
     window.JEVEXA_CONTENT?.resetOnLogout?.();
@@ -2182,6 +2287,7 @@ async function logoutUser() {
 
     showToast('You have been logged out.');
 }
+window.logoutUser = logoutUser;
 
 function syncAuthNavigation(user) {
     const signedIn = Boolean(user);
@@ -2316,30 +2422,50 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
     creditsBadge.style.display = 'inline-flex';
     if (!creditsCount) return;
 
-    creditsCount.textContent = '—';
+    let cachedBal = null;
+    try { cachedBal = localStorage.getItem('jevexa_persisted_credits'); } catch (_) {}
+    creditsCount.textContent = (cachedBal && /^\d+$/.test(cachedBal)) ? cachedBal : '—';
     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
-    let data;
+    let data = null;
     try {
-        const result = await supabaseClient
-            .from('user_credits')
-            .select('balance')
-            .eq('user_id', user.id)
-            .maybeSingle();
-        if (result.error) throw result.error;
-        data = result.data;
-    } catch (error) {
-        if (revision !== authStateRevision || currentUser?.id !== user.id) return;
-        console.error('Credits fetch error:', error);
-        creditsCount.textContent = '—';
-        window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
-        return;
+        let result = await withTimeout(
+            supabaseClient
+                .from('user_credits')
+                .select('balance')
+                .eq('user_id', user.id)
+                .maybeSingle(),
+            4500,
+            'Credits fetch timed out'
+        );
+        if (result?.error) throw result.error;
+        data = result?.data || null;
+    } catch (firstErr) {
+        try {
+            const retryRes = await withTimeout(
+                supabaseClient
+                    .from('user_credits')
+                    .select('balance')
+                    .eq('user_id', user.id)
+                    .maybeSingle(),
+                4500,
+                'Credits retry timed out'
+            );
+            if (retryRes?.error) throw retryRes.error;
+            data = retryRes?.data || null;
+        } catch (error) {
+            if (revision !== authStateRevision || currentUser?.id !== user.id) return;
+            console.error('Credits fetch error:', error);
+            creditsCount.textContent = (cachedBal && /^\d+$/.test(cachedBal)) ? cachedBal : '—';
+            window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
+            return;
+        }
     }
 
     if (revision !== authStateRevision || currentUser?.id !== user.id) return;
 
     if (!data) {
         // Missing row is a backend provisioning issue, not proof the user has zero credits.
-        creditsCount.textContent = '—';
+        creditsCount.textContent = (cachedBal && /^\d+$/.test(cachedBal)) ? cachedBal : '—';
         console.warn('No user_credits row found. Run supabase/jevexa_saas_setup.sql.');
         window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
         return;
@@ -2348,6 +2474,15 @@ async function updateCreditsHeader(user, revision = authStateRevision) {
     creditsCount.textContent = String(data.balance);
     try {
         localStorage.setItem('jevexa_persisted_credits', String(data.balance));
+        if (data.plan) {
+            const cleanPlan = String(data.plan).toLowerCase().trim();
+            localStorage.setItem('jevexa_persisted_plan', cleanPlan);
+            const tierBadge = document.getElementById('profileTierBadge');
+            if (tierBadge) {
+                const planLabels = { free: '✦ Free Trial', lite: '✦ Lite Plan', starter: '✦ Lite Plan', pro: '✦ Pro Plan', max: '✦ Max Plan', business: '✦ Max Plan', ultra: '✦ Ultra Plan' };
+                tierBadge.textContent = planLabels[cleanPlan] || '✦ Free Trial';
+            }
+        }
     } catch (_) {}
     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 }
@@ -4947,15 +5082,29 @@ const JEVEXA_PLANS = {
 
     const ROUTE_SEO_META = {
         '/tools/ai-chatbot': { title: 'AI Chatbot & Deep Reasoning Assistant | JEVEXA AI Studio', desc: 'Run token-weighted Jevexa AI chat across Core Engine (1.0x), Pro Engine (3.0x), and Deep Reasoning Engine (18.0x).' },
+        '/tools/chatbot': { title: 'AI Chatbot & Deep Reasoning Assistant | JEVEXA AI Studio', desc: 'Run token-weighted Jevexa AI chat across Core Engine (1.0x), Pro Engine (3.0x), and Deep Reasoning Engine (18.0x).' },
         '/tools/content-generator': { title: 'AI Content Generator | JEVEXA AI Studio', desc: 'Generate blogs, marketing emails, and ad copy in seconds.' },
+        '/tools/content': { title: 'AI Content Generator | JEVEXA AI Studio', desc: 'Generate blogs, marketing emails, and ad copy in seconds.' },
         '/tools/ocr-extractor': { title: 'AI Document & Invoice OCR Extractor | JEVEXA AI Studio', desc: 'Extract structured line items, totals, and JSON/CSV from invoices and PDFs.' },
+        '/tools/ocr': { title: 'AI Document & Invoice OCR Extractor | JEVEXA AI Studio', desc: 'Extract structured line items, totals, and JSON/CSV from invoices and PDFs.' },
         '/tools/social-media-assistant': { title: 'AI Social Media Assistant | JEVEXA AI Studio', desc: 'Draft multi-platform posts, hooks, and content calendars.' },
+        '/tools/social': { title: 'AI Social Media Assistant | JEVEXA AI Studio', desc: 'Draft multi-platform posts, hooks, and content calendars.' },
         '/tools/business-analytics': { title: 'AI Business Analytics & Forecasting | JEVEXA AI Studio', desc: 'Analyze MRR, unit economics, and predictive growth forecasts.' },
+        '/tools/analytics': { title: 'AI Business Analytics & Forecasting | JEVEXA AI Studio', desc: 'Analyze MRR, unit economics, and predictive growth forecasts.' },
         '/tools/team-admin': { title: 'Team Admin & Access Control | JEVEXA AI Studio', desc: 'Manage seats, roles, and audit trails for your AI studio.' },
+        '/tools/admin': { title: 'Team Admin & Access Control | JEVEXA AI Studio', desc: 'Manage seats, roles, and audit trails for your AI studio.' },
+        '/tools/team': { title: 'Team Admin & Access Control | JEVEXA AI Studio', desc: 'Manage seats, roles, and audit trails for your AI studio.' },
         '/tools/workflow-automation': { title: 'AI Workflow Automation Builder | JEVEXA AI Studio', desc: 'Automate multi-step AI pipelines and CRM actions.' },
+        '/tools/workflows': { title: 'AI Workflow Automation Builder | JEVEXA AI Studio', desc: 'Automate multi-step AI pipelines and CRM actions.' },
         '/tools/data-management': { title: 'AI Data Management & CSV Cleanup | JEVEXA AI Studio', desc: 'Deduplicate and normalize CSV/JSON datasets cleanly.' },
+        '/tools/data': { title: 'AI Data Management & CSV Cleanup | JEVEXA AI Studio', desc: 'Deduplicate and normalize CSV/JSON datasets cleanly.' },
         '/tools/mini-crm': { title: 'AI Mini CRM & Lead Scoring | JEVEXA AI Studio', desc: 'Manage deals and score leads with AI.' },
-        '/tools/outreach-generator': { title: 'AI Outreach Sequence Generator | JEVEXA AI Studio', desc: 'Craft personalized B2B cold email sequences.' }
+        '/tools/crm': { title: 'AI Mini CRM & Lead Scoring | JEVEXA AI Studio', desc: 'Manage deals and score leads with AI.' },
+        '/tools/outreach-generator': { title: 'AI Outreach Sequence Generator | JEVEXA AI Studio', desc: 'Craft personalized B2B cold email sequences.' },
+        '/tools/outreach': { title: 'AI Outreach Sequence Generator | JEVEXA AI Studio', desc: 'Craft personalized B2B cold email sequences.' },
+        '/tools/email-outreach': { title: 'AI Outreach Sequence Generator | JEVEXA AI Studio', desc: 'Craft personalized B2B cold email sequences.' },
+        '/login': { title: 'Sign In | JEVEXA AI Studio', desc: 'Sign in to access all 10 JEVEXA AI tools and your credit wallet.' },
+        '/signup': { title: 'Create Account — 100 Free Credits | JEVEXA AI Studio', desc: 'Create your free JEVEXA account and start with 100 welcome credits.' }
     };
 
     function updateClientSeoForRoute(route) {
@@ -5484,9 +5633,9 @@ const JEVEXA_PLANS = {
         } else if (cleanPath === '/tools/content-generator' || cleanPath === '/tools/content' || cleanHash === '#/tools/content-generator' || cleanHash === '#/tools/content' || cleanHash === '#contentWorkspace' || cleanHash === '#contentTool') {
             openContentWorkspace(false);
         } else if (cleanPath === '/tools/mini-crm' || cleanPath === '/tools/crm' || cleanHash === '#/tools/mini-crm' || cleanHash === '#/tools/crm' || cleanHash === '#crmWorkspace' || cleanHash === '#crmTool') {
-            openCrmWorkspace(false);
+            openExactServiceWorkspace('crm', false);
         } else if (cleanPath === '/tools/outreach-generator' || cleanPath === '/tools/outreach' || cleanPath === '/tools/email-outreach' || cleanHash === '#/tools/outreach-generator' || cleanHash === '#/tools/outreach' || cleanHash === '#/tools/email-outreach' || cleanHash === '#outreachWorkspace' || cleanHash === '#outreachTool') {
-            openOutreachWorkspace(false);
+            openExactServiceWorkspace('outreach', false);
         } else if (cleanPath === '/tools/ocr-extractor' || cleanPath === '/tools/ocr' || cleanHash === '#/tools/ocr-extractor' || cleanHash === '#/tools/ocr' || cleanHash === '#ocrWorkspace' || cleanHash === '#ocrTool') {
             openOcrWorkspace(false);
         } else if (cleanPath === '/tools/social-media-assistant' || cleanPath === '/tools/social' || cleanHash === '#/tools/social-media-assistant' || cleanHash === '#/tools/social' || cleanHash === '#socialWorkspace' || cleanHash === '#socialTool') {
@@ -5494,9 +5643,9 @@ const JEVEXA_PLANS = {
         } else if (cleanPath === '/tools/business-analytics' || cleanPath === '/tools/analytics' || cleanHash === '#/tools/business-analytics' || cleanHash === '#/tools/analytics' || cleanHash === '#analyticsWorkspace' || cleanHash === '#analyticsTool') {
             openAnalyticsWorkspace(false);
         } else if (cleanPath === '/tools/team-admin' || cleanPath === '/tools/admin' || cleanPath === '/tools/team' || cleanHash === '#/tools/team-admin' || cleanHash === '#/tools/admin' || cleanHash === '#/tools/team' || cleanHash === '#teamAdminWorkspace' || cleanHash === '#teamTool') {
-            openTeamAdminWorkspace(false);
+            openExactServiceWorkspace('admin', false);
         } else if (cleanPath === '/tools/workflow-automation' || cleanPath === '/tools/workflows' || cleanHash === '#/tools/workflow-automation' || cleanHash === '#/tools/workflows' || cleanHash === '#workflowsWorkspace' || cleanHash === '#workflowsTool') {
-            openWorkflowsWorkspace(false);
+            openExactServiceWorkspace('workflows', false);
         } else if (cleanPath === '/tools/data-management' || cleanPath === '/tools/data' || cleanHash === '#/tools/data-management' || cleanHash === '#/tools/data' || cleanHash === '#dataWorkspace' || cleanHash === '#dataTool') {
             openDataWorkspace(false);
         } else if (cleanPath.startsWith('/tools/') || cleanHash.startsWith('#/tools/')) {

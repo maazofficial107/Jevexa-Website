@@ -419,12 +419,17 @@
                 setStatus(responseError(response, payload), 'error');
                 return;
             }
-            const remaining = Number.isInteger(payload.remaining_credits)
-                ? payload.remaining_credits
-                : (Number.isInteger(payload.creditsRemaining) ? payload.creditsRemaining : null);
-            const used = Number.isInteger(payload.credits_used)
-                ? payload.credits_used
-                : (Number.isInteger(payload.creditsCharged) ? payload.creditsCharged : null);
+            const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(payload);
+            const remaining = creditUsage?.remaining ?? (
+                Number.isInteger(payload.remaining_credits)
+                    ? payload.remaining_credits
+                    : (Number.isInteger(payload.creditsRemaining) ? payload.creditsRemaining : window.JEVEXA_GET_CREDITS_BALANCE?.() ?? null)
+            );
+            const used = creditUsage?.used ?? (
+                Number.isInteger(payload.credits_used)
+                    ? payload.credits_used
+                    : (Number.isInteger(payload.creditsCharged) ? payload.creditsCharged : null)
+            );
 
             if (typeof payload?.content !== 'string' || !payload.content.trim()
                 || used === null || used < 1
@@ -439,10 +444,15 @@
                 receipt = document.createElement('div');
                 receipt.id = 'contentCreditReceipt';
                 receipt.className = 'content-credit-receipt';
+                receipt.setAttribute('role', 'status');
+                receipt.setAttribute('aria-live', 'polite');
                 output.parentNode.appendChild(receipt);
             }
+            receipt.dataset.usedCredits = String(used);
+            receipt.dataset.remainingCredits = String(remaining);
             receipt.innerHTML = `<span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
             receipt.hidden = false;
+            receipt.removeAttribute('hidden');
 
             const retryContainer = document.getElementById('contentRetryAction');
             if (retryContainer) retryContainer.remove();
@@ -459,6 +469,7 @@
                 length: lengthInput.value,
                 content: payload.content,
                 creditsUsed: used,
+                remainingCredits: remaining,
                 timestamp: Date.now()
             });
             if (remaining !== null) {
@@ -736,10 +747,17 @@
                             receipt = document.createElement('div');
                             receipt.id = 'contentCreditReceipt';
                             receipt.className = 'content-credit-receipt';
+                            receipt.setAttribute('role', 'status');
+                            receipt.setAttribute('aria-live', 'polite');
                             output.parentNode.appendChild(receipt);
                         }
-                        receipt.innerHTML = `<span>⚡ Credits used: <strong>${item.creditsUsed}</strong> &nbsp;•&nbsp; Remaining: <strong>${document.getElementById('creditsCount')?.textContent || '—'}</strong></span>`;
+                        const histRemaining = Number.isInteger(item.remainingCredits) && item.remainingCredits >= 0
+                            ? item.remainingCredits
+                            : (window.JEVEXA_GET_CREDITS_BALANCE?.() ?? document.getElementById('creditsCount')?.textContent ?? '—');
+                        receipt.dataset.usedCredits = String(item.creditsUsed);
+                        receipt.innerHTML = `<span>⚡ Credits used: <strong>${item.creditsUsed}</strong> &nbsp;•&nbsp; Remaining: <strong>${histRemaining}</strong></span>`;
                         receipt.hidden = false;
+                        receipt.removeAttribute('hidden');
                     } else if (receipt) {
                         receipt.hidden = true;
                     }

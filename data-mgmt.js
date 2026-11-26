@@ -473,14 +473,16 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
 
             renderResults(result, text);
-            const dataCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
+            const dataCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const dataRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(dataPreviewContainer, dataCharged, {
                 id: 'dataCreditReceipt',
-                remaining: result.remaining_credits,
-                tier: result.tier
+                remaining: dataRemaining,
+                tier: usage?.tier || result.tier
             });
-            if (result.remaining_credits !== undefined) {
-                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            if (typeof dataRemaining === 'number') {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(dataRemaining);
             }
             window.JEVEXA_CREDITS?.fetchBalance?.();
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
@@ -492,8 +494,8 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             }
             window.showToast?.('Dataset cleaned and normalized successfully!');
         } catch (err) {
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(dataPreviewContainer, 'dataCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(dataPreviewContainer, 'dataCreditReceipt');
                 if (statusEl) {
                     statusEl.textContent = err.message || 'Could not clean dataset.';
                     statusEl.className = 'data-status-msg error';
@@ -504,6 +506,11 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             console.warn('Data cleaning Cloud API notice, activating client engine:', err);
             const fallbackResult = cleanDatasetLocally(text, operations, dedupKey);
             renderResults(fallbackResult, text);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(dataPreviewContainer, 0, {
+                id: 'dataCreditReceipt',
+                allowZero: true,
+                note: 'Local engine (no charge)'
+            });
             if (statusEl) {
                 statusEl.textContent = `Cloud AI unavailable — cleaned ${fallbackResult.summary.cleanedCount} records locally (no credits charged).`;
                 statusEl.className = 'data-status-msg info';

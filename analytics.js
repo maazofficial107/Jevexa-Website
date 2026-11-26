@@ -1735,15 +1735,17 @@
             renderReport(result.report);
             renderDataTable();
             const reportCard = document.getElementById('analyticsReportCard');
-            const analyticsCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
+            const analyticsCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const analyticsRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(reportCard, analyticsCharged, {
                 id: 'analyticsCreditReceipt',
-                remaining: result.remaining_credits,
-                tier: result.tier
+                remaining: analyticsRemaining,
+                tier: usage?.tier || result.tier
             });
 
-            if (result.remaining_credits !== undefined) {
-                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            if (typeof analyticsRemaining === 'number') {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(analyticsRemaining);
             }
             window.JEVEXA_CREDITS?.fetchBalance?.();
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
@@ -1756,8 +1758,8 @@
             window.showToast?.('Business Analytics forecast generated!');
         } catch (err) {
             const reportCard = document.getElementById('analyticsReportCard');
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(reportCard, 'analyticsCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(reportCard, 'analyticsCreditReceipt');
                 if (el.status) {
                     el.status.textContent = err.message || 'Could not generate analytics forecast.';
                     el.status.className = 'analytics-status-msg danger';
@@ -1767,6 +1769,11 @@
             }
             console.warn('Analytics API notice, falling back to deterministic modeling:', err);
             updateAllViews();
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(reportCard, 0, {
+                id: 'analyticsCreditReceipt',
+                allowZero: true,
+                note: 'Local engine (no charge)'
+            });
             if (el.status) {
                 el.status.textContent = 'Cloud AI unavailable — KPIs updated via local deterministic engine (no credits charged).';
                 el.status.className = 'analytics-status-msg info';

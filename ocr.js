@@ -581,15 +581,17 @@ Terms: Net 30`
             }
 
             renderExtraction(result.data, text);
-            const ocrCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
+            const ocrCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const ocrRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(resultCard, ocrCharged, {
                 id: 'ocrCreditReceipt',
-                remaining: result.remaining_credits,
-                tier: result.tier,
+                remaining: ocrRemaining,
+                tier: usage?.tier || result.tier,
                 insertBefore: '.ocr-actions-bar'
             });
-            if (result.remaining_credits !== undefined) {
-                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            if (typeof ocrRemaining === 'number') {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(ocrRemaining);
             }
             window.JEVEXA_CREDITS?.fetchBalance?.();
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
@@ -613,7 +615,12 @@ Terms: Net 30`
             console.warn('OCR Cloud API notice, activating deterministic fallback:', err);
             const fallbackData = deterministicClientOcr(text, docType, curr);
             renderExtraction(fallbackData, text);
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(resultCard, 'ocrCreditReceipt');
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(resultCard, 0, {
+                id: 'ocrCreditReceipt',
+                allowZero: true,
+                note: 'Local engine (no charge)',
+                insertBefore: '.ocr-actions-bar'
+            });
             if (statusEl) {
                 statusEl.textContent = 'Cloud AI unavailable — parsed locally via deterministic engine (no credits charged).';
                 statusEl.className = 'ocr-status-msg info';

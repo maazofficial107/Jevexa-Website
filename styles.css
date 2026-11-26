@@ -11981,6 +11981,17 @@ body.is-offline .toast.show {
     opacity: 0.5;
 }
 
+.service-used-credits-footer .used-credits-tier {
+    color: #a5b4fc;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    font-size: 0.68rem;
+}
+
+.service-used-credits-footer .used-credits-rem strong {
+    color: #38bdf8;
+}
+
 .chat-credit-receipt strong,
 .content-credit-receipt strong,
 .service-used-credits-footer strong {
@@ -12002,8 +12013,13 @@ html[data-jevexa-theme="light"] .service-used-credits-footer strong {
     color: #0f172a;
 }
 
-.chatbot-window[data-chat-theme="light"] .chat-receipt-tier {
+.chatbot-window[data-chat-theme="light"] .chat-receipt-tier,
+html[data-jevexa-theme="light"] .service-used-credits-footer .used-credits-tier {
     color: #4f46e5;
+}
+
+html[data-jevexa-theme="light"] .service-used-credits-footer .used-credits-rem strong {
+    color: #0284c7;
 }
 
 @keyframes fadeInReceipt {

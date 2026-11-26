@@ -392,14 +392,16 @@
             }
 
             renderPostPreview(result.data);
-            const socialCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
+            const socialCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const socialRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(previewContainer, socialCharged, {
                 id: 'socialCreditReceipt',
-                remaining: result.remaining_credits,
-                tier: result.tier
+                remaining: socialRemaining,
+                tier: usage?.tier || result.tier
             });
-            if (result.remaining_credits !== undefined) {
-                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            if (typeof socialRemaining === 'number') {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(socialRemaining);
             }
             window.JEVEXA_CREDITS?.fetchBalance?.();
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
@@ -423,7 +425,11 @@
             console.warn('Social Cloud API notice, activating deterministic fallback:', err);
             const fallbackPost = deterministicClientSocial(topic, platform, tone, goal, cta);
             renderPostPreview(fallbackPost);
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(previewContainer, 'socialCreditReceipt');
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(previewContainer, 0, {
+                id: 'socialCreditReceipt',
+                allowZero: true,
+                note: 'Local engine (no charge)'
+            });
             if (statusEl) {
                 statusEl.textContent = 'Cloud AI unavailable — generated locally via deterministic engine (no credits charged).';
                 statusEl.className = 'social-status-msg info';

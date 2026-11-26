@@ -194,10 +194,17 @@
                 state.userTier = data.tier || 'free';
                 saveCachedTeam();
                 renderMembers();
+                const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(data);
                 window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
                     document.querySelector('#teamAdminWorkspace .team-roster-card'),
                     0,
-                    { id: 'teamCreditReceipt', allowZero: true, note: 'Included in plan' }
+                    {
+                        id: 'teamCreditReceipt',
+                        allowZero: true,
+                        tier: state.userTier,
+                        remaining: usage?.remaining,
+                        note: 'Included in plan'
+                    }
                 );
             } else if (!res.ok) {
                 setAdminStatus(data.error || 'Could not load team members from server.', 'error');
@@ -593,6 +600,18 @@
                 renderMembers();
                 renderAuditLogs();
                 closeInviteModal();
+                const inviteUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(data);
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                    document.querySelector('#teamAdminWorkspace .team-roster-card'),
+                    0,
+                    {
+                        id: 'teamCreditReceipt',
+                        allowZero: true,
+                        tier: state.userTier,
+                        remaining: inviteUsage?.remaining,
+                        note: 'Included in plan'
+                    }
+                );
                 setAdminStatus(`Invitation sent to ${email} as ${role} (${state.members.length}/${state.maxSeats} seats used).`, 'success');
                 window.showToast?.(`Invitation sent to ${email} as ${role}!`);
             } catch (err) {

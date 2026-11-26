@@ -630,16 +630,19 @@
             state.currentSequence = data.sequence;
             state.currentSequenceId = data.sequence_id || null;
             state.useAlternativeSubject = false;
-            const outreachCharged = Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null);
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(data);
+            const outreachCharged = usage?.used ?? (Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null));
+            const outreachRemaining = usage?.remaining ?? data.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(outreachPreview, outreachCharged, {
                 id: 'outreachCreditReceipt',
-                remaining: data.remaining_credits
+                remaining: outreachRemaining,
+                tier: usage?.tier || data.tier
             });
 
             // Immediately update credits in UI
-            if (typeof data.remaining_credits === 'number') {
+            if (typeof outreachRemaining === 'number') {
                 if (typeof window.JEVEXA_UPDATE_CREDIT_BALANCE === 'function') {
-                    window.JEVEXA_UPDATE_CREDIT_BALANCE(data.remaining_credits);
+                    window.JEVEXA_UPDATE_CREDIT_BALANCE(outreachRemaining);
                 }
                 if (typeof window.JEVEXA_SYNC_WORKSPACE_CREDITS === 'function') {
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS();
@@ -656,8 +659,8 @@
                 window.showToast('Outreach sequence generated! Ready to review and send.');
             }
         } catch (err) {
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(outreachPreview, 'outreachCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(outreachPreview, 'outreachCreditReceipt');
                 setStatus(err.message || 'Sequence generation failed.', 'error');
                 if (typeof window.showToast === 'function') {
                     window.showToast(err.message || 'Sequence generation failed.');
@@ -678,6 +681,11 @@
             state.currentSequenceId = 'seq_' + Date.now();
             updateSequenceStatusPill('Draft');
             switchStep(1);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(outreachPreview, 0, {
+                id: 'outreachCreditReceipt',
+                allowZero: true,
+                note: 'Local engine (no charge)'
+            });
             setStatus('Cloud AI unavailable — outreach sequence drafted locally (no credits charged).', 'info');
             if (typeof window.showToast === 'function') {
                 window.showToast('Sequence drafted locally (no credits charged).');

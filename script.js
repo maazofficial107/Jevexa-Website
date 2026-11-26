@@ -609,6 +609,75 @@ async function fetchSessionWithTimeoutAndRetry({ timeoutMs = 4000, maxRetries = 
 window.JEVEXA_GET_SESSION = fetchSessionWithTimeoutAndRetry;
 
 /**
+ * Read current numeric credit balance from DOM or persisted storage as a safe fallback.
+ */
+window.JEVEXA_GET_CREDITS_BALANCE = function getLiveCreditsBalance() {
+    const candidates = [
+        document.getElementById('creditsCount')?.textContent,
+        document.getElementById('settingsBalance')?.textContent
+    ];
+    for (const raw of candidates) {
+        if (typeof raw === 'string') {
+            const clean = raw.replace(/,/g, '').trim();
+            if (/^\d+$/.test(clean)) return Number(clean);
+        }
+    }
+    try {
+        const stored = localStorage.getItem('jevexa_persisted_credits');
+        if (stored && /^\d+$/.test(stored.trim())) return Number(stored.trim());
+    } catch (_) {}
+    return null;
+};
+
+/**
+ * Normalize used & remaining credit fields from any Worker service response.
+ */
+window.JEVEXA_EXTRACT_CREDIT_USAGE = function extractCreditUsage(payload, options = {}) {
+    const parseNonNegInt = (val) => {
+        if (Number.isInteger(val) && val >= 0) return val;
+        if (typeof val === 'number' && Number.isFinite(val) && val >= 0) return Math.round(val);
+        if (typeof val === 'string' && /^\d+$/.test(val.trim())) return Number(val.trim());
+        return null;
+    };
+    const usedCandidates = [
+        payload?.charged_credits,
+        payload?.credits_used,
+        payload?.creditsUsed,
+        payload?.creditsCharged
+    ];
+    let used = null;
+    for (const cand of usedCandidates) {
+        const parsed = parseNonNegInt(cand);
+        if (parsed !== null) {
+            used = parsed;
+            break;
+        }
+    }
+    const remCandidates = [
+        payload?.remaining_credits,
+        payload?.remainingCredits,
+        payload?.creditsRemaining,
+        payload?.balance
+    ];
+    let remaining = null;
+    for (const cand of remCandidates) {
+        const parsed = parseNonNegInt(cand);
+        if (parsed !== null) {
+            remaining = parsed;
+            break;
+        }
+    }
+    if (remaining === null && options.fallbackToLiveBalance !== false) {
+        remaining = window.JEVEXA_GET_CREDITS_BALANCE?.() ?? null;
+    }
+    const tier = typeof payload?.tier === 'string' && payload.tier.trim() ? payload.tier.trim() : null;
+    const model = typeof payload?.modelName === 'string' && payload.modelName.trim()
+        ? payload.modelName.trim()
+        : (typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : null);
+    return { used, remaining, tier, model };
+};
+
+/**
  * Render or hide a subtle "Used credits" footer on any metered service output container.
  */
 window.JEVEXA_CLEAR_USED_CREDITS_FOOTER = function clearUsedCreditsFooter(container, elementId = '') {
@@ -623,8 +692,10 @@ window.JEVEXA_CLEAR_USED_CREDITS_FOOTER = function clearUsedCreditsFooter(contai
 
 window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(container, creditsUsed, options = {}) {
     const elId = options.id || '';
-    const numericUsed = Number(creditsUsed);
-    if (!container || creditsUsed === null || creditsUsed === undefined || !Number.isFinite(numericUsed) || (!options.allowZero && numericUsed < 1) || numericUsed < 0) {
+    const numericUsed = (creditsUsed === null || creditsUsed === undefined || creditsUsed === '')
+        ? NaN
+        : Number(creditsUsed);
+    if (!container || !Number.isFinite(numericUsed) || (!options.allowZero && numericUsed < 1) || numericUsed < 0) {
         window.JEVEXA_CLEAR_USED_CREDITS_FOOTER(container, elId);
         return null;
     }
@@ -672,11 +743,28 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
         footer.append(sep, part);
     };
 
-    if (options.model) appendPart(String(options.model));
-    if (Number.isInteger(options.remaining) && options.remaining >= 0) {
-        appendPart('Remaining: ', options.remaining, 'used-credits-rem');
-    } else if (options.note) {
+    if (options.model) {
+        appendPart(String(options.model), null, 'used-credits-meta used-credits-model');
+    } else if (options.tier) {
+        appendPart(String(options.tier).toUpperCase(), null, 'used-credits-tier');
+    }
+    if (options.note) {
         appendPart(String(options.note));
+    }
+
+    let remVal = null;
+    if (options.remaining !== null && options.remaining !== undefined && options.remaining !== '') {
+        const parsedRem = Number(options.remaining);
+        if (Number.isFinite(parsedRem) && parsedRem >= 0) remVal = Math.round(parsedRem);
+    } else if (options.fallbackToLiveBalance !== false) {
+        remVal = window.JEVEXA_GET_CREDITS_BALANCE?.() ?? null;
+    }
+
+    if (Number.isInteger(remVal) && remVal >= 0) {
+        footer.dataset.remainingCredits = String(remVal);
+        appendPart('Remaining: ', remVal, 'used-credits-rem');
+    } else {
+        delete footer.dataset.remainingCredits;
     }
 
     footer.hidden = false;

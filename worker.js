@@ -1230,13 +1230,29 @@ function buildCreditUsageFields(chargedCredits, remainingCredits, totalTokens) {
   };
 }
 
+async function readUserCreditBalance(cfg, userId) {
+  if (!cfg || !userId) return undefined;
+  try {
+    const res = await sbRequest(
+      cfg,
+      `/rest/v1/user_credits?select=balance&user_id=eq.${encodeURIComponent(userId)}&limit=1`
+    );
+    const rows = await readJsonResponse(res);
+    if (res.ok && Array.isArray(rows) && rows.length > 0 && Number.isInteger(rows[0]?.balance) && rows[0].balance >= 0) {
+      return rows[0].balance;
+    }
+  } catch (_) {}
+  return undefined;
+}
+
 async function settleServiceCredits({
   cfg,
   user,
   requestId,
   reservation,
   usageCredits,
-  totalTokens
+  totalTokens,
+  defaultTokens = 1000
 }) {
   let chargedCredits;
   let remainingCredits;
@@ -1244,7 +1260,7 @@ async function settleServiceCredits({
   if (reservation?.fallbackDirect) {
     chargedCredits = Math.min(reservation.reserved_credits || 1, Math.max(1, usageCredits));
     const refundCredits = (reservation.reserved_credits || 1) - chargedCredits;
-    let finalBalance = reservation.balance;
+    let finalBalance = Number.isInteger(reservation.balance) ? reservation.balance : 0;
     if (refundCredits > 0) {
       finalBalance += refundCredits;
       try {
@@ -1256,7 +1272,7 @@ async function settleServiceCredits({
     const maxAllowedTokens = reservation?.reserved_credits
       ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
       : 50000;
-    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1000)));
+    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || defaultTokens)));
     try {
       const settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
         p_user_id: user.id,
@@ -1278,9 +1294,13 @@ async function settleServiceCredits({
     }
   }
 
+  if (!Number.isInteger(remainingCredits) || remainingCredits < 0) {
+    remainingCredits = await readUserCreditBalance(cfg, user?.id);
+  }
+
   return {
-    chargedCredits: Number.isInteger(chargedCredits) ? chargedCredits : Math.max(1, usageCredits),
-    remainingCredits: Number.isInteger(remainingCredits) ? remainingCredits : undefined
+    chargedCredits: Number.isInteger(chargedCredits) && chargedCredits >= 1 ? chargedCredits : Math.max(1, usageCredits),
+    remainingCredits: Number.isInteger(remainingCredits) && remainingCredits >= 0 ? remainingCredits : undefined
   };
 }
 
@@ -4195,6 +4215,10 @@ async function handleChat(request, env, ctx) {
       }
     }
 
+    if (!Number.isInteger(remainingCredits) || remainingCredits < 0) {
+      remainingCredits = await readUserCreditBalance(cfg, user.id);
+    }
+
     return {
       ok: true,
       payload: {
@@ -5161,45 +5185,17 @@ async function handleCrmScore(request, env) {
   });
   totalTokens = usage.totalTokens;
 
-  let chargedCredits;
-  let remainingCredits;
-
-  if (reservation?.fallbackDirect) {
-    chargedCredits = Math.min(reservation.reserved_credits, Math.max(1, usage.credits));
-    const refundCredits = reservation.reserved_credits - chargedCredits;
-    let finalBalance = reservation.balance;
-    if (refundCredits > 0) {
-      finalBalance += refundCredits;
-      try {
-        await syncUserCreditsAndProfile(cfg, user.id, finalBalance);
-      } catch (_) {}
-    }
-    remainingCredits = finalBalance;
-  } else {
-    const maxAllowedTokens = reservation.reserved_credits
-      ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
-      : 50000;
-    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1000)));
-    try {
-      const settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_usage_tokens: safeTokens
-      });
-      const settlement = await readJsonResponse(settlementResponse);
-      if (settlement?.ok) {
-        chargedCredits = settlement.charged_credits;
-        remainingCredits = settlement.balance;
-        await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
-      } else {
-        chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
-        remainingCredits = reservation.balance;
-      }
-    } catch {
-      chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
-      remainingCredits = reservation.balance;
-    }
-  }
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens,
+    defaultTokens: 1000
+  });
+  const chargedCredits = settlement.chargedCredits;
+  const remainingCredits = settlement.remainingCredits;
 
   if (parsed.lead.id) {
     try {
@@ -5593,45 +5589,17 @@ async function handleOutreachGenerate(request, env) {
   });
   totalTokens = usage.totalTokens;
 
-  let chargedCredits;
-  let remainingCredits;
-
-  if (reservation?.fallbackDirect) {
-    chargedCredits = Math.min(reservation.reserved_credits, Math.max(1, usage.credits));
-    const refundCredits = reservation.reserved_credits - chargedCredits;
-    let finalBalance = reservation.balance;
-    if (refundCredits > 0) {
-      finalBalance += refundCredits;
-      try {
-        await syncUserCreditsAndProfile(cfg, user.id, finalBalance);
-      } catch (_) {}
-    }
-    remainingCredits = finalBalance;
-  } else {
-    const maxAllowedTokens = reservation.reserved_credits
-      ? Math.max(1, Math.floor(reservation.reserved_credits * 1000 / 2))
-      : 50000;
-    const safeTokens = Math.max(1, Math.min(maxAllowedTokens, 50000, Math.round(Number(totalTokens) || 1500)));
-    try {
-      const settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
-        p_user_id: user.id,
-        p_request_id: parsed.requestId,
-        p_usage_tokens: safeTokens
-      });
-      const settlement = await readJsonResponse(settlementResponse);
-      if (settlement?.ok) {
-        chargedCredits = settlement.charged_credits;
-        remainingCredits = settlement.balance;
-        await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
-      } else {
-        chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
-        remainingCredits = reservation.balance;
-      }
-    } catch {
-      chargedCredits = Math.min(reservation.reserved_credits, usage.credits);
-      remainingCredits = reservation.balance;
-    }
-  }
+  const settlement = await settleServiceCredits({
+    cfg,
+    user,
+    requestId: parsed.requestId,
+    reservation,
+    usageCredits: usage.credits,
+    totalTokens: usage.totalTokens,
+    defaultTokens: 1500
+  });
+  const chargedCredits = settlement.chargedCredits;
+  const remainingCredits = settlement.remainingCredits;
 
   let sequenceId = null;
   try {

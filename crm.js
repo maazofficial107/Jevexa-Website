@@ -1109,10 +1109,16 @@
             if (drawerAiAction) {
                 drawerAiAction.textContent = lead.suggested_outreach_angle || 'Follow up with personalized outreach sequence.';
             }
-            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(drawerAiScoreBox, lead.ai_score_credits, {
-                id: 'crmScoreCreditReceipt',
-                remaining: lead.ai_score_remaining
-            });
+            if (lead.ai_score_credits !== null && lead.ai_score_credits !== undefined) {
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(drawerAiScoreBox, lead.ai_score_credits, {
+                    id: 'crmScoreCreditReceipt',
+                    remaining: lead.ai_score_remaining,
+                    allowZero: lead.ai_score_credits === 0,
+                    note: lead.ai_score_note || undefined
+                });
+            } else {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(drawerAiScoreBox, 'crmScoreCreditReceipt');
+            }
         } else {
             window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(drawerAiScoreBox, 'crmScoreCreditReceipt');
             drawerAiScoreBox.hidden = true;
@@ -1305,10 +1311,12 @@
                 throw err;
             }
 
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(data);
             lead.lead_score = data.lead_score;
             lead.ai_summary = data.summary;
-            lead.ai_score_credits = Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null);
-            lead.ai_score_remaining = Number.isInteger(data.remaining_credits) ? data.remaining_credits : undefined;
+            lead.ai_score_credits = usage?.used ?? (Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null));
+            lead.ai_score_remaining = usage?.remaining ?? (Number.isInteger(data.remaining_credits) ? data.remaining_credits : undefined);
+            lead.ai_score_note = null;
             if (data.suggested_outreach_angle) {
                 lead.suggested_outreach_angle = data.suggested_outreach_angle;
             }
@@ -1317,9 +1325,9 @@
             } catch (_) {}
 
             // Immediately update credits in UI
-            if (typeof data.remaining_credits === 'number') {
+            if (typeof lead.ai_score_remaining === 'number') {
                 if (typeof window.JEVEXA_UPDATE_CREDIT_BALANCE === 'function') {
-                    window.JEVEXA_UPDATE_CREDIT_BALANCE(data.remaining_credits);
+                    window.JEVEXA_UPDATE_CREDIT_BALANCE(lead.ai_score_remaining);
                 }
                 if (typeof window.JEVEXA_SYNC_WORKSPACE_CREDITS === 'function') {
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS();
@@ -1343,8 +1351,9 @@
             lead.lead_score = fallback.lead_score;
             lead.ai_summary = fallback.summary;
             lead.suggested_outreach_angle = fallback.suggested_outreach_angle;
-            lead.ai_score_credits = null;
-            lead.ai_score_remaining = undefined;
+            lead.ai_score_credits = 0;
+            lead.ai_score_remaining = window.JEVEXA_GET_CREDITS_BALANCE?.() ?? undefined;
+            lead.ai_score_note = 'Local engine (no charge)';
 
             renderAiStrategyBox(lead);
             renderAll();

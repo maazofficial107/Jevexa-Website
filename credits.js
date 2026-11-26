@@ -1185,7 +1185,10 @@
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = conversation.length > 0;
-        conversation.forEach((item, index) => appendMessage(item.text, item.role === 'user', index, item.meta || null));
+        conversation.forEach((item, index) => {
+            const histMeta = item.meta ? { ...item.meta, _fromHistory: true } : null;
+            appendMessage(item.text, item.role === 'user', index, histMeta);
+        });
         const emptyState = document.getElementById('chatEmptyState');
         if (emptyState) emptyState.hidden = conversation.length > 0;
         updateChatWelcome();
@@ -2773,11 +2776,30 @@
     }
 
     function applyBotMetaStatus(content, meta) {
-        if (!meta) return;
-        const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
-        const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
+        if (!content || !meta) return;
+        content.querySelectorAll('.chat-web-grounded-badge, .chat-credit-receipt').forEach(el => el.remove());
+
+        const extracted = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(meta, {
+            fallbackToLiveBalance: !meta._fromHistory
+        });
+        const used = extracted?.used ?? (
+            Number.isInteger(meta.creditsUsed) ? meta.creditsUsed
+                : (Number.isInteger(meta.credits_used) ? meta.credits_used
+                    : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged
+                        : (Number.isInteger(meta.charged_credits) ? meta.charged_credits : null)))
+        );
+        let remaining = extracted?.remaining ?? (
+            Number.isInteger(meta.remainingCredits) ? meta.remainingCredits
+                : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits
+                    : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null))
+        );
+        if (remaining === null && !meta._fromHistory) {
+            const liveBal = getCachedRemainingCredits();
+            if (Number.isInteger(liveBal) && liveBal >= 0) remaining = liveBal;
+        }
+
         const tierNameMap = { lite: 'Jevexa Core', pro: 'Jevexa Pro', max: 'Jevexa Deep Reasoning', ultra: 'Jevexa Ultra Reasoning' };
-        const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Core';
+        const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[String(meta.tier).toLowerCase()]) || 'Jevexa Core';
         const webGrounded = Boolean(meta.webSearch);
         const webSurcharge = Number(meta.webSearchSurcharge) || 5;
         if (used !== null && remaining !== null) {
@@ -2794,11 +2816,21 @@
             const receipt = document.createElement('div');
             receipt.className = 'chat-credit-receipt';
             receipt.setAttribute('role', 'status');
+            receipt.setAttribute('aria-live', 'polite');
             receipt.dataset.usedCredits = String(used);
+            if (remaining !== null && remaining >= 0) {
+                receipt.dataset.remainingCredits = String(remaining);
+            }
             const remHtml = (remaining !== null && remaining >= 0)
                 ? ` &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong>`
                 : '';
             receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span>⚡ Credits used: <strong>${used}</strong>${remHtml}</span>`;
+            content.appendChild(receipt);
+        } else if (meta.unconfirmedSettlement) {
+            const receipt = document.createElement('div');
+            receipt.className = 'chat-credit-receipt';
+            receipt.setAttribute('role', 'status');
+            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span>⚡ Credit settlement pending reconciliation</span>`;
             content.appendChild(receipt);
         }
     }
@@ -3738,9 +3770,13 @@
                 await refreshDisplayedCredits();
                 if (error.payload?.reply) {
                     const replyText = String(error.payload.reply).trim();
-                    conversation.push({ role: 'assistant', text: replyText });
+                    const replyMeta = {
+                        tier: selectedTier,
+                        unconfirmedSettlement: true
+                    };
+                    conversation.push({ role: 'assistant', text: replyText, meta: replyMeta });
                     trimConversationToMax(100);
-                    appendMessage(replyText, false, conversation.length - 1);
+                    appendMessage(replyText, false, conversation.length - 1, replyMeta);
                     persistConversation(session.user.id);
                     forgetPendingRequest(session);
                     setStatus('AI reply completed. (Credits will reconcile automatically).');

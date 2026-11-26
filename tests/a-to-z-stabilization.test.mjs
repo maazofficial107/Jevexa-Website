@@ -195,6 +195,8 @@ test("A-to-Z 2: Pricing page navigation, plan query highlighting, Support & Auth
   assert.match(pricingHtml, /data-plan="\$\{targetPlan\}"/);
 
   assert.match(scriptJs, /function withTimeout\(/);
+  assert.match(scriptJs, /window\.JEVEXA_EXTRACT_CREDIT_USAGE\s*=/);
+  assert.match(scriptJs, /window\.JEVEXA_GET_CREDITS_BALANCE\s*=/);
   assert.match(scriptJs, /window\.JEVEXA_RENDER_USED_CREDITS_FOOTER\s*=/);
   assert.match(scriptJs, /window\.JEVEXA_CLEAR_USED_CREDITS_FOOTER\s*=/);
   assert.match(scriptJs, /'\/tools\/admin':\s*\{/);
@@ -589,6 +591,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
     })()`);
     assert.equal(chatState.receiptVisible, true);
     assert.match(chatState.receiptText, /Credits used:\s*3/);
+    assert.match(chatState.receiptText, /Remaining:\s*9947/);
     assert.equal(chatState.copied, "Clean AI response without footer pollution.");
     assert.doesNotMatch(chatState.copied, /Credits used/);
 
@@ -616,6 +619,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       };
     })()`);
     assert.match(contentState.receiptText, /Credits used:\s*2/);
+    assert.match(contentState.receiptText, /Remaining:\s*9945/);
     assert.equal(contentState.copied, "Launch high-converting workflows in minutes.");
 
     // Helper for lazy-loaded workspace modules (OCR, Social, Analytics, Workflows, Data, Outreach)
@@ -651,6 +655,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "ocrCreditReceipt"
     );
     assert.match(ocrFooter, /Used credits:\s*4/);
+    assert.match(ocrFooter, /Remaining:\s*9941/);
 
     const socialFooterText = await runLazyServiceAndAwaitFooter(
       "social",
@@ -659,6 +664,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "socialCreditReceipt"
     );
     assert.match(socialFooterText, /Used credits:\s*2/);
+    assert.match(socialFooterText, /Remaining:\s*9939/);
     const socialCopied = await cdp.eval(`document.getElementById('socialCopyPostBtn').click(); window.__COPIED`);
     assert.doesNotMatch(socialCopied, /Used credits/);
 
@@ -669,6 +675,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "analyticsCreditReceipt"
     );
     assert.match(analyticsFooter, /Used credits:\s*3/);
+    assert.match(analyticsFooter, /Remaining:\s*9936/);
 
     const wfFooter = await runLazyServiceAndAwaitFooter(
       "workflows",
@@ -677,6 +684,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "workflowCreditReceipt"
     );
     assert.match(wfFooter, /Used credits:\s*2/);
+    assert.match(wfFooter, /Remaining:\s*9934/);
 
     const dataFooter = await runLazyServiceAndAwaitFooter(
       "data",
@@ -685,6 +693,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "dataCreditReceipt"
     );
     assert.match(dataFooter, /Used credits:\s*2/);
+    assert.match(dataFooter, /Remaining:\s*9932/);
 
     const crmFooter = await runLazyServiceAndAwaitFooter(
       "crm",
@@ -693,6 +702,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "crmScoreCreditReceipt"
     );
     assert.match(crmFooter, /Used credits:\s*2/);
+    assert.match(crmFooter, /Remaining:\s*9930/);
 
     const teamFooter = await runLazyServiceAndAwaitFooter(
       "admin",
@@ -702,6 +712,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
     );
     assert.match(teamFooter, /Used credits:\s*0/);
     assert.match(teamFooter, /Included in plan/);
+    assert.match(teamFooter, /Remaining:\s*9930/);
 
     const outreachFooter = await runLazyServiceAndAwaitFooter(
       "outreach",
@@ -710,6 +721,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "outreachCreditReceipt"
     );
     assert.match(outreachFooter, /Used credits:\s*3/);
+    assert.match(outreachFooter, /Remaining:\s*9929/);
     const outreachCopied = await cdp.eval(`document.getElementById('outreachCopyEmailBtn').click(); window.__COPIED`);
     assert.doesNotMatch(outreachCopied, /Used credits/);
 

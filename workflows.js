@@ -525,12 +525,14 @@
             }
 
             if (execProgressFill) execProgressFill.style.width = '100%';
-            const wfCharged = Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null);
+            const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
+            const wfCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const wfRemaining = usage?.remaining ?? result.remaining_credits;
             const chargedNote = wfCharged ? ` (${wfCharged} credits used)` : '';
             if (execProgressText) execProgressText.textContent = `Sequence completed successfully in ${result.durationMs || 120}ms!${chargedNote}`;
 
-            if (result.remaining_credits !== undefined) {
-                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(result.remaining_credits);
+            if (typeof wfRemaining === 'number') {
+                window.JEVEXA_UPDATE_CREDIT_BALANCE?.(wfRemaining);
             }
             window.JEVEXA_CREDITS?.fetchBalance?.();
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
@@ -548,12 +550,12 @@
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
                 document.querySelector('#workflowExecModal .workflow-exec-body'),
                 wfCharged,
-                { id: 'workflowExecCreditReceipt', remaining: result.remaining_credits, tier: result.tier }
+                { id: 'workflowExecCreditReceipt', remaining: wfRemaining, tier: usage?.tier || result.tier }
             );
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
                 document.querySelector('#workflowsWorkspace .workflows-builder-card'),
                 wfCharged,
-                { id: 'workflowCreditReceipt', remaining: result.remaining_credits, tier: result.tier }
+                { id: 'workflowCreditReceipt', remaining: wfRemaining, tier: usage?.tier || result.tier }
             );
 
             // Record to history
@@ -570,9 +572,9 @@
 
             window.showToast?.('Workflow executed successfully!');
         } catch (err) {
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowExecModal .workflow-exec-body'), 'workflowExecCreditReceipt');
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
             if (err?.status && err.status >= 400 && err.status < 500) {
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowExecModal .workflow-exec-body'), 'workflowExecCreditReceipt');
+                window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
                 if (execProgressFill) execProgressFill.style.width = '0%';
                 if (execProgressText) execProgressText.textContent = err.message || 'Workflow execution blocked.';
                 if (statusEl) {
@@ -584,6 +586,16 @@
             }
             console.warn('API execution notice, completing via client engine:', err);
             await executeSimulatedSteps();
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowExecModal .workflow-exec-body'),
+                0,
+                { id: 'workflowExecCreditReceipt', allowZero: true, note: 'Local engine (no charge)' }
+            );
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowsWorkspace .workflows-builder-card'),
+                0,
+                { id: 'workflowCreditReceipt', allowZero: true, note: 'Local engine (no charge)' }
+            );
             if (statusEl) {
                 statusEl.textContent = 'Cloud runner unavailable — executed workflow locally via client engine (no credits charged).';
                 statusEl.className = 'workflow-status-msg info';

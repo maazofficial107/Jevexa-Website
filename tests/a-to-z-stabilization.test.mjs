@@ -560,11 +560,51 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
     const desktopOverflow = await cdp.eval(`document.documentElement.scrollWidth <= window.innerWidth`);
     assert.equal(desktopOverflow, true, "Desktop 1366x768 must have zero horizontal overflow");
 
-    // 2. Test Chatbot subtle Used Credits footer AND clean Copy excluding receipt
+    const assertUsedBeforeRemaining = (text, usedVal, remVal, label) => {
+      assert.match(text, new RegExp(`Used credit:\\s*${usedVal}`), `${label}: expected Used credit: ${usedVal}`);
+      assert.match(text, new RegExp(`Remaining credit:\\s*${remVal}`), `${label}: expected Remaining credit: ${remVal}`);
+      assert.ok(
+        text.indexOf("Used credit:") < text.indexOf("Remaining credit:"),
+        `${label}: Used credit must appear before Remaining credit (got "${text}")`
+      );
+    };
+
+    // 2. Test Chatbot slim header, centered reading column, subtle Used credit -> Remaining credit footer AND clean Copy excluding receipt
     await cdp.eval(`
       window.__COPIED = '';
       navigator.clipboard.writeText = async (t) => { window.__COPIED = t; };
       window.openExactServiceWorkspace('chatbot', true);
+    `);
+    const emptyChatLayout = await cdp.eval(`(() => {
+      const hdr = document.querySelector('#chatbotWindow .chatbot-header');
+      const empty = document.getElementById('chatEmptyState');
+      const main = document.querySelector('#chatbotWindow .chat-main');
+      const dock = document.querySelector('#chatbotWindow .chat-composer-dock');
+      const sidebar = document.getElementById('chatSidebar');
+      const settingsBtn = document.getElementById('chatOpenCustomizationBtn');
+      const hdrRect = hdr.getBoundingClientRect();
+      const emptyRect = empty.getBoundingClientRect();
+      const mainRect = main.getBoundingClientRect();
+      const dockRect = dock.getBoundingClientRect();
+      const sbRect = sidebar.getBoundingClientRect();
+      const setRect = settingsBtn.getBoundingClientRect();
+      return {
+        headerHeight: hdrRect.height,
+        emptyCenterY: emptyRect.top + emptyRect.height / 2,
+        availTop: hdrRect.bottom,
+        availBottom: dockRect.top,
+        dockHeight: dockRect.height,
+        sidebarOverflowX: sidebar.scrollWidth > sidebar.clientWidth + 1,
+        settingsInsideSidebar: setRect.bottom <= sbRect.bottom + 1
+      };
+    })()`);
+    assert.ok(emptyChatLayout.headerHeight <= 52, `Chatbot desktop header must be <= 52px (got ${emptyChatLayout.headerHeight})`);
+    const availMidY = (emptyChatLayout.availTop + emptyChatLayout.availBottom) / 2;
+    assert.ok(Math.abs(emptyChatLayout.emptyCenterY - availMidY) < 40, `Empty state must be vertically centered in available viewport`);
+    assert.equal(emptyChatLayout.sidebarOverflowX, false, "Sidebar must have zero horizontal clipping");
+    assert.equal(emptyChatLayout.settingsInsideSidebar, true, "Sidebar Settings button must sit cleanly inside sidebar");
+
+    await cdp.eval(`
       document.getElementById('chatInput').value = 'Test clean response';
       document.getElementById('chatSend').click();
     `);
@@ -582,20 +622,22 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       const botMsg = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome])');
       const receipt = botMsg.querySelector('.chat-credit-receipt');
       const style = getComputedStyle(receipt);
+      const msgWidth = botMsg.getBoundingClientRect().width;
       botMsg.querySelector('[data-chat-action="copy"]').click();
       return {
         receiptVisible: style.display !== 'none' && !receipt.hidden,
         receiptText: receipt.textContent.trim(),
+        msgWidth,
         copied: window.__COPIED
       };
     })()`);
     assert.equal(chatState.receiptVisible, true);
-    assert.match(chatState.receiptText, /Credits used:\s*3/);
-    assert.match(chatState.receiptText, /Remaining:\s*9947/);
+    assert.ok(chatState.msgWidth <= 845, `Centered chat reading column should be <= 845px (got ${chatState.msgWidth})`);
+    assertUsedBeforeRemaining(chatState.receiptText, 3, 9947, "Chatbot");
     assert.equal(chatState.copied, "Clean AI response without footer pollution.");
-    assert.doesNotMatch(chatState.copied, /Credits used/);
+    assert.doesNotMatch(chatState.copied, /Used credit/);
 
-    // 3. Test Content Generator Used Credits footer & clean copy
+    // 3. Test Content Generator slim top bar, Used credit -> Remaining credit footer & clean copy
     await cdp.eval(`
       window.openExactServiceWorkspace('content-generator', true);
       document.getElementById('contentTopic').value = 'Write a crisp product pitch';
@@ -613,13 +655,15 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
     })`);
     const contentState = await cdp.eval(`(() => {
       document.getElementById('contentCopy').click();
+      const hdr = document.querySelector('#contentWorkspace .workspace-header');
       return {
+        headerHeight: hdr ? hdr.getBoundingClientRect().height : 0,
         receiptText: document.getElementById('contentCreditReceipt').textContent.trim(),
         copied: window.__COPIED
       };
     })()`);
-    assert.match(contentState.receiptText, /Credits used:\s*2/);
-    assert.match(contentState.receiptText, /Remaining:\s*9945/);
+    assert.ok(contentState.headerHeight <= 52, `Content workspace header must be <= 52px (got ${contentState.headerHeight})`);
+    assertUsedBeforeRemaining(contentState.receiptText, 2, 9945, "Content Generator");
     assert.equal(contentState.copied, "Launch high-converting workflows in minutes.");
 
     // Helper for lazy-loaded workspace modules (OCR, Social, Analytics, Workflows, Data, Outreach)
@@ -654,8 +698,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "document.getElementById('ocrTextInput').value='Invoice INV-99 Total $100'; document.getElementById('ocrExtractBtn').click();",
       "ocrCreditReceipt"
     );
-    assert.match(ocrFooter, /Used credits:\s*4/);
-    assert.match(ocrFooter, /Remaining:\s*9941/);
+    assertUsedBeforeRemaining(ocrFooter, 4, 9941, "OCR");
 
     const socialFooterText = await runLazyServiceAndAwaitFooter(
       "social",
@@ -663,10 +706,9 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "document.getElementById('socialTopic').value='Announcing fast workflows'; document.getElementById('socialForm').dispatchEvent(new Event('submit',{cancelable:true,bubbles:true}));",
       "socialCreditReceipt"
     );
-    assert.match(socialFooterText, /Used credits:\s*2/);
-    assert.match(socialFooterText, /Remaining:\s*9939/);
+    assertUsedBeforeRemaining(socialFooterText, 2, 9939, "Social");
     const socialCopied = await cdp.eval(`document.getElementById('socialCopyPostBtn').click(); window.__COPIED`);
-    assert.doesNotMatch(socialCopied, /Used credits/);
+    assert.doesNotMatch(socialCopied, /Used credit/);
 
     const analyticsFooter = await runLazyServiceAndAwaitFooter(
       "analytics",
@@ -674,8 +716,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "document.getElementById('analyticsGenerateBtn').click();",
       "analyticsCreditReceipt"
     );
-    assert.match(analyticsFooter, /Used credits:\s*3/);
-    assert.match(analyticsFooter, /Remaining:\s*9936/);
+    assertUsedBeforeRemaining(analyticsFooter, 3, 9936, "Analytics");
 
     const wfFooter = await runLazyServiceAndAwaitFooter(
       "workflows",
@@ -683,8 +724,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "document.getElementById('workflowRunBtn').click();",
       "workflowCreditReceipt"
     );
-    assert.match(wfFooter, /Used credits:\s*2/);
-    assert.match(wfFooter, /Remaining:\s*9934/);
+    assertUsedBeforeRemaining(wfFooter, 2, 9934, "Workflows");
 
     const dataFooter = await runLazyServiceAndAwaitFooter(
       "data",
@@ -692,8 +732,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "document.getElementById('dataProcessBtn').click();",
       "dataCreditReceipt"
     );
-    assert.match(dataFooter, /Used credits:\s*2/);
-    assert.match(dataFooter, /Remaining:\s*9932/);
+    assertUsedBeforeRemaining(dataFooter, 2, 9932, "Data Management");
 
     const crmFooter = await runLazyServiceAndAwaitFooter(
       "crm",
@@ -701,8 +740,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "window.JEVEXA_CRM.openLeadDrawer(window.JEVEXA_CRM.getLeads()[0].id); document.getElementById('crmAiScoreBtn').click();",
       "crmScoreCreditReceipt"
     );
-    assert.match(crmFooter, /Used credits:\s*2/);
-    assert.match(crmFooter, /Remaining:\s*9930/);
+    assertUsedBeforeRemaining(crmFooter, 2, 9930, "Mini CRM");
 
     const teamFooter = await runLazyServiceAndAwaitFooter(
       "admin",
@@ -710,9 +748,8 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "window.JEVEXA_TEAM.fetchTeamMembers();",
       "teamCreditReceipt"
     );
-    assert.match(teamFooter, /Used credits:\s*0/);
+    assertUsedBeforeRemaining(teamFooter, 0, 9930, "Team Admin");
     assert.match(teamFooter, /Included in plan/);
-    assert.match(teamFooter, /Remaining:\s*9930/);
 
     const outreachFooter = await runLazyServiceAndAwaitFooter(
       "outreach",
@@ -720,10 +757,9 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
       "document.getElementById('outreachValueProp').value='Automated lead scoring and CRM outreach in one studio'; document.getElementById('outreachForm').dispatchEvent(new Event('submit',{cancelable:true,bubbles:true}));",
       "outreachCreditReceipt"
     );
-    assert.match(outreachFooter, /Used credits:\s*3/);
-    assert.match(outreachFooter, /Remaining:\s*9929/);
+    assertUsedBeforeRemaining(outreachFooter, 3, 9929, "Outreach");
     const outreachCopied = await cdp.eval(`document.getElementById('outreachCopyEmailBtn').click(); window.__COPIED`);
-    assert.doesNotMatch(outreachCopied, /Used credits/);
+    assert.doesNotMatch(outreachCopied, /Used credit/);
 
     // 5. Support Assistant interactive check
     await cdp.eval(`

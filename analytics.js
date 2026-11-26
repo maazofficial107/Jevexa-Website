@@ -1751,7 +1751,9 @@
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (el.status) {
-                const costText = analyticsCharged ? ` (${analyticsCharged} credits used)` : '';
+                const costText = analyticsCharged !== null && analyticsRemaining !== undefined
+                    ? ` (Used credit: ${analyticsCharged} · Remaining credit: ${analyticsRemaining})`
+                    : (analyticsCharged ? ` (Used credit: ${analyticsCharged})` : '');
                 el.status.textContent = `KPIs and scenario forecasts updated!${costText}`;
                 el.status.className = 'analytics-status-msg success';
             }

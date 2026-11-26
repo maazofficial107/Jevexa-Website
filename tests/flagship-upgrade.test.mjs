@@ -594,7 +594,7 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
     assert.equal(firstChatState.webBtnLabel, "Web Search");
     assert.equal(firstChatState.webBtnLocked, "true");
     assert.equal(firstChatState.webBtnAriaDisabled, "false");
-    assert.match(firstChatState.statusText, /99 credits remaining/);
+    assert.match(firstChatState.statusText, /Used credit:\s*1\s*·\s*Remaining credit:\s*99/);
     assert.doesNotMatch(firstChatState.statusText, /Token-weighted|Credits used:/);
     assert.match(firstChatState.botText, /const hello/);
     assert.equal(firstChatState.credits, "99");

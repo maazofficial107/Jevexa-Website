@@ -651,7 +651,9 @@
 
             updateSequenceStatusPill('Draft');
             switchStep(1);
-            const costText = outreachCharged ? ` (${outreachCharged} credits used)` : '';
+            const costText = outreachCharged !== null && outreachRemaining !== undefined
+                ? ` (Used credit: ${outreachCharged} · Remaining credit: ${outreachRemaining})`
+                : (outreachCharged ? ` (Used credit: ${outreachCharged})` : '');
             setStatus(`3-step outreach sequence generated successfully!${costText}`, 'success');
             await loadSavedSequences();
 

@@ -630,6 +630,24 @@ window.JEVEXA_GET_CREDITS_BALANCE = function getLiveCreditsBalance() {
 };
 
 /**
+ * Sanitize engine/model label so raw internal provider model names are never exposed.
+ */
+window.JEVEXA_SANITIZE_ENGINE_NAME = function sanitizeEngineName(raw, fallback = 'Jevexa Core') {
+    if (typeof raw !== 'string') return fallback;
+    const trimmed = raw.trim();
+    if (!trimmed) return fallback;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'lite' || lower === 'core' || /core\s*engine|jevexa\s*(?:lite|core)/i.test(trimmed)) return 'Jevexa Core';
+    if (lower === 'pro' || /pro\s*engine|jevexa\s*pro/i.test(trimmed)) return 'Jevexa Pro';
+    if (lower === 'max' || /deep\s*reasoning|jevexa\s*max/i.test(trimmed)) return 'Jevexa Deep Reasoning';
+    if (lower === 'ultra' || /ultra\s*reasoning|jevexa\s*ultra/i.test(trimmed)) return 'Jevexa Ultra Reasoning';
+    if (/llama|gpt|claude|gemini|qwen|deepseek|mistral|mixtral|groq|openrouter|anthropic|openai|google\//i.test(lower)) {
+        return fallback;
+    }
+    return trimmed;
+};
+
+/**
  * Normalize used & remaining credit fields from any Worker service response.
  */
 window.JEVEXA_EXTRACT_CREDIT_USAGE = function extractCreditUsage(payload, options = {}) {
@@ -643,6 +661,8 @@ window.JEVEXA_EXTRACT_CREDIT_USAGE = function extractCreditUsage(payload, option
         payload?.charged_credits,
         payload?.credits_used,
         payload?.creditsUsed,
+        payload?.usedCredits,
+        payload?.used_credits,
         payload?.creditsCharged
     ];
     let used = null;
@@ -671,14 +691,15 @@ window.JEVEXA_EXTRACT_CREDIT_USAGE = function extractCreditUsage(payload, option
         remaining = window.JEVEXA_GET_CREDITS_BALANCE?.() ?? null;
     }
     const tier = typeof payload?.tier === 'string' && payload.tier.trim() ? payload.tier.trim() : null;
-    const model = typeof payload?.modelName === 'string' && payload.modelName.trim()
+    const rawModel = typeof payload?.modelName === 'string' && payload.modelName.trim()
         ? payload.modelName.trim()
         : (typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : null);
+    const model = rawModel ? window.JEVEXA_SANITIZE_ENGINE_NAME(rawModel, tier ? window.JEVEXA_SANITIZE_ENGINE_NAME(tier) : 'Jevexa Core') : null;
     return { used, remaining, tier, model };
 };
 
 /**
- * Render or hide a subtle "Used credits" footer on any metered service output container.
+ * Render or hide a subtle "Used credit" -> "Remaining credit" footer on any metered service output container.
  */
 window.JEVEXA_CLEAR_USED_CREDITS_FOOTER = function clearUsedCreditsFooter(container, elementId = '') {
     const existing = elementId
@@ -724,7 +745,7 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
     boltIcon.setAttribute('aria-hidden', 'true');
     const usedStrong = document.createElement('strong');
     usedStrong.textContent = String(usedVal);
-    labelSpan.append(boltIcon, document.createTextNode(' Used credits: '), usedStrong);
+    labelSpan.append(boltIcon, document.createTextNode(' Used credit: '), usedStrong);
     footer.appendChild(labelSpan);
 
     const appendPart = (text, strongVal = null, cls = 'used-credits-meta') => {
@@ -743,15 +764,6 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
         footer.append(sep, part);
     };
 
-    if (options.model) {
-        appendPart(String(options.model), null, 'used-credits-meta used-credits-model');
-    } else if (options.tier) {
-        appendPart(String(options.tier).toUpperCase(), null, 'used-credits-tier');
-    }
-    if (options.note) {
-        appendPart(String(options.note));
-    }
-
     let remVal = null;
     if (options.remaining !== null && options.remaining !== undefined && options.remaining !== '') {
         const parsedRem = Number(options.remaining);
@@ -762,9 +774,18 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
 
     if (Number.isInteger(remVal) && remVal >= 0) {
         footer.dataset.remainingCredits = String(remVal);
-        appendPart('Remaining: ', remVal, 'used-credits-rem');
+        appendPart('Remaining credit: ', remVal, 'used-credits-rem');
     } else {
         delete footer.dataset.remainingCredits;
+    }
+
+    if (options.model) {
+        appendPart(window.JEVEXA_SANITIZE_ENGINE_NAME(String(options.model)), null, 'used-credits-meta used-credits-model');
+    } else if (options.tier) {
+        appendPart(window.JEVEXA_SANITIZE_ENGINE_NAME(String(options.tier), String(options.tier).toUpperCase()), null, 'used-credits-tier');
+    }
+    if (options.note) {
+        appendPart(String(options.note));
     }
 
     footer.hidden = false;

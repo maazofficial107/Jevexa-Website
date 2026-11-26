@@ -407,7 +407,9 @@
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
-                const costText = socialCharged ? ` (${socialCharged} credits used)` : '';
+                const costText = socialCharged !== null && socialRemaining !== undefined
+                    ? ` (Used credit: ${socialCharged} · Remaining credit: ${socialRemaining})`
+                    : (socialCharged ? ` (Used credit: ${socialCharged})` : '');
                 statusEl.textContent = `Post draft and viral hooks generated!${costText}`;
                 statusEl.className = 'social-status-msg success';
             }

@@ -4366,13 +4366,13 @@ test("credit receipt footer & real-time balance sync across chat and content gen
 
   // Chatbot message receipt footer
   assert.match(creditsCode, /chat-credit-receipt/);
-  assert.match(creditsCode, /⚡ Credits used:/);
-  assert.match(creditsCode, /Remaining:/);
+  assert.match(creditsCode, /⚡ Used credit:/);
+  assert.match(creditsCode, /Remaining credit:/);
 
   // Content generator receipt footer
   assert.match(contentCode, /content-credit-receipt|contentCreditReceipt/);
-  assert.match(contentCode, /⚡ Credits used:/);
-  assert.match(contentCode, /Remaining:/);
+  assert.match(contentCode, /JEVEXA_RENDER_USED_CREDITS_FOOTER|⚡ Used credit:/);
+  assert.match(contentCode, /Remaining credit:/);
 
   // Real-time balance sync helper exported to window
   assert.match(scriptCode, /window\.JEVEXA_UPDATE_CREDIT_BALANCE\s*=/);
@@ -4807,8 +4807,8 @@ test("Fix 2: Clean minimal telemetry status — remove legacy (1 cr / 500 tok) a
   assert.match(creditsJs, /credits remaining/);
 
   // Hidden receipt node remains intact for structured balance tracking
-  assert.match(creditsJs, /⚡ Credits used:/);
-  assert.match(creditsJs, /Remaining:/);
+  assert.match(creditsJs, /⚡ Used credit:/);
+  assert.match(creditsJs, /Remaining credit:/);
 });
 
 test("Fix 3: Pricing toggle cuts prices by 20% (Lite $5->$4, Pro $12->$9.60, Max $25->$20, Ultra $49->$39.20)", async () => {
@@ -5027,13 +5027,13 @@ test("Chatbot Viewport & Compact Controls: Spacious thread layout, low-profile s
   const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const creditsCode = await readFile(new URL("../credits.js", import.meta.url), "utf8");
 
-  // Spacious reading viewport on laptop/desktop: expanded width up to 1180px and 1240px
-  assert.match(stylesCode, /\.chat-messages\s*\{[^}]*width:\s*min\(100%,\s*1180px\);/);
-  assert.match(stylesCode, /\.chat-messages[^{]*\{[^}]*width:\s*min\(100%,\s*1240px\);/);
+  // Full-width scroll container with centered reading column (840px)
+  assert.match(stylesCode, /\.chat-messages\s*\{[^}]*width:\s*100%;/);
+  assert.match(stylesCode, /\.message\s*\{[^}]*max-width:\s*840px;/);
 
   // Generous message bubble reading area for modern desktop AI chatbots
-  assert.match(stylesCode, /\.msg-content\s*\{[^}]*max-width:\s*min\(92%,\s*1020px\);/);
-  assert.match(stylesCode, /\.message\.bot\s+\.msg-content\s*\{[^}]*max-width:\s*min\(94%,\s*1040px\);/);
+  assert.match(stylesCode, /\.msg-content\s*\{[^}]*max-width:\s*100%;/);
+  assert.match(stylesCode, /\.message\.bot\s+\.msg-content\s*\{[^}]*max-width:\s*100%;/);
 
   // Compact, sleek low-height selector toolbar for Engine, Thinking, and Web Search
   assert.match(stylesCode, /\.chat-tier-controls\s*\{[^}]*min-height:\s*(?:48|52)px;/);
@@ -5338,8 +5338,8 @@ test("Chatbot upgrade: Stop-abort control, non-promotional system rules & bottom
 
   // Receipt appears at bottom end of messages in .chat-credit-receipt, status line stays minimal
   assert.match(credits, /receipt\.className = 'chat-credit-receipt'/);
-  assert.match(credits, /⚡ Credits used:/);
-  assert.match(credits, /Remaining:/);
+  assert.match(credits, /⚡ Used credit:/);
+  assert.match(credits, /Remaining credit:/);
   assert.match(credits, /setStatus\(formatMinimalStatus\(/);
 });
 
@@ -6618,10 +6618,10 @@ test("Ultra Max Layout, Workspace Stability, Scrollbars & Interactive Controls",
   assert.match(styles, /\.workspace-scroll-wrap,\s*\.workspace-content-scroll\s*\{[\s\S]*?min-height:\s*0 !important;/);
   assert.match(styles, /\.workspace-scroll-wrap,\s*\.workspace-content-scroll\s*\{[\s\S]*?overflow-y:\s*auto !important;/);
 
-  // 3. 100% Zoom Workspace Scaling (no cramped headers, reset section padding, 2-column workspace grid)
+  // 3. 100% Zoom Workspace Scaling (no cramped headers, collapsed redundant section banner, 2-column workspace grid)
   assert.match(styles, /\.content-tool-section\.workspace-mode\s*\{[\s\S]*?padding:\s*0 !important;/);
   assert.match(styles, /\.content-tool-section\.workspace-mode\s*\{[\s\S]*?margin:\s*0 !important;/);
-  assert.match(styles, /\.content-tool-section\.workspace-mode\s*\.section-title\s*\{[\s\S]*?font-size:\s*1\.45rem !important;/);
+  assert.match(styles, /\.content-tool-section\.workspace-mode\s*\.section-header,\s*\.tool-workspace\s*\.section-header\s*\{[\s\S]*?position:\s*absolute !important;/);
   assert.match(styles, /\.tool-workspace-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(360px,\s*440px\)\s*minmax\(0,\s*1fr\)(?:\s*!important)?;/);
 
   // 4. Team Management Interactive Controls (Role select, Status toggle, Audit logging)

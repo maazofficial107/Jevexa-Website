@@ -106,14 +106,16 @@
         return null;
     }
 
-    function formatMinimalStatus({ tier = currentTier, webSearch = webSearchEnabled, remaining = undefined } = {}) {
+    function formatMinimalStatus({ tier = currentTier, webSearch = webSearchEnabled, used = null, remaining = undefined } = {}) {
         const engine = getActiveEngineLabel(tier);
         const rem = Number.isInteger(remaining) ? remaining : getCachedRemainingCredits();
         const parts = [engine];
         if (webSearch && isWebSearchAllowed()) {
             parts.push('Web Search (+5 cr)');
         }
-        if (Number.isInteger(rem)) {
+        if (Number.isInteger(used) && used >= 0 && Number.isInteger(rem)) {
+            parts.push(`Used credit: ${used} · Remaining credit: ${rem.toLocaleString()}`);
+        } else if (Number.isInteger(rem)) {
             parts.push(`${rem.toLocaleString()} credits remaining`);
         } else if (!activeAuthUserId) {
             parts.push('Sign in for 100 free credits');
@@ -121,6 +123,22 @@
             parts.push('Ready');
         }
         return parts.join(' • ');
+    }
+
+    function updateChatHeaderTitle(overrideTitle = null) {
+        const titleEl = document.getElementById('chatbotTitle');
+        if (!titleEl) return;
+        if (typeof overrideTitle === 'string' && overrideTitle.trim()) {
+            titleEl.textContent = overrideTitle.trim();
+            return;
+        }
+        const activeSess = activeChatId ? chatSessions.find(item => item.id === activeChatId) : null;
+        if (activeSess?.title && activeSess.title.trim()) {
+            titleEl.textContent = activeSess.title.trim();
+        } else {
+            const firstUserMsg = conversation.find(m => m?.role === 'user' && typeof m.text === 'string' && m.text.trim());
+            titleEl.textContent = firstUserMsg ? firstUserMsg.text.trim().slice(0, 42) : 'New Chat';
+        }
     }
 
     function isWebSearchAllowed() {
@@ -549,6 +567,7 @@
         renderMemoriesUI();
         renderChatHistory();
         updateChatWelcome(null);
+        updateChatHeaderTitle('New Chat');
         setStatus('Please sign in to use the AI chatbot.');
     }
 
@@ -1155,6 +1174,7 @@
         webSearchEnabled = isWebSearchAllowed() ? getStoredWebSearchPref(historyUserId || activeAuthUserId) : false;
         syncWebSearchUI();
         renderChatHistory();
+        updateChatHeaderTitle('New Chat');
         setStatus(formatMinimalStatus());
         document.getElementById('chatInput')?.focus();
     }
@@ -1175,6 +1195,7 @@
             ? (typeof session.webSearch === 'boolean' ? session.webSearch : getStoredWebSearchPref(historyUserId || activeAuthUserId))
             : false;
         syncWebSearchUI();
+        updateChatHeaderTitle(session.title || 'New Chat');
         setStatus(formatMinimalStatus());
         if (historyUserId) {
             try {
@@ -1346,6 +1367,7 @@
             const emptyState = document.getElementById('chatEmptyState');
             if (emptyState) emptyState.hidden = false;
             updateChatWelcome();
+            updateChatHeaderTitle('New Chat');
             loadCustomSettings(userId);
             loadMemories(userId);
             renderChatHistory();
@@ -2408,8 +2430,12 @@
 
     function setStatus(message, showUpgrade = false) {
         if (!status) return;
-        const remMatch = typeof message === 'string' && message.match(/^(.+?)\s*•\s*([\d,]+)\s+credits remaining$/i);
-        if (remMatch) {
+        const turnMatch = typeof message === 'string' && message.match(/^(.+?)\s*•\s*Used credit:\s*([\d,]+)\s*·\s*Remaining credit:\s*([\d,]+)$/i);
+        const remMatch = !turnMatch && typeof message === 'string' && message.match(/^(.+?)\s*•\s*([\d,]+)\s+credits remaining$/i);
+        if (turnMatch) {
+            const [, prefixPart, usedVal, remainingVal] = turnMatch;
+            status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-sep" aria-hidden="true">·</span> <span class="chat-status-stat">Used credit: <strong class="chat-credit-used-val">${escapeMarkdownHtml(usedVal)}</strong></span> <span class="chat-status-sep" aria-hidden="true">·</span> <span class="chat-status-stat">Remaining credit: <strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong></span>`;
+        } else if (remMatch) {
             const [, prefixPart, remainingVal] = remMatch;
             status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-sep" aria-hidden="true">•</span> <span class="chat-status-stat"><strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong> credits remaining</span>`;
         } else {
@@ -2799,11 +2825,15 @@
         }
 
         const tierNameMap = { lite: 'Jevexa Core', pro: 'Jevexa Pro', max: 'Jevexa Deep Reasoning', ultra: 'Jevexa Ultra Reasoning' };
-        const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[String(meta.tier).toLowerCase()]) || 'Jevexa Core';
+        const fallbackModel = (meta.tier && tierNameMap[String(meta.tier).toLowerCase()]) || 'Jevexa Core';
+        const rawModel = extracted?.model || meta.modelName || meta.model || fallbackModel;
+        const activeModel = window.JEVEXA_SANITIZE_ENGINE_NAME
+            ? window.JEVEXA_SANITIZE_ENGINE_NAME(rawModel, fallbackModel)
+            : fallbackModel;
         const webGrounded = Boolean(meta.webSearch);
         const webSurcharge = Number(meta.webSearchSurcharge) || 5;
         if (used !== null && remaining !== null) {
-            setStatus(formatMinimalStatus({ tier: meta.tier || currentTier, webSearch: webGrounded, remaining }));
+            setStatus(formatMinimalStatus({ tier: meta.tier || currentTier, webSearch: webGrounded, used, remaining }));
         }
         if (webGrounded) {
             const webBadge = document.createElement('div');
@@ -2822,15 +2852,15 @@
                 receipt.dataset.remainingCredits = String(remaining);
             }
             const remHtml = (remaining !== null && remaining >= 0)
-                ? ` &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong>`
+                ? ` <span class="chat-receipt-sep" aria-hidden="true">·</span> <span>Remaining credit: <strong>${remaining}</strong></span>`
                 : '';
-            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span>⚡ Credits used: <strong>${used}</strong>${remHtml}</span>`;
+            receipt.innerHTML = `<span class="chat-receipt-main">⚡ Used credit: <strong>${used}</strong>${remHtml}</span> <span class="chat-receipt-tier">${escapeHtml(activeModel)}</span>`;
             content.appendChild(receipt);
         } else if (meta.unconfirmedSettlement) {
             const receipt = document.createElement('div');
             receipt.className = 'chat-credit-receipt';
             receipt.setAttribute('role', 'status');
-            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span>⚡ Credit settlement pending reconciliation</span>`;
+            receipt.innerHTML = `<span class="chat-receipt-main">⚡ Credit settlement pending reconciliation</span> <span class="chat-receipt-tier">${escapeHtml(activeModel)}</span>`;
             content.appendChild(receipt);
         }
     }
@@ -3729,9 +3759,16 @@
                 }
 
                 persistConversation(session.user.id);
-                const remaining = Number.isInteger(result.remaining_credits)
-                    ? result.remaining_credits
-                    : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null);
+                updateChatHeaderTitle();
+                const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result, { fallbackToLiveBalance: false });
+                const remaining = creditUsage?.remaining ?? (
+                    Number.isInteger(result.remainingCredits)
+                        ? result.remainingCredits
+                        : (Number.isInteger(result.remaining_credits)
+                            ? result.remaining_credits
+                            : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null))
+                );
+                const usedForStatus = creditUsage?.used ?? usedCreditsMeta;
                 if (remaining !== null) {
                     const countEl = document.getElementById('creditsCount');
                     if (countEl) countEl.textContent = String(remaining);
@@ -3746,6 +3783,7 @@
                 setStatus(formatMinimalStatus({
                     tier: selectedTier,
                     webSearch: Boolean(result?.webSearch),
+                    used: usedForStatus,
                     remaining: remaining !== null ? remaining : undefined
                 }));
                 await refreshDisplayedCredits();

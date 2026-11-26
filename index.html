@@ -3538,14 +3538,9 @@
                     </button>
                 </div>
                 <div class="chatbot-header-center">
-                    <div class="chatbot-avatar">
-                        <div class="avatar-ring"></div>
-                        <i class="fas fa-wand-magic-sparkles"></i>
-                        <span class="status-dot"></span>
-                    </div>
                     <div class="chatbot-info">
-                        <h4 id="chatbotTitle">Jevexa AI</h4>
-                        <span class="status" id="chatbotStatusText">AI Chat • Sign in to start</span>
+                        <h4 id="chatbotTitle">New Chat</h4>
+                        <span class="status" id="chatbotStatusText">Sign in to start</span>
                     </div>
                 </div>
                 <div class="chatbot-header-right">
@@ -3561,9 +3556,8 @@
                 </div>
             </div>
             <div class="chat-empty-state" id="chatEmptyState">
-                <div class="chat-empty-mark"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i></div>
                 <h2 id="chatWelcomeTitle">👋 Welcome! Ready to automate?</h2>
-                <p>Choose a quick start or ask Jevexa AI anything.</p>
+                <p>Ask anything, upload files, or start with a prompt below.</p>
                 <div class="chat-welcome-chips" id="chatWelcomeChips" aria-label="Quick-start prompts">
                     <button type="button" class="chat-welcome-chip">Write a blog post</button>
                     <button type="button" class="chat-welcome-chip">Draft an email</button>
@@ -3596,7 +3590,15 @@
             </div>
 
             <div class="chat-composer-dock">
+            <div class="chat-attachment-list" id="chatAttachmentList" aria-live="polite" hidden></div>
+
+            <div class="chat-input-area">
+                <textarea id="chatInput" rows="1" placeholder="Ask Jevexa AI anything..." autocomplete="off" enterkeyhint="send" aria-label="Message Jevexa AI"></textarea>
+            </div>
+
             <div class="chat-tier-controls">
+                <input type="file" id="chatFileInput" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,application/zip,.jpg,.jpeg,.png,.webp,.gif,.pdf,.zip" multiple hidden>
+                <button type="button" id="chatAttachButton" class="chat-attach" aria-label="Attach an image, PDF, or ZIP file" title="Attach image, PDF, or ZIP"><i class="fas fa-paperclip" aria-hidden="true"></i></button>
                 <input type="hidden" id="chatTier" value="lite">
                 <div class="chat-select" data-chat-select="tier">
                     <span class="chat-select-label" id="chatTierLabel">Engine</span>
@@ -3631,18 +3633,7 @@
                     <span class="chat-web-search-pill" aria-hidden="true"><i class="fas fa-lock"></i></span>
                 </button>
                 <span id="chatComposerWebBadge" class="chat-composer-web-badge visually-hidden" role="status" aria-live="polite" hidden>Live Web Search active (+5 credits/request)</span>
-            </div>
-
-            <div class="chat-attachment-list" id="chatAttachmentList" aria-live="polite" hidden></div>
-
-            <div class="chat-input-area">
-
-                <input type="file" id="chatFileInput" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,application/zip,.jpg,.jpeg,.png,.webp,.gif,.pdf,.zip" multiple hidden>
-                <button type="button" id="chatAttachButton" class="chat-attach" aria-label="Attach an image, PDF, or ZIP file"><i class="fas fa-paperclip" aria-hidden="true"></i></button>
-                <textarea id="chatInput" rows="1" placeholder="Ask Jevexa AI anything..." autocomplete="off" enterkeyhint="send" aria-label="Message Jevexa AI"></textarea>
-
                 <button type="button" id="chatSend" class="chat-send" aria-label="Send message"><i class="fas fa-paper-plane"></i></button>
-
             </div>
             </div>
 

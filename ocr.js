@@ -597,7 +597,9 @@ Terms: Net 30`
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
-                const costText = ocrCharged ? ` (${ocrCharged} credits used)` : '';
+                const costText = ocrCharged !== null && ocrRemaining !== undefined
+                    ? ` (Used credit: ${ocrCharged} · Remaining credit: ${ocrRemaining})`
+                    : (ocrCharged ? ` (Used credit: ${ocrCharged})` : '');
                 statusEl.textContent = `Data extracted successfully!${costText}`;
                 statusEl.className = 'ocr-status-msg success';
             }

@@ -439,20 +439,29 @@
 
             clearContentProcessing();
             output.textContent = payload.content;
-            let receipt = document.getElementById('contentCreditReceipt');
-            if (!receipt) {
-                receipt = document.createElement('div');
-                receipt.id = 'contentCreditReceipt';
-                receipt.className = 'content-credit-receipt';
-                receipt.setAttribute('role', 'status');
-                receipt.setAttribute('aria-live', 'polite');
-                output.parentNode.appendChild(receipt);
+            if (typeof window.JEVEXA_RENDER_USED_CREDITS_FOOTER === 'function') {
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER(output.parentNode, used, {
+                    id: 'contentCreditReceipt',
+                    className: 'content-credit-receipt',
+                    remaining,
+                    tier: creditUsage?.tier || payload?.tier
+                });
+            } else {
+                let receipt = document.getElementById('contentCreditReceipt');
+                if (!receipt) {
+                    receipt = document.createElement('div');
+                    receipt.id = 'contentCreditReceipt';
+                    receipt.className = 'content-credit-receipt';
+                    receipt.setAttribute('role', 'status');
+                    receipt.setAttribute('aria-live', 'polite');
+                    output.parentNode.appendChild(receipt);
+                }
+                receipt.dataset.usedCredits = String(used);
+                receipt.dataset.remainingCredits = String(remaining);
+                receipt.innerHTML = `<span>⚡ Used credit: <strong>${used}</strong> &nbsp;·&nbsp; Remaining credit: <strong>${remaining}</strong></span>`;
+                receipt.hidden = false;
+                receipt.removeAttribute('hidden');
             }
-            receipt.dataset.usedCredits = String(used);
-            receipt.dataset.remainingCredits = String(remaining);
-            receipt.innerHTML = `<span>⚡ Credits used: <strong>${used}</strong> &nbsp;•&nbsp; Remaining: <strong>${remaining}</strong></span>`;
-            receipt.hidden = false;
-            receipt.removeAttribute('hidden');
 
             const retryContainer = document.getElementById('contentRetryAction');
             if (retryContainer) retryContainer.remove();
@@ -489,7 +498,7 @@
                     balanceMessage = ' Your displayed balance could not be refreshed.';
                 }
             }
-            setStatus(`Content generated. ${used} credits charged; ${remaining} remaining.${balanceMessage}`, 'success');
+            setStatus(`Content generated. Used credit: ${used} · Remaining credit: ${remaining}.${balanceMessage}`, 'success');
         } catch (error) {
             clearContentProcessing();
             output.textContent = '';
@@ -741,25 +750,35 @@
                     const charCount = document.getElementById('contentCharCount');
                     if (charCount) charCount.textContent = `${topicInput.value.length} / 1000`;
                     output.textContent = item.content || '';
-                    let receipt = document.getElementById('contentCreditReceipt');
                     if (Number.isInteger(item.creditsUsed) && item.creditsUsed > 0) {
-                        if (!receipt) {
-                            receipt = document.createElement('div');
-                            receipt.id = 'contentCreditReceipt';
-                            receipt.className = 'content-credit-receipt';
-                            receipt.setAttribute('role', 'status');
-                            receipt.setAttribute('aria-live', 'polite');
-                            output.parentNode.appendChild(receipt);
-                        }
                         const histRemaining = Number.isInteger(item.remainingCredits) && item.remainingCredits >= 0
                             ? item.remainingCredits
-                            : (window.JEVEXA_GET_CREDITS_BALANCE?.() ?? document.getElementById('creditsCount')?.textContent ?? '—');
-                        receipt.dataset.usedCredits = String(item.creditsUsed);
-                        receipt.innerHTML = `<span>⚡ Credits used: <strong>${item.creditsUsed}</strong> &nbsp;•&nbsp; Remaining: <strong>${histRemaining}</strong></span>`;
-                        receipt.hidden = false;
-                        receipt.removeAttribute('hidden');
-                    } else if (receipt) {
-                        receipt.hidden = true;
+                            : (window.JEVEXA_GET_CREDITS_BALANCE?.() ?? null);
+                        if (typeof window.JEVEXA_RENDER_USED_CREDITS_FOOTER === 'function') {
+                            window.JEVEXA_RENDER_USED_CREDITS_FOOTER(output.parentNode, item.creditsUsed, {
+                                id: 'contentCreditReceipt',
+                                className: 'content-credit-receipt',
+                                remaining: histRemaining,
+                                fallbackToLiveBalance: false
+                            });
+                        } else {
+                            let receipt = document.getElementById('contentCreditReceipt');
+                            if (!receipt) {
+                                receipt = document.createElement('div');
+                                receipt.id = 'contentCreditReceipt';
+                                receipt.className = 'content-credit-receipt';
+                                receipt.setAttribute('role', 'status');
+                                receipt.setAttribute('aria-live', 'polite');
+                                output.parentNode.appendChild(receipt);
+                            }
+                            receipt.dataset.usedCredits = String(item.creditsUsed);
+                            const remLabel = histRemaining !== null ? histRemaining : '—';
+                            receipt.innerHTML = `<span>⚡ Used credit: <strong>${item.creditsUsed}</strong> &nbsp;·&nbsp; Remaining credit: <strong>${remLabel}</strong></span>`;
+                            receipt.hidden = false;
+                            receipt.removeAttribute('hidden');
+                        }
+                    } else {
+                        window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(output.parentNode, 'contentCreditReceipt');
                     }
                     copyButton.disabled = false;
                     downloadButton.disabled = false;

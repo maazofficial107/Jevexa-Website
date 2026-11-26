@@ -294,9 +294,9 @@ insert into public.jevexa_service_pricing
   (service_key, display_name, integration_status, fixed_credits, credits_per_1000_tokens, enabled)
 values
   ('ai_chat', 'AI Chat — Lite', 'available', 1, null, true),
-  ('ai_chat_pro', 'AI Chat — Pro', 'available', 2, null, true),
-  ('ai_chat_max', 'AI Chat — Max', 'available', 4, null, true),
-  ('ai_chat_ultra', 'AI Chat — Ultra', 'available', 8, null, true),
+  ('ai_chat_pro', 'AI Chat — Pro', 'available', 3, null, true),
+  ('ai_chat_max', 'AI Chat — Max', 'available', 18, null, true),
+  ('ai_chat_ultra', 'AI Chat — Ultra', 'available', 18, null, true),
   ('content_generation', 'Content Generation', 'available', null, 1, true),
   ('email_outreach', 'Email & Outreach AI', 'unavailable', null, null, false),
   ('mini_crm', 'Mini CRM', 'unavailable', null, null, false),

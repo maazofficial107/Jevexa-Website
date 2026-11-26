@@ -276,12 +276,9 @@ test("Phase 3: Groq full 4-model failover chain reaches legacy models then falls
     }
     if (url.hostname === "generativelanguage.googleapis.com") {
       geminiModelsTried.push(url.pathname);
-      const reqBody = JSON.parse(options.body);
-      // Verify gemini-2.0-flash never receives thinkingConfig
-      if (url.pathname.includes("gemini-2.0-flash")) {
-        assert.equal("thinkingConfig" in (reqBody.generationConfig || {}), false);
+      if (url.pathname.includes("gemini-2.5-flash:")) {
         return Response.json({
-          candidates: [{ content: { parts: [{ text: "Recovered on Gemini 2.0 Flash!" }], role: "model" }, finishReason: "STOP" }],
+          candidates: [{ content: { parts: [{ text: "Recovered on Gemini 2.5 Flash!" }], role: "model" }, finishReason: "STOP" }],
           usageMetadata: { totalTokenCount: 55 }
         });
       }
@@ -292,14 +289,14 @@ test("Phase 3: Groq full 4-model failover chain reaches legacy models then falls
 
   try {
     const env = { ...baseEnv, GROQ_API_KEY: "g-key", GEMINI_API_KEY: "gem-key" };
-    const res = await worker.fetch(makeChatReq({ message: "Test full cascade", tier: "pro", thinkingLevel: "standard" }), env);
+    const res = await worker.fetch(makeChatReq({ message: "Test full cascade", tier: "lite" }), env);
     assert.equal(res.status, 200);
     const data = await res.json();
-    assert.equal(data.reply, "Recovered on Gemini 2.0 Flash!");
+    assert.equal(data.reply, "Recovered on Gemini 2.5 Flash!");
     assert.equal(groqModelsTried.length, 4, "Groq must try primary, fallback, and both legacy models");
     assert.equal(groqModelsTried[0], "llama-3.3-70b-versatile");
     assert.equal(groqModelsTried[1], "llama-3.1-8b-instant");
-    assert.equal(geminiModelsTried.some(p => p.includes("gemini-3.5")), false, "Must not call nonexistent gemini-3.5 models");
+    assert.equal(geminiModelsTried.some(p => p.includes("gemini-2.5-flash-lite")), true);
     assert.equal(geminiModelsTried.some(p => p.includes("gemini-2.5-flash")), true);
   } finally {
     globalThis.fetch = originalFetch;

@@ -56,10 +56,12 @@
     let activeAuthUserId = null;
     let maximumChatTier = 'lite';
     let currentTier = 'lite';
-    let maximumThinkingLevel = 'low';
-    let currentThinkingLevel = 'low';
-    const accountTiers = { free: 'lite', starter: 'lite', lite: 'lite', pro: 'pro', business: 'max', max: 'max', ultra: 'ultra' };
+    let maximumThinkingLevel = 'off';
+    let currentThinkingLevel = 'off';
+    let webSearchEnabled = false;
+    const accountTiers = { free: 'lite', starter: 'pro', lite: 'pro', pro: 'pro', business: 'max', max: 'max', ultra: 'ultra' };
     const tierOrder = ['lite', 'pro', 'max', 'ultra'];
+    const thinkingOrder = ['off', 'low', 'standard', 'max'];
 
     const PLAN_MEMORY_CONFIG = {
         free: { maxMemories: 5, maxMemoryChars: 200, maxHistoryMessages: 6, label: 'Free Plan' },
@@ -1246,8 +1248,8 @@
                 maximumTier = accountTiers[currentUserPlan];
             } else if (!planKey && data && Number.isInteger(data.balance)) {
                 // Only use balance fallback if plan is completely unknown/empty (never override explicit free)
-                if (data.balance >= 30000) maximumTier = 'max';
-                else if (data.balance >= 10000) maximumTier = 'pro';
+                if (data.balance >= 22000) maximumTier = 'max';
+                else if (data.balance >= 2500) maximumTier = 'pro';
                 else maximumTier = 'lite';
             } else {
                 maximumTier = 'lite';
@@ -1264,16 +1266,31 @@
             updateSelectorDisplay('tier');
             tierSelect.setAttribute('aria-label', `AI chat tier. Your maximum tier is ${maximumTier}.`);
             if (thinkingSelect) {
-                maximumThinkingLevel = maximumIndex >= 2 ? 'max' : maximumIndex >= 1 ? 'standard' : 'low';
-                const thinkingMaximumIndex = ['low', 'standard', 'max'].indexOf(maximumThinkingLevel);
+                const isFreeOrLite = ['free', 'lite', 'starter'].includes(currentUserPlan);
+                maximumThinkingLevel = isFreeOrLite
+                    ? 'off'
+                    : (maximumIndex >= 2 ? 'max' : (maximumIndex >= 1 ? 'standard' : 'off'));
+                const thinkingMaximumIndex = thinkingOrder.indexOf(maximumThinkingLevel);
                 selectorOptions('thinking').forEach(option => {
-                    const optionIndex = ['low', 'standard', 'max'].indexOf(option.dataset.value);
+                    const optionIndex = thinkingOrder.indexOf(option.dataset.value);
                     const locked = optionIndex > thinkingMaximumIndex;
                     option.dataset.locked = String(locked);
                 });
-                if (['low', 'standard', 'max'].indexOf(thinkingSelect.value) > thinkingMaximumIndex) thinkingSelect.value = 'low';
+                if (thinkingOrder.indexOf(thinkingSelect.value) > thinkingMaximumIndex || thinkingOrder.indexOf(thinkingSelect.value) < 0) {
+                    thinkingSelect.value = 'off';
+                }
                 currentThinkingLevel = thinkingSelect.value;
                 updateSelectorDisplay('thinking');
+            }
+            const webSearchBtn = document.getElementById('chatWebSearchBtn');
+            if (webSearchBtn) {
+                const searchAllowed = !['free', 'lite', 'starter'].includes(currentUserPlan) && ['pro', 'max', 'ultra'].includes(maximumTier);
+                if (!searchAllowed && webSearchEnabled) {
+                    webSearchEnabled = false;
+                    webSearchBtn.setAttribute('aria-pressed', 'false');
+                    webSearchBtn.classList.remove('active');
+                }
+                webSearchBtn.dataset.locked = String(!searchAllowed);
             }
         } catch (tierErr) {
             console.warn('Chat tier lookup notice, defaulting to lite:', tierErr?.message || tierErr);
@@ -3036,13 +3053,13 @@
             return "Here is a professional outreach email template:\n\n**Subject:** Streamlining your AI workflow at [Company Name]\n\nHi [First Name],\n\nI noticed your team is scaling operations and thought you might be interested in automating repetitive content and customer queries.\n\nAt JEVEXA, our AI tools help teams save 15+ hours weekly with intelligent chat, automated drafting, and workflow integrations. Would you be open to a quick 5-minute look this week?\n\nBest regards,\n[Your Name]\n\n*Tip:* You can generate personalized email sequences using our Content Generation tool with your 100 free credits!";
         }
         if (/credit|token|balance|cost|quota/i.test(q)) {
-            return "JEVEXA credits power all studio tools with transparent usage-based economics:\n• **100 Free Welcome Credits:** Included immediately upon sign-up (no card required).\n• **Token-Weighted Chat:** 1 credit per 500 tokens (input + output) multiplied by model tier (Lite 1.0x, Pro 1.5x, Max 2.0x, Ultra 2.0x) + attachment surcharges.\n• **Content Generation:** Measured transparently by provider token usage.\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount**!";
+            return "JEVEXA credits power all 10 live studio tools with transparent unit economics:\n• **100 Free Signup Credits:** Included immediately upon sign-up (capped at 15 credits/day burn limit).\n• **Token-Weighted Chat:** 1 credit per 500 base tokens (input + output + thinking tokens), scaled across Economy (1.0x), Standard (3.0x), and Flagship Reasoning (18.0x) models + attachment surcharges.\n• **Real-Time Web Search:** +5 credits per grounded search request (Pro 15/day, Max 50/day, Ultra 150/day).\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount** and a 7-day refund policy!";
         }
         if (/price|pricing|plan|ultra|pro|lite|max|annual|discount/i.test(q)) {
-            return "JEVEXA offers 4 scalable tiers with an automatic 20% annual package discount:\n• **Lite:** $5/mo ($4/mo annual) — 2,000 monthly credits, fast Lite AI chat, Images + PDF + ZIP unlocked\n• **Pro:** $12/mo ($9.60/mo annual) — 10,000 monthly credits, Pro AI models, expanded PDF & ZIP limits, Standard thinking\n• **Max:** $25/mo ($20/mo annual) — 30,000 monthly credits, Max AI models, high-volume PDF & ZIP, deep reasoning\n• **Ultra:** $49/mo ($39.20/mo annual) — 70,000 monthly credits, Ultra flagship reasoning & vision models, priority queue.\nAll annual packages are discounted by 20% and paid once!";
+            return "JEVEXA offers 5 transparent tiers with an automatic 20% annual package discount:\n• **Free ($0):** 100 signup credits (max 15/day), Economy Tier (1.0x), thinking OFF\n• **Lite:** $5/mo ($4/mo annual, $48/yr) — 2,500 monthly credits (~1.25M fast tokens), Standard Tier (3.0x), PDF + ZIP unlocked\n• **Pro:** $15/mo ($12/mo annual, $144/yr) — 10,000 monthly credits (~5M tokens), Low/Medium thinking, Web Search (15/day, +5 cr/req)\n• **Max:** $29/mo ($23.20/mo annual, $278.40/yr) — 22,000 monthly credits (~11M tokens), Flagship Reasoning (18.0x), High/Max thinking, Web Search (50/day)\n• **Ultra:** $49/mo ($39.20/mo annual, $470.40/yr) — 40,000 monthly credits (~20M tokens), Priority Flagship (18.0x), Web Search (150/day).\nAll annual packages are discounted by 20% and paid once!";
         }
         if (/tool|feature|capabilities|model|ocr|crm/i.test(q)) {
-            return "JEVEXA AI Studio features 10 business tools:\n• **AI Chat** & **Content Generation** are live today!\n• 8 additional tools (Email AI, Mini CRM, Document OCR, Social Assistant, Analytics, User Management, Workflow Automation, Data Management) roll out across planned releases.\nSign in to test the live tools with 100 free credits!";
+            return "All 10 JEVEXA AI Studio tools are live today: AI Chat, Content Generation, Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, Team Admin, Workflow Automation, and Data Management. Sign in to test all 10 tools with 100 free credits!";
         }
         return "I can help with that! As your JEVEXA AI Assistant, I can draft comprehensive responses, analyze technical topics, explore business automation strategies, or guide you through our studio tools. Let me know what specific focus or format you prefer!";
     }
@@ -3303,16 +3320,17 @@
             const chatPayload = {
                 message: text,
                 tier: selectedTier,
-                thinkingLevel: thinkingSelect?.value || 'low',
+                thinkingLevel: thinkingSelect?.value || 'off',
+                webSearch: webSearchEnabled,
                 attachments,
                 history: historyForApi,
                 customSettings: getActiveCustomSettings(),
                 memories: getActiveMemoriesList()
             };
 
-            const tierMultipliers = { lite: 1.0, pro: 1.5, max: 2.0, ultra: 2.0 };
+            const tierMultipliers = { lite: 1.0, pro: 3.0, max: 18.0, ultra: 18.0 };
             const multiplier = tierMultipliers[selectedTier] || 1.0;
-            let attachmentSurcharge = 0;
+            let attachmentSurcharge = webSearchEnabled ? 5 : 0;
             for (const att of attachments) {
                 const t = (att?.type || '').toLowerCase();
                 if (t.startsWith('image/')) attachmentSurcharge += 2;
@@ -4052,29 +4070,29 @@
         if (tierOrder.indexOf(tier) > tierOrder.indexOf(currentMaximumChatTier)) {
             tierSelect.value = currentTier;
             updateSelectorDisplay('tier');
-            const requiredPlan = ({ pro: 'Pro', max: 'Max', ultra: 'Ultra' })[tier] || 'Pro';
+            const requiredPlan = ({ pro: 'Lite', max: 'Max', ultra: 'Ultra' })[tier] || 'Lite';
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlan, 'this chat tier');
+                window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlan, 'this model tier');
             } else if (typeof window.showToast === 'function') {
-                window.showToast(`Upgrade to ${requiredPlan} Plan to unlock this feature.`);
+                window.showToast(`Upgrade to ${requiredPlan} Plan to unlock this model tier.`);
             } else {
-                setStatus(`Upgrade to ${requiredPlan} Plan to unlock this feature.`);
+                setStatus(`Upgrade to ${requiredPlan} Plan to unlock this model tier.`);
             }
             return;
         }
         currentTier = tier;
         updateSelectorDisplay('tier');
-        const tierMultipliers = { lite: '1.0x', pro: '1.5x', max: '2.0x', ultra: '2.0x' };
-        setStatus(`⚡ ${tier[0].toUpperCase()}${tier.slice(1)} • Token-weighted`);
-        const activeModelName = ({ lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' })[tier] || 'Jevexa Lite';
+        const tierMultipliers = { lite: '1.0x', pro: '3.0x', max: '18.0x', ultra: '18.0x' };
+        setStatus(`⚡ ${tierMultipliers[tier] || '1.0x'} Model • Token-weighted`);
+        const activeModelName = ({ lite: 'Economy (1.0x)', pro: 'Standard (3.0x)', max: 'Flagship (18.0x)', ultra: 'Ultra Flagship (18.0x)' })[tier] || 'Economy (1.0x)';
         const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
         if (statusText && activeAuthUserId) statusText.textContent = `${activeModelName} • Online`;
     });
     document.getElementById('chatThinking')?.addEventListener('change', () => {
         const selected = thinkingSelect.value;
         // Defensive: Ensure maximum values are valid before comparison
-        const currentMaximumThinkingLevel = typeof maximumThinkingLevel === 'string' && maximumThinkingLevel.length > 0 ? maximumThinkingLevel : 'low';
-        if (['low', 'standard', 'max'].indexOf(selected) > ['low', 'standard', 'max'].indexOf(currentMaximumThinkingLevel)) {
+        const currentMaximumThinkingLevel = typeof maximumThinkingLevel === 'string' && maximumThinkingLevel.length > 0 ? maximumThinkingLevel : 'off';
+        if (thinkingOrder.indexOf(selected) > thinkingOrder.indexOf(currentMaximumThinkingLevel)) {
             thinkingSelect.value = currentThinkingLevel;
             updateSelectorDisplay('thinking');
             const requiredPlan = selected === 'max' ? 'Max' : 'Pro';
@@ -4089,6 +4107,24 @@
         }
         currentThinkingLevel = selected;
         updateSelectorDisplay('thinking');
+    });
+    document.getElementById('chatWebSearchBtn')?.addEventListener('click', () => {
+        const btn = document.getElementById('chatWebSearchBtn');
+        const searchAllowed = !['free', 'lite', 'starter'].includes(currentUserPlan) && ['pro', 'max', 'ultra'].includes(maximumChatTier);
+        if (!searchAllowed) {
+            if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'Real-Time Web Search Grounding (Pro 15/day, Max 50/day, Ultra 150/day)', btn);
+            } else {
+                setStatus('Real-Time Web Search requires Pro ($15/mo), Max ($29/mo), or Ultra ($49/mo).');
+            }
+            return;
+        }
+        webSearchEnabled = !webSearchEnabled;
+        if (btn) {
+            btn.setAttribute('aria-pressed', String(webSearchEnabled));
+            btn.classList.toggle('active', webSearchEnabled);
+        }
+        setStatus(webSearchEnabled ? '🌐 Web Search Grounding ON (+5 cr/request)' : '⚡ Token-weighted');
     });
     document.getElementById('chatTheme')?.addEventListener('change', event => {
         const themeVal = event.target.value || 'dark';

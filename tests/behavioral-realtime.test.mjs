@@ -674,8 +674,7 @@ test('17. Full 10-Service Real Action Integrity, Fail-Safe Fallbacks, Modal Life
     // 3. Modals & Drawers Safe Lifecycle in script.js
     assert.ok(scriptCode.includes("'workflowExecModal'"), 'script.js drawerBackdropIds includes workflowExecModal');
     assert.ok(scriptCode.includes("'chatCustomizationModal'"), 'script.js drawerBackdropIds includes chatCustomizationModal');
-    assert.ok(scriptCode.includes("'comingSoonModal'"), 'script.js drawerBackdropIds includes comingSoonModal');
-    assert.ok(scriptCode.includes("'comingSoonBackdrop'"), 'script.js drawerBackdropIds includes comingSoonBackdrop');
+    assert.ok(scriptCode.includes("'activationModal'"), 'script.js drawerBackdropIds includes activationModal');
 
     assert.ok(scriptCode.includes('window.clearContentProcessing();'), 'script.js cancels in-flight content polling timers on reset');
     assert.ok(scriptCode.includes('window.closeWorkflowExecModal();') || scriptCode.includes('window.JEVEXA_WORKFLOWS?.closeExecModal();'), 'script.js closes workflow execution modal on reset');

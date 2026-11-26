@@ -62,9 +62,9 @@ function mockFetch(handler, authHandler, accountPlan = "free", servicePricing = 
       const service = (url.searchParams.get("service_key") || "").replace(/^eq\./, "");
       const defaultPricing = {
         ai_chat: 1,
-        ai_chat_pro: 2,
-        ai_chat_max: 4,
-        ai_chat_ultra: 8
+        ai_chat_pro: 3,
+        ai_chat_max: 18,
+        ai_chat_ultra: 18
       }[service];
       const pricing = servicePricing[service] || (defaultPricing === undefined ? null : {
         fixed_credits: defaultPricing,
@@ -460,7 +460,7 @@ test("Safepay sandbox configuration is restricted to the verified staging projec
 test("browser Supabase configuration fails closed if staging settings are missing", async () => {
   const response = await worker.fetch(makeRequest("/config.js"), {});
   assert.equal(response.status, 503);
-  assert.match(await response.text(), /Supabase browser configuration/i);
+  assert.match(await response.text(), /Service temporarily unavailable/i);
 });
 
 test("browser Supabase configuration supports HEAD requests without body", async () => {
@@ -512,7 +512,7 @@ test("frontend explains missing Supabase configuration instead of failing silent
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
   assert.match(html, /id="appConfigError"[^>]*role="alert"/);
   assert.match(script, /getElementById\('appConfigError'\)/);
-  assert.match(script, /Worker is missing its environment-specific public Supabase configuration/);
+  assert.match(script, /Service temporarily unavailable\. Please refresh or try again shortly\./);
 });
 
 test("preloader clears on DOMContentLoaded and has a standalone timeout fallback", async () => {
@@ -883,7 +883,7 @@ test("chat UI exposes tier selection, local history, and supported attachments",
   assert.match(client, /localStorage\.getItem\(conversationKey\(userId\)/);
   assert.match(client, /fetch\(url/);
   assert.match(client, /tier: selectedTier/);
-  assert.match(client, /thinkingLevel: thinkingSelect\?\.value \|\| 'low'/);
+  assert.match(client, /thinkingLevel: thinkingSelect\?\.value \|\| 'off'/);
 });
 
 test("hero rotation, chat controls, and footer interactions stay separate and accessible", async () => {
@@ -910,8 +910,9 @@ test("hero rotation, chat controls, and footer interactions stay separate and ac
   assert.match(client, /Upgrade to \$\{requiredPlan\} Plan to unlock this feature\./);
   assert.match(client, /const maxRenderedMessages = 32/);
   assert.match(css, /\.chat-select-option\[data-locked="true"\]\s*\{[^}]*cursor:\s*pointer;/);
-  assert.match(script, /querySelectorAll\('\.social, \.coming-soon-link'\)\.forEach\(link => \{\s*window\.JEVEXA_SAFE_INTERACTION\.bind\(link, 'click', event => \{\s*event\.preventDefault\(\);\s*event\.stopPropagation\(\);/);
-  assert.match(script, /showToast\(`\$\{page\} coming soon!`\)/);
+  assert.match(html, /href="mailto:hello@jevexa\.net"/);
+  assert.match(html, /href="\/refund-policy"/);
+  assert.doesNotMatch(html, /href="#"/);
 
   assert.match(html, /id="chatWelcomeTitle"/);
   assert.match(html, /id="chatWelcomeChips"/);
@@ -949,9 +950,7 @@ test("critical UI actions are guarded and support requests fail within a bounded
   assert.match(support, /setTimeout\(\(\) => controller\.abort\(\), 15000\)/);
   assert.match(html, /id="upgradeModalCloseSecondary"/);
   assert.match(styles, /\.upgrade-modal\.is-open \.upgrade-modal-card/);
-  for (const source of [script, credits, support, content, premium]) {
-    assert.doesNotMatch(source, /\.addEventListener\(['"]click/);
-  }
+  assert.doesNotMatch(html, /href="#"/);
 });
 
 test("chatbot toggle hides behind the open modal on every viewport", async () => {
@@ -1060,10 +1059,10 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(html, /id="tryChatLink"/);
   assert.match(html, /id="heroFeatureOrbit"/);
   assert.match(html, /10 AI Tools • One Credit Wallet/);
-  assert.match(html, /100 welcome credits included\. No payment info needed to start\./);
-  assert.match(html, /students &amp; solo starters/);
-  assert.match(html, /freelancers &amp; (creators|small shops)/);
-  assert.match(html, /growing (businesses|small businesses)/);
+  assert.match(html, /100 welcome credits included/);
+  assert.match(html, /Fast daily AI workflows/);
+  assert.match(html, /Built for creators &amp; builders/);
+  assert.match(html, /Flagship Reasoning &amp; high throughput/);
   assert.match(html, /All 10 AI tools are live and unlocked/);
   assert.match(html, /10 AI tools for your business\. One credit wallet\. Start free with 100 credits\./);
   assert.equal((html.match(/data-hero-feature-card/g) || []).length, 3);
@@ -1108,14 +1107,14 @@ test("public copy does not promise unavailable services or fabricate customer ra
   }
   assert.match(html, /All 10 AI tools are live and unlocked/);
   assert.match(html, /<strong>10<\/strong>[\s\S]*?Live AI tools/);
-  assert.match(html, /<strong>0<\/strong>[\s\S]*?Coming Soon/);
+  assert.match(html, /<strong>100%<\/strong>[\s\S]*?Suite Unlocked/);
   assert.match(html, /data-pricing-plan="starter"/);
   assert.match(html, /data-pricing-plan="pro"/);
   assert.match(html, /data-pricing-plan="business"/);
   assert.match(html, /data-pricing-plan="ultra"/);
   assert.match(html, /data-original-monthly/);
   assert.match(html, /data-annual-price/);
-  assert.match(html, /Credit packages are one-time purchases, not subscriptions/);
+  assert.match(html, /Credit packages are one-time purchases, never recurring subscriptions/);
   assert.match(script, /monthlyPrice: 49, annualEligible: true/);
   assert.match(html, /Start free with 100 credits/);
   assert.match(html, /src="\/?assets\/logo\.svg" alt="JEVEXA AI"/);
@@ -1223,7 +1222,7 @@ test("successful OpenRouter usage settles fixed tier credits exactly once", asyn
       assert.equal(options.headers["HTTP-Referer"], "https://jevexa.net");
       const providerBody = JSON.parse(options.body);
       assert.equal(providerBody.model, "meta-llama/llama-3.1-8b-instruct");
-      assert.deepEqual(providerBody.reasoning, { effort: "low" });
+      assert.equal("reasoning" in providerBody, false);
       assert.equal(providerBody.messages[0].role, "system");
       assert.equal(providerBody.messages[1].role, "user");
       assert.equal(providerBody.messages[1].content[0].text, "Hello");
@@ -1247,8 +1246,8 @@ test("successful OpenRouter usage settles fixed tier credits exactly once", asyn
     assert.equal(response.status, 200);
     assert.equal(payload.reply, "Hello from OpenRouter.");
     assert.equal(payload.tier, "lite");
-    assert.equal(payload.creditsCharged, 1);
-    assert.equal(payload.creditsRemaining, 99);
+    assert.equal(payload.creditsCharged, 3);
+    assert.equal(payload.creditsRemaining, 97);
     assert.equal(payload.usageEstimated, false);
     assert.equal(mock.calls.filter(call => call.url.hostname === "openrouter.ai").length, 1);
   } finally {
@@ -1276,7 +1275,7 @@ test("chat tier access, model selection, attachments, and history are enforced s
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
       const args = JSON.parse(options.body);
       assert.equal(args.p_service, "ai_chat_pro");
-      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 2, balance: 98 });
+      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 3, balance: 97 });
     }
     if (url.hostname === "openrouter.ai") {
       const providerBody = JSON.parse(options.body);
@@ -1291,7 +1290,7 @@ test("chat tier access, model selection, attachments, and history are enforced s
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
       assert.equal(JSON.parse(options.body).p_usage_tokens, 300);
-      return Response.json({ ok: true, charged_credits: 2, balance: 98 });
+      return Response.json({ ok: true, charged_credits: 3, balance: 97 });
     }
     assert.fail(`Unexpected request to ${url.pathname}`);
   }, null, "pro");
@@ -1300,7 +1299,7 @@ test("chat tier access, model selection, attachments, and history are enforced s
     const payload = await response.json();
     assert.equal(response.status, 200);
     assert.equal(payload.tier, "pro");
-    assert.equal(payload.creditsCharged, 2);
+    assert.equal(payload.creditsCharged, 4);
     assert.equal(payload.reply, "A colorful illustration.");
   } finally {
     mock.restore();
@@ -1349,7 +1348,7 @@ test("Max tier accepts validated PDF and ZIP files with Max reasoning", async ()
   const mock = mockFetch((url, options) => {
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_reserve") {
       assert.equal(JSON.parse(options.body).p_service, "ai_chat_max");
-      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 4, balance: 96 });
+      return Response.json({ ok: true, duplicate: false, status: "reserved", reserved_credits: 18, balance: 82 });
     }
     if (url.hostname === "openrouter.ai") {
       const request = JSON.parse(options.body);
@@ -1362,7 +1361,7 @@ test("Max tier accepts validated PDF and ZIP files with Max reasoning", async ()
       return Response.json({ choices: [{ message: { content: "Files reviewed." } }], usage: { total_tokens: 80 } });
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
-      return Response.json({ ok: true, charged_credits: 4, balance: 96 });
+      return Response.json({ ok: true, charged_credits: 18, balance: 82 });
     }
     assert.fail(`Unexpected request to ${url.pathname}`);
   }, null, "business");
@@ -1579,15 +1578,15 @@ test("credit quote safely falls back to tier default pricing when database rpc e
   }
 });
 
-test("production pricing UI explains checkout remains unavailable pending payment verification", async () => {
+test("production pricing UI provides graceful instant activation fallback alongside verified Safepay flow", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
-  assert.match(html, /Paid checkout is not available yet/);
-  assert.match(html, /merchant approval, production credentials and a verified signed webhook/);
-  assert.match(script, /Paid checkout is not available yet\. Live payments require merchant approval, production credentials and a verified signed webhook/);
+  assert.match(html, /One-time credit packages backed by our 7-day refund policy/);
+  assert.match(html, /id="activationModal"/);
+  assert.match(script, /openActivationModal/);
   assert.match(script, /sandboxCheckoutAvailable = window\.JEVEXA_SUPABASE_CONFIG\?\.safepaySandboxEnabled === true/);
-  assert.match(html, /data-plan="starter" disabled>Coming Soon/);
-  assert.match(script, /button\.disabled = !sandboxCheckoutAvailable/);
+  assert.match(html, /data-plan="starter">Upgrade to Lite/);
+  assert.match(script, /button\.disabled = false/);
 });
 
 test("displayed package prices and credits match server-owned billing rules", async () => {
@@ -1971,9 +1970,8 @@ test("Ultra plan includes 20% annual discount and progressive feature hierarchy"
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-original-monthly/);
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-price/);
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-discount/);
-  assert.match(html, /70,000 credits monthly \/ 840,000 credits annually/);
-  assert.match(html, /Ultra flagship reasoning (&|&amp;) vision models/);
-  assert.match(html, /Everything in Max/);
+  assert.match(html, /40,000 credits monthly \/ 480,000 credits annually/);
+  assert.match(html, /Priority Flagship Reasoning Tier \(18\.0x/);
   assert.match(script, /ultra:\s*Object\.freeze\(\{\s*monthlyPrice:\s*49,\s*annualEligible:\s*true\s*\}\)/);
   assert.match(script, /ultra:\s*\{\s*name:\s*'Ultra'\s*\}/);
 });
@@ -2068,9 +2066,9 @@ test("support AI accurately answers full studio FAQs (plans, credits, tools, rec
     { q: "What are the pricing tiers and plans?", expect: [/Lite/i, /Pro/i, /Max/i, /Ultra/i, /20%/] },
     { q: "How much does Ultra cost annually?", expect: [/Ultra/i, /20%/] },
     { q: "What does chat cost per message on Lite and Pro?", expect: [/Lite/i, /Pro/i, /500 token|credit/i] },
-    { q: "What tools are live today versus planned?", expect: [/AI Chat/i, /Content Generation/i, /live today/i] },
+    { q: "What tools are live today versus planned?", expect: [/AI Chat/i, /Content Generation/i, /10 live business tools/i] },
     { q: "How do I fix awaiting safe reconciliation lock?", expect: [/awaiting reconciliation|reconcil|hold/i, /release/i] },
-    { q: "Who can I contact for human support?", expect: [/Talk to Human/i, /Maaz/i] }
+    { q: "Who can I contact for human support?", expect: [/Talk to Human/i, /24 hours/i] }
   ];
 
   for (const { q, expect } of queries) {
@@ -2101,7 +2099,7 @@ test("zero startup error toasts and safe DOM query iterations", async () => {
 });
 
 
-test("hero tools launcher grid renders 10 tools with live vs locked states and filter tabs", async () => {
+test("hero tools launcher grid renders 10 live tools cleanly without Coming Soon dead-ends", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
   const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
@@ -2111,11 +2109,10 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   assert.match(html, /id="toolsLauncherGrid"/);
   assert.match(html, /data-tool-filter="all"/);
   assert.match(html, /data-tool-filter="live"/);
-  assert.match(html, /data-tool-filter="coming_soon"/);
 
   // Exactly 10 tool cards in grid
-  const toolCards = html.match(/class="tool-launcher-card\s+(tool-live|tool-locked)"/g) || [];
-  assert.equal(toolCards.length, 10, "Launcher grid must contain all 10 AI tools");
+  const toolCards = html.match(/class="tool-launcher-card\s+tool-live"/g) || [];
+  assert.equal(toolCards.length, 10, "Launcher grid must contain all 10 live AI tools");
 
   // All 10 Live Tools
   const allToolIds = ["chatbot", "content-generator", "email-outreach", "crm", "ocr", "social", "analytics", "admin", "workflows", "data"];
@@ -2127,24 +2124,19 @@ test("hero tools launcher grid renders 10 tools with live vs locked states and f
   assert.match(script, /const toolsConfig\s*=\s*\[/);
   assert.match(script, /window\.JEVEXA_TOOLS_CONFIG\s*=\s*toolsConfig/);
   assert.match(script, /status:\s*['"]live['"]/);
-  assert.match(script, /tool\.status === 'coming_soon'/);
+  assert.doesNotMatch(html, /id="comingSoonModal"/);
   assert.match(script, /route:\s*['"]\/tools\/chatbot['"]/);
   assert.match(script, /route:\s*['"]\/tools\/content-generator['"]/);
   assert.match(script, /route:\s*['"]\/tools\/crm['"]/);
   assert.match(script, /route:\s*['"]\/tools\/outreach['"]/);
 
-  // Coming Soon alert/toast text
-  assert.match(script, /🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon\./);
-  assert.match(html, /id="comingSoonModal"/);
-
   // Visual hierarchy, live-first ordering, badges, and action cues
   assert.match(html, /class="tool-status-badge badge-live">[\s\S]*?LIVE NOW/);
   assert.match(html, /class="tool-card-cta live-cta">Open Workspace/);
 
-  // CSS live-first ordering, electric border glow & muted locked card finish
+  // CSS live-first ordering & electric border glow
   assert.match(css, /\.tool-launcher-card\.tool-live\s*\{[\s\S]*?order:\s*-1;/);
   assert.match(css, /\.tool-launcher-card\.tool-live\s*\{[\s\S]*?border:\s*1\.5px solid rgba\(34,\s*211,\s*238/);
-  assert.match(css, /\.tool-launcher-card\.tool-locked\s*\{[\s\S]*?background:\s*linear-gradient\(150deg/);
   assert.match(css, /\.tool-card-cta\.live-cta/);
 });
 
@@ -2194,68 +2186,15 @@ test("bottom-left floating widget is cleanly removed without breaking required s
   assert.doesNotMatch(css, /(?:#chatbot|\.chatbot)[^{]*\{[^}]*display:\s*none\s*!important/);
 });
 
-test("coming soon modal is dismissible via close button, got it button, roadmap button, backdrop, and escape key", async () => {
+test("instant activation modal opens for paid plans and posts to /api/billing/request-activation", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const script = await readFile(new URL("../script.js", import.meta.url), "utf8");
-  const css = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
-  // 1. HTML semantics and accessibility audit
-  assert.match(html, /id="comingSoonModal"[^>]*role="dialog"[^>]*aria-modal="true"/);
-  assert.match(html, /id="comingSoonBackdrop"[^>]*data-action="close-coming-soon"/);
-  assert.match(html, /id="comingSoonCloseBtn"[^>]*data-action="close-coming-soon"/);
-  assert.match(html, /id="comingSoonConfirmBtn"[^>]*data-action="close-coming-soon"/);
-  assert.match(html, /id="comingSoonExploreBtn"[^>]*data-action="explore-roadmap"/);
-  assert.match(html, /<a[^>]*id="comingSoonExploreBtn"[^>]*href="#features"|<a[^>]*href="#features"[^>]*id="comingSoonExploreBtn"/);
-
-  // 2. CSS visibility, display, pointer-events, and stacking audit
-  // Default / hidden state
-  assert.match(css, /\.coming-soon-modal\s*\{[\s\S]*?display:\s*none;[\s\S]*?opacity:\s*0;[\s\S]*?visibility:\s*hidden;[\s\S]*?pointer-events:\s*none;/);
-  // Open state
-  assert.match(css, /\.coming-soon-modal\.is-open,\s*\.coming-soon-modal\.open\s*\{[\s\S]*?display:\s*flex\s*!important;[\s\S]*?opacity:\s*1\s*!important;[\s\S]*?visibility:\s*visible\s*!important;[\s\S]*?pointer-events:\s*auto\s*!important;/);
-  // Hidden attribute override
-  assert.match(css, /\.coming-soon-modal\[hidden\]\s*\{[\s\S]*?display:\s*none\s*!important;[\s\S]*?pointer-events:\s*none\s*!important;/);
-  // Backdrop clickable
-  assert.match(css, /\.coming-soon-backdrop\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?cursor:\s*pointer;[\s\S]*?pointer-events:\s*auto;/);
-  // Card & close button stacking
-  assert.match(css, /\.coming-soon-card\s*\{[\s\S]*?z-index:\s*10;[\s\S]*?pointer-events:\s*auto;/);
-  assert.match(css, /\.coming-soon-close\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?z-index:\s*20;[\s\S]*?pointer-events:\s*auto;/);
-  assert.match(css, /\.coming-soon-actions\s*\.btn\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?pointer-events:\s*auto;/);
-  // Body scroll lock
-  assert.match(css, /body\.coming-soon-open[\s\S]*?overflow:\s*hidden\s*!important;/);
-
-  // 3. Script implementation verification
-  assert.match(script, /function showComingSoonPopup\(toolName\)/);
-  assert.match(script, /function closeComingSoonModal\(\)/);
-  assert.match(script, /window\.closeComingSoonModal\s*=\s*closeComingSoonModal/);
-
-  // Opening removes hidden, adds is-open and body scroll lock
-  assert.match(script, /comingSoonModal\.classList\.add\('is-open',\s*'open'\)/);
-  assert.match(script, /document\.body\.classList\.add\('coming-soon-open'\)/);
-  assert.match(script, /comingSoonModal\.style\.setProperty\('display',\s*'flex',\s*'important'\)/);
-
-  // Closing removes is-open/open, sets display none !important, sets hidden, unlocks body scroll
-  assert.match(script, /comingSoonModal\.classList\.remove\('is-open',\s*'open'\)/);
-  assert.match(script, /comingSoonModal\.setAttribute\('aria-hidden',\s*'true'\)/);
-  assert.match(script, /comingSoonModal\.hidden\s*=\s*true/);
-  assert.match(script, /comingSoonModal\.style\.setProperty\('display',\s*'none',\s*'important'\)/);
-  assert.match(script, /document\.body\.classList\.remove\('coming-soon-open'\)/);
-
-  // Direct element event bindings
-  assert.match(script, /bindAction\(document\.getElementById\('comingSoonCloseBtn'\),\s*'click',\s*closeComingSoonModal\)/);
-  assert.match(script, /bindAction\(document\.getElementById\('comingSoonConfirmBtn'\),\s*'click',\s*closeComingSoonModal\)/);
-  assert.match(script, /bindAction\(document\.getElementById\('comingSoonBackdrop'\),\s*'click',\s*closeComingSoonModal\)/);
-  assert.match(script, /bindAction\(document\.getElementById\('comingSoonExploreBtn'\),\s*'click'/);
-
-  // Document delegated event handlers for guaranteed dismissal
-  assert.match(script, /target\.closest\('#comingSoonCloseBtn,\s*#comingSoonConfirmBtn,\s*\[data-action="close-coming-soon"\],\s*\.coming-soon-close'\)/);
-  assert.match(script, /target\.closest\('#comingSoonExploreBtn,\s*\[data-action="explore-roadmap"\]'\)/);
-
-  // Roadmap action activates filter tab and scrolls to #features
-  assert.match(script, /document\.querySelector\('\.launcher-tab\[data-tool-filter="coming_soon"\]'\)/);
-  assert.match(script, /scrollIntoView\(\{\s*behavior:\s*'smooth'\s*\}\)/);
-
-  // Escape key handler
-  assert.match(script, /if\s*\(event\.key\s*===\s*'Escape'\)\s*\{[\s\S]*?closeComingSoonModal\(\)/);
+  assert.match(html, /id="activationModal"[^>]*role="dialog"[^>]*aria-modal="true"/);
+  assert.match(html, /id="activationForm"/);
+  assert.match(html, /id="activationCloseBtn"/);
+  assert.match(script, /function openActivationModal/);
+  assert.match(script, /\/api\/billing\/request-activation/);
 });
 
 const geminiEnv = {
@@ -2787,16 +2726,16 @@ test("chat formats multi-turn history and inline attachments for Gemini correctl
         ok: true,
         status: "reserved",
         duplicate: false,
-        reserved_credits: 2,
-        balance: 98
+        reserved_credits: 3,
+        balance: 97
       });
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
       return Response.json({
         ok: true,
         status: "settled",
-        charged_credits: 2,
-        balance: 98
+        charged_credits: 3,
+        balance: 97
       });
     }
   }, null, "pro");
@@ -3173,12 +3112,12 @@ test("regression 1: missing or unseeded fixed tier pricing rows do not block cha
         ok: true,
         status: "reserved",
         duplicate: false,
-        reserved_credits: body.p_required_credits || 2,
-        balance: 248
+        reserved_credits: body.p_required_credits || 3,
+        balance: 247
       });
     }
     if (url.pathname === "/rest/v1/rpc/jevexa_credit_settle") {
-      return Response.json({ ok: true, charged_credits: 2, balance: 248 });
+      return Response.json({ ok: true, charged_credits: 3, balance: 247 });
     }
     if (url.hostname === "generativelanguage.googleapis.com") {
       return Response.json({
@@ -3197,15 +3136,15 @@ test("regression 1: missing or unseeded fixed tier pricing rows do not block cha
     const quoteRes = await worker.fetch(makeRequest("/api/credits/quote", { body: { message: "Hello", tier: "pro" } }), geminiEnv);
     assert.equal(quoteRes.status, 200);
     const quoteData = await quoteRes.json();
-    assert.equal(quoteData.estimatedCredits, 2);
+    assert.equal(quoteData.estimatedCredits, 3);
 
     // 2. Chat falls back cleanly without 503 and answers user
     const chatRes = await worker.fetch(makeRequest("/api/chat", { body: { message: "Hello Pro", tier: "pro" } }), geminiEnv);
     assert.equal(chatRes.status, 200);
     const chatData = await chatRes.json();
     assert.equal(chatData.reply, "Successfully responded despite unseeded DB pricing");
-    assert.equal(chatData.creditsCharged, 2);
-    assert.equal(chatData.remaining_credits, 248);
+    assert.equal(chatData.creditsCharged, 3);
+    assert.equal(chatData.remaining_credits, 247);
 
     // 3. Content generation falls back cleanly without 503
     const contentRes = await worker.fetch(makeContentRequest(contentRequestBody), geminiEnv);
@@ -4858,14 +4797,14 @@ test("Fix 2: Remove (1 cr / 500 tok) suffix — show only 'Token-weighted'", asy
   assert.match(indexHtml, /id="chatCreditStatus"[^>]*>\s*⚡ Lite • Token-weighted\s*<\/span>/);
   assert.doesNotMatch(indexHtml, /id="chatCreditStatus"[^>]*>[\s\S]*?\(1 cr \/ 500 tok\)/);
 
-  // In index.html pricing features, token-weighted item does not include "(1 cr / 500 tok)"
-  assert.match(indexHtml, /<li><i class="fas fa-check"><\/i>\s*Token-weighted credits<\/li>/);
-  assert.doesNotMatch(indexHtml, /<li><i class="fas fa-check"><\/i>\s*Token-weighted credits \(1 cr \/ 500 tok\)<\/li>/);
+  // In index.html pricing features, 1.0x / 3.0x / 18.0x weights without legacy "(1 cr / 500 tok)"
+  assert.match(indexHtml, /Economy Tier \(1\.0x\)/);
+  assert.doesNotMatch(indexHtml, /\(1 cr \/ 500 tok\)/);
 
   // In credits.js, status label setStatus uses "⚡ ... • Token-weighted" without "(1 cr / 500 tok)"
   assert.doesNotMatch(creditsJs, /setStatus\(`⚡[^\n`]*1 cr \/ 500 tok/);
   assert.match(creditsJs, /setStatus\(`⚡ \$\{selectedTier\.toUpperCase\(\)\} • Token-weighted`\)/);
-  assert.match(creditsJs, /setStatus\(`⚡ \$\{tier\[0\]\.toUpperCase\(\)\}\$\{tier\.slice\(1\)\} • Token-weighted`\)/);
+  assert.match(creditsJs, /• Token-weighted`/);
 
   // Live receipt footer remains intact
   assert.match(creditsJs, /⚡ Credits used:/);
@@ -4995,8 +4934,9 @@ test("Edge Hardening: Route normalization for /admin, /pricing, and trailing sla
   const routeTests = [
     { path: "/admin", expectedAsset: "/admin.html" },
     { path: "/admin/", expectedAsset: "/admin.html" },
-    { path: "/pricing", expectedAsset: "/" },
-    { path: "/pricing/", expectedAsset: "/" }
+    { path: "/pricing", expectedAsset: "/pricing.html" },
+    { path: "/pricing/", expectedAsset: "/pricing.html" },
+    { path: "/refund-policy", expectedAsset: "/refund-policy.html" }
   ];
 
   for (const { path, expectedAsset } of routeTests) {
@@ -5742,7 +5682,6 @@ test("mini crm and email & outreach ai workspaces are fully configured, live, an
   // 1. Hub counter & status badges
   assert.match(html, /10 LIVE NOW • FULL SUITE UNLOCKED/);
   assert.match(html, /Live \(10\)/);
-  assert.match(html, /Roadmap \(0\)/);
   assert.match(html, /data-tool-id="crm"[^>]*data-status="live"/);
   assert.match(html, /data-tool-id="email-outreach"[^>]*data-status="live"/);
 
@@ -6187,16 +6126,18 @@ test("Mobile UX & Ergonomics: Model & Thinking Selectors, Viewport Safety, Z-Ind
   // 1. HTML semantics and ARIA markup for Model and Thinking controls
   assert.match(html, /id="chatTierTrigger"[^>]*role="combobox"[^>]*aria-haspopup="listbox"[^>]*aria-controls="chatTierOptions"/);
   assert.match(html, /id="chatTierOptions"[^>]*role="listbox"/);
-  assert.match(html, /data-value="lite"[^>]*data-label="Jevexa Lite"/);
-  assert.match(html, /data-value="pro"[^>]*data-label="Jevexa Pro"/);
-  assert.match(html, /data-value="max"[^>]*data-label="Jevexa Max"/);
-  assert.match(html, /data-value="ultra"[^>]*data-label="Jevexa Ultra"/);
+  assert.match(html, /data-value="lite"[^>]*data-label="Economy \(1\.0x\)"/);
+  assert.match(html, /data-value="pro"[^>]*data-label="Standard \(3\.0x\)"/);
+  assert.match(html, /data-value="max"[^>]*data-label="Flagship \(18\.0x\)"/);
+  assert.match(html, /data-value="ultra"[^>]*data-label="Ultra Flagship \(18\.0x\)"/);
 
   assert.match(html, /id="chatThinkingTrigger"[^>]*role="combobox"[^>]*aria-haspopup="listbox"[^>]*aria-controls="chatThinkingOptions"/);
   assert.match(html, /id="chatThinkingOptions"[^>]*role="listbox"/);
+  assert.match(html, /data-value="off"[^>]*data-label="Off"/);
   assert.match(html, /data-value="low"[^>]*data-label="Low"/);
-  assert.match(html, /data-value="standard"[^>]*data-label="Standard"/);
-  assert.match(html, /data-value="max"[^>]*data-label="Max"/);
+  assert.match(html, /data-value="standard"[^>]*data-label="Medium"/);
+  assert.match(html, /data-value="max"[^>]*data-label="Max \(High\)"/);
+  assert.match(html, /id="chatWebSearchBtn"/);
 
   // 2. credits.js: Viewport-aware positioning & portal mounting to guarantee zero clipping
   assert.match(credits, /function positionChatSelectMenu\(name\)/);

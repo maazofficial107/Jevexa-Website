@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing &amp; Plans — Credit Packages &amp; Model Routing | JEVEXA</title>
+    <meta name="description" content="Explore JEVEXA's 5 transparent one-time credit plans (Free, Lite $5, Pro $15, Max $29, Ultra $49), model multipliers (1.0x Economy, 3.0x Standard, 18.0x Flagship), and 7-day refund guarantee.">
+    <link rel="canonical" href="https://jevexa.net/pricing">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="theme-color" content="#07070c">
+    <meta property="og:title" content="Pricing &amp; Plans — JEVEXA AI Automation Studio">
+    <meta property="og:description" content="Transparent credit packages starting at $5/mo (2,500 credits) with 20% annual savings, Economy/Standard/Flagship routing, and 7-day refund protection.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jevexa.net/pricing">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        .pricing-standalone-hero { padding: 132px 0 42px; text-align: center; }
+        .pricing-standalone-hero h1 { font-size: clamp(2.1rem, 4.5vw, 3.2rem); margin-bottom: 14px; }
+        .pricing-standalone-hero p { max-width: 680px; margin: 0 auto 24px; color: var(--text-secondary); font-size: 1.05rem; line-height: 1.65; }
+        .routing-matrix-wrap { margin-top: 48px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 18px; padding: 28px; overflow-x: auto; }
+        .routing-matrix-wrap h2 { font-size: 1.35rem; margin-bottom: 8px; }
+        .routing-matrix-sub { color: var(--text-secondary); font-size: 0.92rem; margin-bottom: 18px; }
+        .routing-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        .routing-table th, .routing-table td { text-align: left; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .routing-table th { color: var(--text-secondary); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .routing-badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+        .routing-badge-eco { background: rgba(16,185,129,0.14); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+        .routing-badge-std { background: rgba(6,182,212,0.14); color: #22d3ee; border: 1px solid rgba(6,182,212,0.3); }
+        .routing-badge-flg { background: rgba(139,92,246,0.16); color: #c084fc; border: 1px solid rgba(139,92,246,0.35); }
+    </style>
+</head>
+<body>
+    <nav class="navbar scrolled" id="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">
+                <span class="logo-icon"><i class="fas fa-robot"></i></span>
+                <div class="logo-texts">
+                    <span class="logo-text">JEVEXA</span>
+                    <span class="logo-sub">AI STUDIO</span>
+                </div>
+            </a>
+            <div class="nav-links" id="navLinks">
+                <a href="/#tools">Tools</a>
+                <a href="/#features">Features</a>
+                <a href="/pricing" class="active">Pricing</a>
+                <a href="/about">About Us</a>
+                <a href="/contact">Contact</a>
+                <a href="/login" class="btn btn-primary" style="padding: 8px 18px; border-radius: 10px;">Sign In</a>
+            </div>
+            <button type="button" class="mobile-toggle" id="mobileToggle" aria-label="Toggle Menu" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <main>
+        <section class="pricing-standalone-hero">
+            <div class="container">
+                <div class="badge" style="margin: 0 auto 14px;"><i class="fas fa-coins"></i> ONE-TIME CREDIT PACKAGES</div>
+                <h1>Simple, Predictable <span class="text-gradient">Credit Pricing</span></h1>
+                <p>No recurring subscriptions or hidden auto-renewals. Start free with 100 signup credits, or unlock faster Standard (3.0x) and Flagship Reasoning (18.0x) capacity with 1 credit = 500 base tokens.</p>
+
+                <div class="billing-toggle">
+                    <button type="button" class="billing-btn active" data-billing="monthly">Monthly Package</button>
+                    <button type="button" class="billing-btn" data-billing="annual">Annual Package <span class="save-badge">Save 20%</span></button>
+                </div>
+            </div>
+        </section>
+
+        <section class="pricing" style="padding-top: 10px;">
+            <div class="container">
+                <div class="pricing-grid">
+                    <!-- Free -->
+                    <div class="pricing-card">
+                        <div class="pricing-header">
+                            <h3>Free</h3>
+                            <p>Try all 10 live studio tools at zero cost</p>
+                        </div>
+                        <div class="pricing-price">
+                            <span class="amount">$0</span><span class="period">/ forever</span>
+                        </div>
+                        <div class="annual-note"><strong>100 one-time signup credits</strong> · Max 15 credits/day</div>
+                        <ul class="pricing-features">
+                            <li><i class="fas fa-check"></i> All 10 AI tools accessible</li>
+                            <li><i class="fas fa-check"></i> Economy Tier models (1.0x weight)</li>
+                            <li><i class="fas fa-check"></i> Thinking Mode: OFF · Web Search: Off</li>
+                            <li><i class="fas fa-check"></i> Image uploads (up to 5 MB)</li>
+                            <li><i class="fas fa-check"></i> Email Support: Response within 24 hours (Mon–Sat)</li>
+                        </ul>
+                        <a href="/signup" class="btn btn-outline">Start Free Trial</a>
+                    </div>
+
+                    <!-- Lite -->
+                    <div class="pricing-card">
+                        <div class="pricing-header">
+                            <h3>Lite</h3>
+                            <p>Fast daily AI &amp; document workflows (~1.25M fast tokens)</p>
+                        </div>
+                        <div class="pricing-price">
+                            <span class="amount" data-monthly="$5" data-annual="$4">$5</span><span class="period">/ mo</span>
+                        </div>
+                        <div class="annual-note" data-monthly="2,500 credits ($5 one-time)" data-annual="30,000 credits ($48/yr — Save 20%)">2,500 credits ($5 one-time)</div>
+                        <ul class="pricing-features">
+                            <li><i class="fas fa-check"></i> <strong>2,500</strong> credits/month</li>
+                            <li><i class="fas fa-check"></i> Unlocks <strong>Standard Tier (3.0x)</strong> + Economy (1.0x)</li>
+                            <li><i class="fas fa-check"></i> Thinking Mode: OFF · Web Search: Off</li>
+                            <li><i class="fas fa-check"></i> Unlocks PDF &amp; ZIP uploads (10 MB)</li>
+                            <li><i class="fas fa-check"></i> Email Support: Response within 24 hours (Mon–Sat)</li>
+                        </ul>
+                        <button type="button" class="btn btn-outline js-plan-trigger" data-plan="lite" data-plan-label="Lite ($5/mo · 2,500 credits)" data-monthly-price="5" data-annual-price="48" data-monthly-credits="2,500">Upgrade to Lite</button>
+                    </div>
+
+                    <!-- Pro -->
+                    <div class="pricing-card pricing-featured">
+                        <div class="popular-badge">Most Popular</div>
+                        <div class="pricing-header">
+                            <h3>Pro</h3>
+                            <p>For teams &amp; builders (~5M fast tokens + web grounding)</p>
+                        </div>
+                        <div class="pricing-price">
+                            <span class="amount" data-monthly="$15" data-annual="$12">$15</span><span class="period">/ mo</span>
+                        </div>
+                        <div class="annual-note" data-monthly="10,000 credits ($15 one-time)" data-annual="120,000 credits ($144/yr — Save 20%)">10,000 credits ($15 one-time)</div>
+                        <ul class="pricing-features">
+                            <li><i class="fas fa-check"></i> <strong>10,000</strong> credits/month</li>
+                            <li><i class="fas fa-check"></i> Economy (1.0x) &amp; <strong>Standard Tier (3.0x)</strong></li>
+                            <li><i class="fas fa-check"></i> <strong>Low / Medium Thinking</strong> enabled</li>
+                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (max 15/day, +5 cr/req)</li>
+                            <li><i class="fas fa-check"></i> Files up to 25 MB (PDF, ZIP, Images)</li>
+                        </ul>
+                        <button type="button" class="btn btn-primary js-plan-trigger" data-plan="pro" data-plan-label="Pro ($15/mo · 10,000 credits)" data-monthly-price="15" data-annual-price="144" data-monthly-credits="10,000">Upgrade to Pro</button>
+                    </div>
+
+                    <!-- Max -->
+                    <div class="pricing-card">
+                        <div class="pricing-header">
+                            <h3>Max</h3>
+                            <p>High-volume workflows &amp; Flagship deep reasoning (~11M fast tokens)</p>
+                        </div>
+                        <div class="pricing-price">
+                            <span class="amount" data-monthly="$29" data-annual="$23.20">$29</span><span class="period">/ mo</span>
+                        </div>
+                        <div class="annual-note" data-monthly="22,000 credits ($29 one-time)" data-annual="264,000 credits ($278.40/yr — Save 20%)">22,000 credits ($29 one-time)</div>
+                        <ul class="pricing-features">
+                            <li><i class="fas fa-check"></i> <strong>22,000</strong> credits/month</li>
+                            <li><i class="fas fa-check"></i> Unlocks <strong>Flagship Reasoning (18.0x)</strong></li>
+                            <li><i class="fas fa-check"></i> <strong>High / Max Deep Thinking</strong> unlocked</li>
+                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (max 50/day, +5 cr/req)</li>
+                            <li><i class="fas fa-check"></i> Files up to 50 MB + 50 team seats</li>
+                        </ul>
+                        <button type="button" class="btn btn-outline js-plan-trigger" data-plan="max" data-plan-label="Max ($29/mo · 22,000 credits)" data-monthly-price="29" data-annual-price="278.40" data-monthly-credits="22,000">Upgrade to Max</button>
+                    </div>
+
+                    <!-- Ultra -->
+                    <div class="pricing-card">
+                        <div class="pricing-header">
+                            <h3>Ultra</h3>
+                            <p>Maximum Flagship capacity &amp; agency throughput (~20M fast tokens)</p>
+                        </div>
+                        <div class="pricing-price">
+                            <span class="amount" data-monthly="$49" data-annual="$39.20">$49</span><span class="period">/ mo</span>
+                        </div>
+                        <div class="annual-note" data-monthly="40,000 credits ($49 one-time)" data-annual="480,000 credits ($470.40/yr — Save 20%)">40,000 credits ($49 one-time)</div>
+                        <ul class="pricing-features">
+                            <li><i class="fas fa-check"></i> <strong>40,000</strong> credits/month</li>
+                            <li><i class="fas fa-check"></i> Full <strong>Flagship Reasoning (18.0x)</strong> priority access</li>
+                            <li><i class="fas fa-check"></i> <strong>High / Max Deep Thinking</strong> unlocked</li>
+                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (max 150/day, +5 cr/req)</li>
+                            <li><i class="fas fa-check"></i> Files up to 100 MB + 250 team seats</li>
+                        </ul>
+                        <button type="button" class="btn btn-outline js-plan-trigger" data-plan="ultra" data-plan-label="Ultra ($49/mo · 40,000 credits)" data-monthly-price="49" data-annual-price="470.40" data-monthly-credits="40,000">Upgrade to Ultra</button>
+                    </div>
+                </div>
+
+                <div class="routing-matrix-wrap">
+                    <h2>Transparent Model Routing, Thinking &amp; Grounding Matrix</h2>
+                    <p class="routing-matrix-sub">1 credit = 500 base tokens (input + output + thinking output tokens). Exact pinned model IDs ensure consistent latency and predictable cost.</p>
+                    <table class="routing-table">
+                        <thead>
+                            <tr>
+                                <th>Model Tier</th>
+                                <th>Pinned Models</th>
+                                <th>Credit Weight</th>
+                                <th>Eligible Plans</th>
+                                <th>Thinking &amp; Search Rules</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="routing-badge routing-badge-eco">Economy</span></td>
+                                <td><code>gemini-2.5-flash-lite</code> / <code>groq/llama-3.3-70b-versatile</code></td>
+                                <td><strong>1.0x</strong></td>
+                                <td>Free, Lite, Pro, Max, Ultra</td>
+                                <td>Free capped at 15 cr/day · Thinking OFF on Free &amp; Lite</td>
+                            </tr>
+                            <tr>
+                                <td><span class="routing-badge routing-badge-std">Standard</span></td>
+                                <td><code>gemini-3.5-flash-lite</code> / <code>gemini-3.8-flash</code></td>
+                                <td><strong>3.0x</strong></td>
+                                <td>Lite, Pro, Max, Ultra</td>
+                                <td>Pro unlocks Low/Medium thinking &amp; 15 searches/day (+5 cr/search)</td>
+                            </tr>
+                            <tr>
+                                <td><span class="routing-badge routing-badge-flg">Flagship Reasoning</span></td>
+                                <td><code>gemini-4-argon</code> / <code>gemini-4-carbon</code></td>
+                                <td><strong>18.0x</strong></td>
+                                <td>Max &amp; Ultra Only</td>
+                                <td>High/Max deep thinking + 50/day (Max) or 150/day (Ultra) search</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p style="margin-top: 18px; color: var(--text-secondary); font-size: 0.9rem;">
+                        Backed by our <a href="/refund-policy" style="color: var(--cyan); text-decoration: underline;">7-Day Refund Policy</a> (full refund if &lt;10% of credits are consumed).
+                        <strong>Email Support: Response within 24 hours (Mon–Sat).</strong>
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Instant Activation / Payment Request Modal -->
+    <div id="pricingActivationModal" class="auth-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pricingActivationTitle">
+        <div class="auth-modal-card" style="max-width: 480px;">
+            <button type="button" id="closePricingActivation" class="auth-modal-close" aria-label="Close"><i class="fas fa-times"></i></button>
+            <div class="auth-modal-head">
+                <div class="badge" style="margin-bottom: 10px;"><i class="fas fa-bolt"></i> INSTANT ACTIVATION REQUEST</div>
+                <h2 id="pricingActivationTitle">Activate Paid Credit Package</h2>
+                <p id="pricingActivationDesc" style="color: var(--text-secondary); font-size: 0.92rem;">Submit your contact email or WhatsApp to receive your one-time invoice link and instant credit activation.</p>
+            </div>
+            <form id="pricingActivationForm" style="display:flex; flex-direction:column; gap:14px; margin-top:16px;">
+                <input type="hidden" id="pricingActPlan" value="pro">
+                <input type="hidden" id="pricingActCycle" value="monthly">
+                <div>
+                    <label for="pricingActEmail" style="display:block; margin-bottom:6px; font-size:0.85rem; color:var(--text-secondary);">Account Email *</label>
+                    <input type="email" id="pricingActEmail" required placeholder="you@company.com" class="form-input" style="width:100%; padding:11px 14px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.04); color:#fff;">
+                </div>
+                <div>
+                    <label for="pricingActWhatsapp" style="display:block; margin-bottom:6px; font-size:0.85rem; color:var(--text-secondary);">WhatsApp (Optional for faster activation)</label>
+                    <input type="text" id="pricingActWhatsapp" placeholder="+1 555 010 9900" class="form-input" style="width:100%; padding:11px 14px; border-radius:10px; border:1px solid var(--border); background:rgba(255,255,255,0.04); color:#fff;">
+                </div>
+                <div id="pricingActStatus" style="display:none; padding:10px 12px; border-radius:10px; font-size:0.88rem;"></div>
+                <button type="submit" id="pricingActSubmit" class="btn btn-primary" style="width:100%;">Request Activation &amp; Payment Link</button>
+            </form>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="/" class="logo">
+                        <span class="logo-icon"><i class="fas fa-robot"></i></span>
+                        <div class="logo-texts">
+                            <span class="logo-text">JEVEXA</span>
+                            <span class="logo-sub">AI STUDIO</span>
+                        </div>
+                    </a>
+                    <p>Autonomous multi-model AI Studio engineering enterprise chatbots, automated copy generation, and intelligent business tooling.</p>
+                </div>
+                <div class="footer-links-group">
+                    <div>
+                        <h4>Product</h4>
+                        <a href="/#features">Features</a>
+                        <a href="/pricing">Pricing</a>
+                        <a href="/#how">Process</a>
+                        <a href="/#faq">FAQ</a>
+                    </div>
+                    <div>
+                        <h4>Company</h4>
+                        <a href="/about">About Us</a>
+                        <a href="/privacy-policy#security">Security</a>
+                        <a href="/contact">Contact</a>
+                    </div>
+                    <div>
+                        <h4>Legal</h4>
+                        <a href="/privacy-policy">Privacy Policy</a>
+                        <a href="/terms">Terms of Service</a>
+                        <a href="/refund-policy">Refund Policy</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2026 JEVEXA AI Automation Studio. All rights reserved.</p>
+                <p style="font-size:0.85rem; color:var(--text-secondary);">Email Support: Response within 24 hours (Mon–Sat)</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        (function() {
+            const toggle = document.getElementById('mobileToggle');
+            const navLinks = document.getElementById('navLinks');
+            if (toggle && navLinks) {
+                toggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = navLinks.classList.toggle('open');
+                    toggle.classList.toggle('active', isOpen);
+                    toggle.setAttribute('aria-expanded', String(isOpen));
+                });
+            }
+
+            let billingCycle = 'monthly';
+            const toggleBtns = document.querySelectorAll('.billing-btn');
+            const amounts = document.querySelectorAll('.pricing-price .amount[data-monthly]');
+            const notes = document.querySelectorAll('.annual-note[data-monthly]');
+            toggleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    billingCycle = btn.getAttribute('data-billing') === 'annual' ? 'annual' : 'monthly';
+                    toggleBtns.forEach(b => b.classList.toggle('active', b === btn));
+                    amounts.forEach(el => { el.textContent = el.getAttribute(`data-${billingCycle}`); });
+                    notes.forEach(el => { el.textContent = el.getAttribute(`data-${billingCycle}`); });
+                });
+            });
+
+            const modal = document.getElementById('pricingActivationModal');
+            const closeBtn = document.getElementById('closePricingActivation');
+            const desc = document.getElementById('pricingActivationDesc');
+            const planInput = document.getElementById('pricingActPlan');
+            const cycleInput = document.getElementById('pricingActCycle');
+            const statusBox = document.getElementById('pricingActStatus');
+            const form = document.getElementById('pricingActivationForm');
+            const submitBtn = document.getElementById('pricingActSubmit');
+
+            document.querySelectorAll('.js-plan-trigger').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const plan = btn.getAttribute('data-plan') || 'pro';
+                    const isAnnual = billingCycle === 'annual';
+                    const price = isAnnual ? btn.getAttribute('data-annual-price') : btn.getAttribute('data-monthly-price');
+                    const label = btn.getAttribute('data-plan-label') || plan.toUpperCase();
+                    planInput.value = plan;
+                    cycleInput.value = isAnnual ? 'yearly' : 'monthly';
+                    desc.textContent = `Selected: ${label} (${isAnnual ? 'Annual Package — $' + price : 'Monthly Package — $' + price}). Submit your email or WhatsApp to receive your payment link.`;
+                    statusBox.style.display = 'none';
+                    modal.classList.remove('hidden');
+                });
+            });
+
+            closeBtn?.addEventListener('click', () => modal.classList.add('hidden'));
+            modal?.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+
+            form?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('pricingActEmail')?.value?.trim() || '';
+                const whatsapp = document.getElementById('pricingActWhatsapp')?.value?.trim() || '';
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting…';
+                statusBox.style.display = 'none';
+                try {
+                    const res = await fetch('/api/billing/request-activation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            plan: planInput.value,
+                            cycle: cycleInput.value,
+                            email,
+                            whatsapp
+                        })
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    statusBox.style.display = 'block';
+                    if (res.ok && data.ok) {
+                        statusBox.style.background = 'rgba(34,197,94,0.15)';
+                        statusBox.style.color = '#4ade80';
+                        statusBox.textContent = data.message || 'Activation request submitted! Check your inbox within 24 hours (Mon–Sat).';
+                        form.reset();
+                    } else {
+                        statusBox.style.background = 'rgba(239,68,68,0.15)';
+                        statusBox.style.color = '#f87171';
+                        statusBox.textContent = data.error || 'Could not submit request. Please email hello@jevexa.net.';
+                    }
+                } catch {
+                    statusBox.style.display = 'block';
+                    statusBox.style.background = 'rgba(239,68,68,0.15)';
+                    statusBox.style.color = '#f87171';
+                    statusBox.textContent = 'Network error. Please email hello@jevexa.net.';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Request Activation & Payment Link';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -174,8 +174,7 @@ function closeAllWorkspacesAndModals() {
         'teamModalBackdrop',
         'workflowExecModal',
         'chatCustomizationModal',
-        'comingSoonModal',
-        'comingSoonBackdrop'
+        'activationModal'
     ];
     drawerBackdropIds.forEach(id => {
         const el = document.getElementById(id);
@@ -202,8 +201,11 @@ function closeAllWorkspacesAndModals() {
     window.JEVEXA_OUTREACH?.closeHistoryDrawer?.();
     window.JEVEXA_TEAM?.closeInvite?.();
 
-    if (typeof window.closeComingSoonModal === 'function') {
-        window.closeComingSoonModal();
+    const activationModal = document.getElementById('activationModal');
+    if (activationModal) {
+        activationModal.classList.remove('open', 'is-open');
+        activationModal.setAttribute('aria-hidden', 'true');
+        activationModal.hidden = true;
     }
 
     const upgradeModal = document.getElementById('upgradeModal');
@@ -227,7 +229,7 @@ function closeAllWorkspacesAndModals() {
 
     if (typeof closeMobileMenu === 'function') closeMobileMenu();
 
-    document.body.classList.remove('chat-modal-open', 'workspace-open', 'coming-soon-open', 'login-open', 'modal-open', 'menu-open');
+    document.body.classList.remove('chat-modal-open', 'workspace-open', 'activation-open', 'login-open', 'modal-open', 'menu-open');
     document.documentElement.classList.remove('login-open', 'menu-open');
     document.body.style.removeProperty('overflow');
     document.body.style.removeProperty('top');
@@ -570,14 +572,10 @@ if (!window.JEVEXA_SUPABASE_READY) {
     } else {
         const configError = document.getElementById('appConfigError');
         if (configError) {
-            configError.textContent = !hasSupabaseConfig
-                ? 'JEVEXA account features could not load because this Worker is missing its environment-specific public Supabase configuration. Please try again later.'
-                : !hasSupabaseSdk
-                    ? 'JEVEXA account features could not load because the Supabase browser library is unavailable. Please try again later.'
-                    : 'JEVEXA account features could not load because the Worker Supabase configuration could not be initialized. Please try again later.';
+            configError.textContent = 'Service temporarily unavailable. Please refresh or try again shortly.';
             configError.hidden = false;
         }
-        console.error('JEVEXA account features are unavailable; public Supabase configuration or browser library is missing.');
+        console.error('JEVEXA account features are temporarily unavailable.');
     }
 }
 
@@ -1815,9 +1813,9 @@ function openSettingsView(user) {
         return;
       }
       if (!data) {
-        balanceNode.textContent = 'Not set up';
+        balanceNode.textContent = 'Initializing';
         allowanceNode.textContent = '—';
-        statusNode.textContent = 'No credit account exists for this user yet. Configure the Supabase user-credit trigger before launch.';
+        statusNode.textContent = 'Your credit wallet is still syncing. Refresh shortly or contact Email Support: Response within 24 hours (Mon–Sat).';
         return;
       }
       balanceNode.textContent = String(data.balance);
@@ -1969,7 +1967,7 @@ function openSettingsView(user) {
 
         if (error) {
           console.error(error);
-          showToast('Could not send reset email. Check your Supabase email settings.');
+          showToast('Could not send reset email right now. Please try again shortly.');
           return;
         }
 
@@ -2122,10 +2120,11 @@ async function logoutUser() {
     if (contentBackdrop) { contentBackdrop.hidden = true; contentBackdrop.classList.remove('open'); }
     const wfModal = document.getElementById('workflowExecModal');
     if (wfModal) { wfModal.hidden = true; wfModal.classList.remove('open'); }
-    const comingSoonModal = document.getElementById('comingSoonModal');
-    if (comingSoonModal) {
-        comingSoonModal.classList.remove('open');
-        comingSoonModal.setAttribute('aria-hidden', 'true');
+    const activationModal = document.getElementById('activationModal');
+    if (activationModal) {
+        activationModal.classList.remove('open', 'is-open');
+        activationModal.setAttribute('aria-hidden', 'true');
+        activationModal.hidden = true;
     }
     const supportModal = document.getElementById('supportModal');
     if (supportModal) {
@@ -2331,14 +2330,14 @@ function initHeroFeatureOrbit() {
             { title: 'Credit Wallet', state: 'Live' }
         ],
         [
-            { title: 'Document AI & OCR', state: 'Planned' },
-            { title: 'Mini CRM', state: 'Planned' },
-            { title: 'Email & Outreach AI', state: 'Planned' }
+            { title: 'Document AI & OCR', state: 'Live' },
+            { title: 'Mini CRM', state: 'Live' },
+            { title: 'Email & Outreach AI', state: 'Live' }
         ],
         [
-            { title: 'Workflow Automation', state: 'Planned' },
-            { title: 'Social Media Assistant', state: 'Planned' },
-            { title: 'Business Analytics', state: 'Planned' }
+            { title: 'Workflow Automation', state: 'Live' },
+            { title: 'Social Media Assistant', state: 'Live' },
+            { title: 'Business Analytics', state: 'Live' }
         ]
     ];
     const cards = Array.from(stage.querySelectorAll('[data-hero-feature-card]'));
@@ -2936,8 +2935,8 @@ const PRICING_CONFIG = Object.freeze({
     annualDiscountRate: 0.2,
     plans: Object.freeze({
         starter: Object.freeze({ monthlyPrice: 5, annualEligible: true }),
-        pro: Object.freeze({ monthlyPrice: 12, annualEligible: true }),
-        business: Object.freeze({ monthlyPrice: 25, annualEligible: true }),
+        pro: Object.freeze({ monthlyPrice: 15, annualEligible: true }),
+        business: Object.freeze({ monthlyPrice: 29, annualEligible: true }),
         ultra: Object.freeze({ monthlyPrice: 49, annualEligible: true })
     })
 });
@@ -3481,18 +3480,7 @@ if (newsletterForm) {
     });
 }
 
-// Footer links that do not have live destination pages yet
-
-
-
-document.querySelectorAll('.social, .coming-soon-link').forEach(link => {
-    window.JEVEXA_SAFE_INTERACTION.bind(link, 'click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        const page = link.dataset.page || 'This page';
-        showToast(`${page} coming soon!`);
-    });
-});
+// External & routed footer actions (zero dead href="#" links remain)
 
 
 
@@ -4265,14 +4253,99 @@ const JEVEXA_PLANS = {
     const sandboxCheckoutAvailable = window.JEVEXA_SUPABASE_CONFIG?.safepaySandboxEnabled === true;
     const checkoutNotice = document.getElementById('pricingCheckoutNotice');
     if (checkoutNotice && sandboxCheckoutAvailable) {
-        checkoutNotice.textContent = 'Safepay sandbox checkout is enabled for staging tests only. Purchases are one-time and do not auto-renew.';
+        checkoutNotice.textContent = 'Safepay sandbox checkout is active for testing. Purchases are one-time and do not auto-renew.';
     }
+    const planCreditMap = { starter: '2,500', pro: '10,000', business: '22,000', ultra: '40,000' };
     document.querySelectorAll('[data-plan]').forEach(button => {
         const plan = JEVEXA_PLANS[button.dataset.plan];
         if (!plan) return;
-        button.disabled = !sandboxCheckoutAvailable;
-        button.textContent = sandboxCheckoutAvailable ? `Choose ${plan.name} (staging)` : 'Coming Soon';
+        button.disabled = false;
+        button.textContent = sandboxCheckoutAvailable ? `Choose ${plan.name} (staging)` : `Upgrade to ${plan.name}`;
     });
+
+    function openActivationModal(planKey, cycle = 'monthly') {
+        const modal = document.getElementById('activationModal');
+        if (!modal) {
+            window.location.assign('/pricing');
+            return;
+        }
+        const normalizedPlan = planKey === 'starter' ? 'lite' : (planKey === 'business' ? 'max' : planKey);
+        const planMeta = JEVEXA_PLANS[planKey] || { name: 'Pro' };
+        const priceCfg = PRICING_CONFIG.plans[planKey] || PRICING_CONFIG.plans.pro;
+        const unitMonthly = priceCfg.monthlyPrice;
+        const displayTotal = cycle === 'yearly'
+            ? Number((unitMonthly * 12 * (1 - PRICING_CONFIG.annualDiscountRate)).toFixed(2))
+            : unitMonthly;
+        const creditsLabel = planCreditMap[planKey] || '10,000';
+        const titleEl = document.getElementById('activationModalTitle');
+        const descEl = document.getElementById('activationModalDesc');
+        const planInput = document.getElementById('activationPlanInput');
+        const cycleInput = document.getElementById('activationCycleInput');
+        const emailInput = document.getElementById('activationEmail');
+        const statusEl = document.getElementById('activationStatus');
+        if (titleEl) titleEl.textContent = `Activate ${planMeta.name} (${cycle === 'yearly' ? 'Annual' : 'Monthly'})`;
+        if (descEl) descEl.textContent = `Selected: JEVEXA ${planMeta.name} — $${displayTotal} (${creditsLabel} cr/mo). Submit your email or WhatsApp for your payment link and priority activation.`;
+        if (planInput) planInput.value = normalizedPlan;
+        if (cycleInput) cycleInput.value = cycle;
+        if (emailInput && currentUser?.email && !emailInput.value) emailInput.value = currentUser.email;
+        if (statusEl) { statusEl.hidden = true; statusEl.textContent = ''; }
+        modal.hidden = false;
+        modal.removeAttribute('hidden');
+        modal.classList.add('open', 'is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('activation-open');
+    }
+
+    function closeActivationModal() {
+        const modal = document.getElementById('activationModal');
+        if (!modal) return;
+        modal.classList.remove('open', 'is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        modal.hidden = true;
+        document.body.classList.remove('activation-open');
+    }
+
+    const activationFormEl = document.getElementById('activationForm');
+    if (activationFormEl) {
+        activationFormEl.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('activationSubmitBtn');
+            const statusEl = document.getElementById('activationStatus');
+            const email = document.getElementById('activationEmail')?.value?.trim() || '';
+            const whatsapp = document.getElementById('activationWhatsapp')?.value?.trim() || '';
+            const plan = document.getElementById('activationPlanInput')?.value || 'pro';
+            const cycle = document.getElementById('activationCycleInput')?.value || 'monthly';
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+            try {
+                const res = await fetch('/api/billing/request-activation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan, cycle, email, whatsapp })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (statusEl) {
+                    statusEl.hidden = false;
+                    statusEl.style.color = (res.ok && data.ok) ? '#4ade80' : '#f87171';
+                    statusEl.textContent = data.message || data.error || 'Request submitted!';
+                }
+                if (res.ok && data.ok) {
+                    toast('Activation request received!');
+                    activationFormEl.reset();
+                }
+            } catch {
+                if (statusEl) {
+                    statusEl.hidden = false;
+                    statusEl.style.color = '#f87171';
+                    statusEl.textContent = 'Network error. Please email hello@jevexa.net.';
+                }
+            } finally {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Request Instant Activation'; }
+            }
+        });
+    }
+    document.getElementById('activationCloseBtn')?.addEventListener('click', closeActivationModal);
+    document.getElementById('activationBackdrop')?.addEventListener('click', closeActivationModal);
+
     const safeTheme = theme => ['dark', 'light', 'system'].includes(theme) ? theme : 'dark';
 
     function applyThemeChoice(theme, button) {
@@ -4297,19 +4370,16 @@ const JEVEXA_PLANS = {
         if (planButton) {
             event.preventDefault();
             event.stopImmediatePropagation();
-            if (!sandboxCheckoutAvailable) {
-                toast('Paid checkout is not available yet. Live payments require merchant approval, production credentials and a verified signed webhook.');
-                const planKey = planButton.dataset.plan;
-                const planInfo = JEVEXA_PLANS?.[planKey] || { name: 'Pro' };
-                openUpgradeModal(planInfo.name, `${planInfo.name} Plan`, planButton);
-                return;
-            }
             const plan = JEVEXA_PLANS?.[planButton.dataset.plan];
             const cycle = document.getElementById('billingToggle')?.checked ? 'yearly' : 'monthly';
             if (!plan) { toast('This plan is not available.'); return; }
+            if (!sandboxCheckoutAvailable) {
+                openActivationModal(planButton.dataset.plan, cycle);
+                return;
+            }
             if (!currentUser) { openLogin(); return; }
             if (!supabaseClient) {
-                showSupabaseUnavailable();
+                openActivationModal(planButton.dataset.plan, cycle);
                 return;
             }
             let sessionData;
@@ -4340,6 +4410,12 @@ const JEVEXA_PLANS = {
                     body: JSON.stringify({ plan: planButton.dataset.plan, cycle })
                 });
                 const result = await response.json().catch(() => ({}));
+                if (response.status === 403 || response.status === 503) {
+                    openActivationModal(planButton.dataset.plan, cycle);
+                    planButton.disabled = false;
+                    planButton.textContent = originalText;
+                    return;
+                }
                 if (!response.ok || !result.checkoutUrl) throw new Error(result.error || 'Could not start checkout.');
                 window.location.assign(result.checkoutUrl);
             } catch (error) {
@@ -4645,7 +4721,6 @@ const JEVEXA_PLANS = {
     const teamAdminWorkspace = document.getElementById('teamAdminWorkspace');
     const workflowsWorkspace = document.getElementById('workflowsWorkspace');
     const dataWorkspace = document.getElementById('dataWorkspace');
-    const comingSoonModal = document.getElementById('comingSoonModal');
     const topicTextarea = document.getElementById('contentTopic');
     const charCountDisplay = document.getElementById('contentCharCount');
 
@@ -4769,38 +4844,29 @@ const JEVEXA_PLANS = {
     }
     window.JEVEXA_UPDATE_CREDIT_BALANCE = updateCreditBalanceGlobal;
 
-    // Coming Soon Notification / Modal
-    function showComingSoonPopup(toolName) {
-        const message = '🔒 Coming Soon! This AI tool is currently under development and will be unlocked soon.';
-        if (typeof showToast === 'function') {
-            showToast(message);
-        }
-        if (comingSoonModal) {
-            const titleEl = document.getElementById('comingSoonToolTitle');
-            const descEl = document.getElementById('comingSoonToolDesc');
-            if (titleEl) titleEl.textContent = toolName ? `🔒 ${toolName}` : '🔒 Coming Soon';
-            if (descEl) descEl.textContent = message;
-            comingSoonModal.hidden = false;
-            comingSoonModal.removeAttribute('hidden');
-            comingSoonModal.classList.add('is-open', 'open');
-            comingSoonModal.style.setProperty('display', 'flex', 'important');
-            comingSoonModal.setAttribute('aria-hidden', 'false');
-            document.body.classList.add('coming-soon-open');
+    const ROUTE_SEO_META = {
+        '/tools/ai-chatbot': { title: 'AI Chatbot & Deep Reasoning Assistant | JEVEXA AI Studio', desc: 'Run token-weighted multi-model AI chat across Economy (1.0x), Standard (3.0x), and Flagship Reasoning (18.0x) models.' },
+        '/tools/content-generator': { title: 'AI Content Generator | JEVEXA AI Studio', desc: 'Generate blogs, marketing emails, and ad copy in seconds.' },
+        '/tools/ocr-extractor': { title: 'AI Document & Invoice OCR Extractor | JEVEXA AI Studio', desc: 'Extract structured line items, totals, and JSON/CSV from invoices and PDFs.' },
+        '/tools/social-media-assistant': { title: 'AI Social Media Assistant | JEVEXA AI Studio', desc: 'Draft multi-platform posts, hooks, and content calendars.' },
+        '/tools/business-analytics': { title: 'AI Business Analytics & Forecasting | JEVEXA AI Studio', desc: 'Analyze MRR, unit economics, and predictive growth forecasts.' },
+        '/tools/team-admin': { title: 'Team Admin & Access Control | JEVEXA AI Studio', desc: 'Manage seats, roles, and audit trails for your AI studio.' },
+        '/tools/workflow-automation': { title: 'AI Workflow Automation Builder | JEVEXA AI Studio', desc: 'Automate multi-step AI pipelines and CRM actions.' },
+        '/tools/data-management': { title: 'AI Data Management & CSV Cleanup | JEVEXA AI Studio', desc: 'Deduplicate and normalize CSV/JSON datasets cleanly.' },
+        '/tools/mini-crm': { title: 'AI Mini CRM & Lead Scoring | JEVEXA AI Studio', desc: 'Manage deals and score leads with AI.' },
+        '/tools/outreach-generator': { title: 'AI Outreach Sequence Generator | JEVEXA AI Studio', desc: 'Craft personalized B2B cold email sequences.' }
+    };
+
+    function updateClientSeoForRoute(route) {
+        const meta = ROUTE_SEO_META[route];
+        if (meta) {
+            document.title = meta.title;
+            const descTag = document.querySelector('meta[name="description"]');
+            if (descTag) descTag.setAttribute('content', meta.desc);
+        } else if (route === '/' || !route) {
+            document.title = 'JEVEXA — AI Automation Studio | Autonomous Business Intelligence';
         }
     }
-
-    function closeComingSoonModal() {
-        if (!comingSoonModal) return;
-        comingSoonModal.classList.remove('is-open', 'open');
-        comingSoonModal.setAttribute('aria-hidden', 'true');
-        comingSoonModal.setAttribute('hidden', '');
-        comingSoonModal.hidden = true;
-        comingSoonModal.style.setProperty('display', 'none', 'important');
-        document.body.classList.remove('coming-soon-open');
-    }
-
-    window.closeComingSoonModal = closeComingSoonModal;
-    window.showComingSoonPopup = showComingSoonPopup;
 
     // Workspaces Control
     function closeAllWorkspaces(except = null) {
@@ -4814,7 +4880,12 @@ const JEVEXA_PLANS = {
         if (except !== 'admin') closeTeamAdminWorkspace(false);
         if (except !== 'workflows') closeWorkflowsWorkspace(false);
         if (except !== 'data') closeDataWorkspace(false);
-        closeComingSoonModal();
+        const activationModal = document.getElementById('activationModal');
+        if (activationModal) {
+            activationModal.classList.remove('open', 'is-open');
+            activationModal.setAttribute('aria-hidden', 'true');
+            activationModal.hidden = true;
+        }
         if (!except) {
             document.body.classList.remove('workspace-open', 'chat-modal-open', 'modal-open', 'drawer-open');
         }
@@ -5262,6 +5333,7 @@ const JEVEXA_PLANS = {
 
     // Routing Manager
     function navigateToRoute(route) {
+        updateClientSeoForRoute(route);
         const currentPath = window.location.pathname;
         const currentHash = window.location.hash;
         if (currentPath !== route && currentHash !== '#' + route) {
@@ -5278,8 +5350,7 @@ const JEVEXA_PLANS = {
         const hash = window.location.hash;
         const cleanPath = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
         const cleanHash = hash.length > 1 && hash.endsWith('/') ? hash.slice(0, -1) : hash;
-
-
+        updateClientSeoForRoute(cleanPath);
 
         if (cleanPath === '/login' || cleanHash === '#login') {
             if (!currentUser) openAuthModal('login');
@@ -5298,7 +5369,6 @@ const JEVEXA_PLANS = {
                 closeContentWorkspace(false);
                 closeCrmWorkspace(false);
                 closeOutreachWorkspace(false);
-                closeComingSoonModal();
                 setTimeout(() => {
                     pricingEl.scrollIntoView({ behavior: 'smooth' });
                 }, 50);
@@ -5306,33 +5376,53 @@ const JEVEXA_PLANS = {
             }
         }
 
-        if (cleanPath === '/tools/chatbot' || cleanHash === '#/tools/chatbot' || cleanHash === '#chatbot' || cleanHash === '#chatbotWindow' || cleanHash === '#chatTool') {
+        if (cleanPath === '/tools/ai-chatbot' || cleanPath === '/tools/chatbot' || cleanHash === '#/tools/ai-chatbot' || cleanHash === '#/tools/chatbot' || cleanHash === '#chatbot' || cleanHash === '#chatbotWindow' || cleanHash === '#chatTool') {
             openChatWorkspace(false);
         } else if ((cleanPath === '/' || cleanPath === '') && !cleanHash && localStorage.getItem('jevexa_last_workspace') === 'chatbot') {
             openChatWorkspace(false);
         } else if (cleanPath === '/tools/content-generator' || cleanPath === '/tools/content' || cleanHash === '#/tools/content-generator' || cleanHash === '#/tools/content' || cleanHash === '#contentWorkspace' || cleanHash === '#contentTool') {
             openContentWorkspace(false);
-        } else if (cleanPath === '/tools/crm' || cleanHash === '#/tools/crm' || cleanHash === '#crmWorkspace' || cleanHash === '#crmTool') {
+        } else if (cleanPath === '/tools/mini-crm' || cleanPath === '/tools/crm' || cleanHash === '#/tools/mini-crm' || cleanHash === '#/tools/crm' || cleanHash === '#crmWorkspace' || cleanHash === '#crmTool') {
             openCrmWorkspace(false);
-        } else if (cleanPath === '/tools/outreach' || cleanPath === '/tools/email-outreach' || cleanHash === '#/tools/outreach' || cleanHash === '#/tools/email-outreach' || cleanHash === '#outreachWorkspace' || cleanHash === '#outreachTool') {
+        } else if (cleanPath === '/tools/outreach-generator' || cleanPath === '/tools/outreach' || cleanPath === '/tools/email-outreach' || cleanHash === '#/tools/outreach-generator' || cleanHash === '#/tools/outreach' || cleanHash === '#/tools/email-outreach' || cleanHash === '#outreachWorkspace' || cleanHash === '#outreachTool') {
             openOutreachWorkspace(false);
-        } else if (cleanPath === '/tools/ocr' || cleanHash === '#/tools/ocr' || cleanHash === '#ocrWorkspace' || cleanHash === '#ocrTool') {
+        } else if (cleanPath === '/tools/ocr-extractor' || cleanPath === '/tools/ocr' || cleanHash === '#/tools/ocr-extractor' || cleanHash === '#/tools/ocr' || cleanHash === '#ocrWorkspace' || cleanHash === '#ocrTool') {
             openOcrWorkspace(false);
-        } else if (cleanPath === '/tools/social' || cleanHash === '#/tools/social' || cleanHash === '#socialWorkspace' || cleanHash === '#socialTool') {
+        } else if (cleanPath === '/tools/social-media-assistant' || cleanPath === '/tools/social' || cleanHash === '#/tools/social-media-assistant' || cleanHash === '#/tools/social' || cleanHash === '#socialWorkspace' || cleanHash === '#socialTool') {
             openSocialWorkspace(false);
-        } else if (cleanPath === '/tools/analytics' || cleanHash === '#/tools/analytics' || cleanHash === '#analyticsWorkspace' || cleanHash === '#analyticsTool') {
+        } else if (cleanPath === '/tools/business-analytics' || cleanPath === '/tools/analytics' || cleanHash === '#/tools/business-analytics' || cleanHash === '#/tools/analytics' || cleanHash === '#analyticsWorkspace' || cleanHash === '#analyticsTool') {
             openAnalyticsWorkspace(false);
-        } else if (cleanPath === '/tools/admin' || cleanHash === '#/tools/admin' || cleanPath === '/tools/team' || cleanHash === '#/tools/team' || cleanHash === '#teamAdminWorkspace' || cleanHash === '#teamTool') {
+        } else if (cleanPath === '/tools/team-admin' || cleanPath === '/tools/admin' || cleanPath === '/tools/team' || cleanHash === '#/tools/team-admin' || cleanHash === '#/tools/admin' || cleanHash === '#/tools/team' || cleanHash === '#teamAdminWorkspace' || cleanHash === '#teamTool') {
             openTeamAdminWorkspace(false);
-        } else if (cleanPath === '/tools/workflows' || cleanHash === '#/tools/workflows' || cleanHash === '#workflowsWorkspace' || cleanHash === '#workflowsTool') {
+        } else if (cleanPath === '/tools/workflow-automation' || cleanPath === '/tools/workflows' || cleanHash === '#/tools/workflow-automation' || cleanHash === '#/tools/workflows' || cleanHash === '#workflowsWorkspace' || cleanHash === '#workflowsTool') {
             openWorkflowsWorkspace(false);
-        } else if (cleanPath === '/tools/data' || cleanHash === '#/tools/data' || cleanHash === '#dataWorkspace' || cleanHash === '#dataTool') {
+        } else if (cleanPath === '/tools/data-management' || cleanPath === '/tools/data' || cleanHash === '#/tools/data-management' || cleanHash === '#/tools/data' || cleanHash === '#dataWorkspace' || cleanHash === '#dataTool') {
             openDataWorkspace(false);
         } else if (cleanPath.startsWith('/tools/') || cleanHash.startsWith('#/tools/')) {
             const rawId = cleanPath.replace(/^\/tools\//, '') || cleanHash.replace(/^#\/tools\//, '');
-            const toolId = (rawId === 'content' ? 'content-generator' : (rawId === 'outreach' ? 'email-outreach' : rawId));
+            const aliasMap = {
+                'ai-chatbot': 'chatbot',
+                'content': 'content-generator',
+                'ocr': 'ocr',
+                'ocr-extractor': 'ocr',
+                'social': 'social',
+                'social-media-assistant': 'social',
+                'analytics': 'analytics',
+                'business-analytics': 'analytics',
+                'team': 'admin',
+                'team-admin': 'admin',
+                'workflows': 'workflows',
+                'workflow-automation': 'workflows',
+                'data': 'data',
+                'data-management': 'data',
+                'crm': 'crm',
+                'mini-crm': 'crm',
+                'outreach': 'email-outreach',
+                'outreach-generator': 'email-outreach'
+            };
+            const toolId = aliasMap[rawId] || rawId;
             const tool = toolsConfig.find(t => t.id === toolId || t.route === cleanPath || t.route === cleanHash.replace(/^#/, ''));
-            if (tool && tool.status === 'live') {
+            if (tool) {
                 if (tool.id === 'chatbot') openChatWorkspace(false);
                 else if (tool.id === 'content-generator') openContentWorkspace(false);
                 else if (tool.id === 'crm') openCrmWorkspace(false);
@@ -5343,9 +5433,6 @@ const JEVEXA_PLANS = {
                 else if (tool.id === 'admin') openTeamAdminWorkspace(false);
                 else if (tool.id === 'workflows') openWorkflowsWorkspace(false);
                 else if (tool.id === 'data') openDataWorkspace(false);
-            } else if (tool && tool.status === 'coming_soon') {
-                returnToStudio();
-                showComingSoonPopup(tool.name);
             } else {
                 returnToStudio();
             }
@@ -5388,8 +5475,6 @@ const JEVEXA_PLANS = {
         openWorkflows: () => openWorkflowsWorkspace(true),
         openData: () => openDataWorkspace(true),
         closeWorkspaces: returnToStudio,
-        showComingSoon: showComingSoonPopup,
-        closeComingSoon: closeComingSoonModal,
         tools: toolsConfig
     };
 
@@ -5521,11 +5606,7 @@ const JEVEXA_PLANS = {
         const tool = toolsConfig.find(t => t.id === toolId);
 
         const handleCardAction = () => {
-            if (status === 'live' || tool?.status === 'live') {
-                openExactServiceWorkspace(toolId, true);
-            } else {
-                showComingSoonPopup(tool?.name || card.querySelector('.tool-card-title')?.textContent?.trim());
-            }
+            openExactServiceWorkspace(toolId, true);
         };
 
         bindAction(card, 'click', handleCardAction);
@@ -5744,57 +5825,6 @@ const JEVEXA_PLANS = {
         });
     });
 
-    // Coming Soon Modal buttons
-    bindAction(document.getElementById('comingSoonCloseBtn'), 'click', closeComingSoonModal);
-    bindAction(document.getElementById('comingSoonConfirmBtn'), 'click', closeComingSoonModal);
-    bindAction(document.getElementById('comingSoonBackdrop'), 'click', closeComingSoonModal);
-    bindAction(document.getElementById('comingSoonExploreBtn'), 'click', (event) => {
-        if (event) event.preventDefault();
-        closeComingSoonModal();
-        returnToStudio();
-        const roadmapTab = document.querySelector('.launcher-tab[data-tool-filter="coming_soon"]');
-        if (roadmapTab) {
-            roadmapTab.click();
-        }
-        const featuresSec = document.getElementById('features') || document.querySelector('.hero-tools-launcher');
-        if (featuresSec) {
-            featuresSec.scrollIntoView({ behavior: 'smooth' });
-        }
-    });
-
-    // Outer modal container click fallback
-    if (comingSoonModal) {
-        bindAction(comingSoonModal, 'click', (event) => {
-            if (event.target === comingSoonModal) {
-                closeComingSoonModal();
-            }
-        });
-    }
-
-    // Delegated safe click handler on document to guarantee dismissibility
-    bindAction(document, 'click', (event) => {
-        const target = event.target;
-        if (!target || !(target instanceof Element)) return;
-
-        if (target.closest('#comingSoonCloseBtn, #comingSoonConfirmBtn, [data-action="close-coming-soon"], .coming-soon-close')) {
-            closeComingSoonModal();
-        } else if (target.closest('#comingSoonExploreBtn, [data-action="explore-roadmap"]')) {
-            if (event) event.preventDefault();
-            closeComingSoonModal();
-            returnToStudio();
-            const roadmapTab = document.querySelector('.launcher-tab[data-tool-filter="coming_soon"]');
-            if (roadmapTab) {
-                roadmapTab.click();
-            }
-            const featuresSec = document.getElementById('features') || document.querySelector('.hero-tools-launcher');
-            if (featuresSec) {
-                featuresSec.scrollIntoView({ behavior: 'smooth' });
-            }
-        } else if (target.id === 'comingSoonBackdrop' || target === comingSoonModal || target.classList?.contains('coming-soon-backdrop')) {
-            closeComingSoonModal();
-        }
-    });
-
     // Keyboard ESC handler
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' || event.key === 'Esc') {
@@ -5805,17 +5835,13 @@ const JEVEXA_PLANS = {
                 return;
             }
             const hasActiveInnerModal = document.querySelector(
-                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, #contentHistoryDrawer.open, #contentHistoryDrawer:not([hidden]), .crm-lead-drawer.open, .upgrade-modal.open, #upgradeModal.is-open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #chatConfirmModal:not([hidden]), #chatConfirmModal.open, .chat-history-dropdown-menu, .selector-menu:not([hidden]), .chat-select-menu:not([hidden]), #chatbotWindow.chat-history-open, #supportModal:not([hidden])'
+                '.crm-modal-backdrop.open, #crmLeadModal:not([hidden]), #crmLeadDrawer.open, #outreachHistoryDrawer.open, #contentHistoryDrawer.open, #contentHistoryDrawer:not([hidden]), .crm-lead-drawer.open, .upgrade-modal.open, #upgradeModal.is-open, .auth-modal.open, #teamInviteModal:not([hidden]), #workflowExecModal:not([hidden]), #chatCustomizationModal:not([hidden]), #chatConfirmModal:not([hidden]), #chatConfirmModal.open, .chat-history-dropdown-menu, .selector-menu:not([hidden]), .chat-select-menu:not([hidden]), #chatbotWindow.chat-history-open, #supportModal:not([hidden]), #activationModal.open'
             );
             const activeModalOrDrawer = hasActiveInnerModal;
             if (activeModalOrDrawer) {
-                // An inner modal or drawer is open; let its dedicated handler dismiss it without closing the entire workspace
                 return;
             }
-            if (comingSoonModal && (!comingSoonModal.hidden || comingSoonModal.classList.contains('is-open') || comingSoonModal.classList.contains('open') || comingSoonModal.style.display === 'flex')) {
-                event.preventDefault();
-                closeComingSoonModal();
-            } else if (
+            if (
                 contentWorkspace?.classList.contains('open') ||
                 chatbotWindow?.classList.contains('open') ||
                 crmWorkspace?.classList.contains('open') ||

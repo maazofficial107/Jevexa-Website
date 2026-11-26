@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pricing &amp; Plans — Credit Packages &amp; Model Routing | JEVEXA</title>
-    <meta name="description" content="Explore JEVEXA's 5 transparent one-time credit plans (Free, Lite $5, Pro $15, Max $29, Ultra $49), model multipliers (1.0x Economy, 3.0x Standard, 18.0x Flagship), and 7-day refund guarantee.">
+    <title>Pricing &amp; Plans — Credit Packages &amp; AI Engines | JEVEXA</title>
+    <meta name="description" content="Explore JEVEXA's 5 transparent one-time credit plans (Free, Lite $5, Pro $15, Max $29, Ultra $49), Jevexa AI engines, 20% annual savings, and 7-day refund guarantee.">
     <link rel="canonical" href="https://jevexa.net/pricing">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <meta name="theme-color" content="#07070c">
     <meta property="og:title" content="Pricing &amp; Plans — JEVEXA AI Automation Studio">
-    <meta property="og:description" content="Transparent credit packages starting at $5/mo (2,500 credits) with 20% annual savings, Economy/Standard/Flagship routing, and 7-day refund protection.">
+    <meta property="og:description" content="Transparent credit packages starting at $5/mo (2,500 credits) with 20% annual savings across Core, Pro, and Deep Reasoning engines, plus 7-day refund protection.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://jevexa.net/pricing">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,6 +21,26 @@
         .pricing-standalone-hero { padding: 132px 0 42px; text-align: center; }
         .pricing-standalone-hero h1 { font-size: clamp(2.1rem, 4.5vw, 3.2rem); margin-bottom: 14px; }
         .pricing-standalone-hero p { max-width: 680px; margin: 0 auto 24px; color: var(--text-secondary); font-size: 1.05rem; line-height: 1.65; }
+        .billing-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px; border-radius: 999px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+        .billing-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.22s ease; }
+        .billing-btn.active { background: var(--gradient); color: #fff; box-shadow: 0 6px 20px rgba(139,92,246,0.35); }
+        .pricing-card { position: relative; display: flex; flex-direction: column; padding: 32px 22px; border-radius: 22px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); backdrop-filter: blur(18px); transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease; }
+        .pricing-card:hover { transform: translateY(-8px); box-shadow: 0 24px 55px rgba(139,92,246,0.22); border-color: rgba(167,139,250,0.4); }
+        .pricing-card.pricing-featured { border-color: var(--primary); box-shadow: 0 0 38px rgba(139,92,246,0.24); }
+        @media (min-width: 1280px) { .pricing-card.pricing-featured { transform: scale(1.03); } .pricing-card.pricing-featured:hover { transform: scale(1.03) translateY(-8px); } }
+        .pricing-header { min-height: 76px; }
+        .pricing-header h3 { font-family: var(--font-display); font-size: 1.38rem; font-weight: 800; margin-bottom: 6px; }
+        .pricing-header p { font-size: 0.86rem; color: var(--text-muted); line-height: 1.45; min-height: 40px; }
+        .pricing-price { display: flex; align-items: baseline; gap: 5px; margin: 16px 0 8px; min-height: 58px; }
+        .pricing-price .amount { font-family: var(--font-display); font-size: 2.9rem; font-weight: 900; line-height: 1; background: var(--gradient-text); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .pricing-price .period { font-size: 0.9rem; color: var(--text-muted); }
+        .annual-note { font-size: 0.78rem; font-weight: 600; color: #c4b5fd; background: rgba(139,92,246,0.12); border: 1px solid rgba(167,139,250,0.24); border-radius: 10px; padding: 7px 10px; min-height: 36px; display: flex; align-items: center; justify-content: center; text-align: center; margin-bottom: 18px; }
+        .pricing-features { list-style: none; padding: 0; margin: 0 0 26px; display: flex; flex-direction: column; gap: 10px; flex: 1; font-size: 0.87rem; color: var(--text-secondary); }
+        .pricing-features li { display: flex; align-items: flex-start; gap: 9px; line-height: 1.45; }
+        .pricing-features li i { margin-top: 3px; color: var(--green); font-size: 12px; flex-shrink: 0; }
+        .pricing-features li.disabled { color: var(--text-muted); opacity: 0.65; }
+        .pricing-features li.disabled i { color: #94a3b8; }
+        .pricing-card .btn { margin-top: auto; width: 100%; justify-content: center; }
         .routing-matrix-wrap { margin-top: 48px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 18px; padding: 28px; overflow-x: auto; }
         .routing-matrix-wrap h2 { font-size: 1.35rem; margin-bottom: 8px; }
         .routing-matrix-sub { color: var(--text-secondary); font-size: 0.92rem; margin-bottom: 18px; }
@@ -62,7 +82,7 @@
             <div class="container">
                 <div class="badge" style="margin: 0 auto 14px;"><i class="fas fa-coins"></i> ONE-TIME CREDIT PACKAGES</div>
                 <h1>Simple, Predictable <span class="text-gradient">Credit Pricing</span></h1>
-                <p>No recurring subscriptions or hidden auto-renewals. Start free with 100 signup credits, or unlock faster Standard (3.0x) and Flagship Reasoning (18.0x) capacity with 1 credit = 500 base tokens.</p>
+                <p>No recurring subscriptions or hidden auto-renewals. Start free with 100 welcome credits, or scale across Jevexa Core, Pro, and Deep Reasoning engines with 20% annual savings.</p>
 
                 <div class="billing-toggle">
                     <button type="button" class="billing-btn active" data-billing="monthly">Monthly Package</button>
@@ -78,17 +98,17 @@
                     <div class="pricing-card">
                         <div class="pricing-header">
                             <h3>Free</h3>
-                            <p>Try all 10 live studio tools at zero cost</p>
+                            <p>Explore all 10 live studio tools at zero cost</p>
                         </div>
                         <div class="pricing-price">
                             <span class="amount">$0</span><span class="period">/ forever</span>
                         </div>
-                        <div class="annual-note"><strong>100 one-time signup credits</strong> · Max 15 credits/day</div>
+                        <div class="annual-note"><strong>100 welcome credits included</strong></div>
                         <ul class="pricing-features">
                             <li><i class="fas fa-check"></i> All 10 AI tools accessible</li>
-                            <li><i class="fas fa-check"></i> Economy Tier models (1.0x weight)</li>
-                            <li><i class="fas fa-check"></i> Thinking Mode: OFF · Web Search: Off</li>
+                            <li><i class="fas fa-check"></i> Fast / Core Engine for everyday tasks</li>
                             <li><i class="fas fa-check"></i> Image uploads (up to 5 MB)</li>
+                            <li class="disabled"><i class="fas fa-lock"></i> Thinking Mode, Web Search &amp; PDF/ZIP locked</li>
                             <li><i class="fas fa-check"></i> Email Support: Response within 24 hours (Mon–Sat)</li>
                         </ul>
                         <a href="/signup" class="btn btn-outline">Start Free Trial</a>
@@ -98,7 +118,7 @@
                     <div class="pricing-card">
                         <div class="pricing-header">
                             <h3>Lite</h3>
-                            <p>Fast daily AI &amp; document workflows (~1.25M fast tokens)</p>
+                            <p>Fast daily AI &amp; document workflows</p>
                         </div>
                         <div class="pricing-price">
                             <span class="amount" data-monthly="$5" data-annual="$4">$5</span><span class="period">/ mo</span>
@@ -106,9 +126,9 @@
                         <div class="annual-note" data-monthly="2,500 credits ($5 one-time)" data-annual="30,000 credits ($48/yr — Save 20%)">2,500 credits ($5 one-time)</div>
                         <ul class="pricing-features">
                             <li><i class="fas fa-check"></i> <strong>2,500</strong> credits/month</li>
-                            <li><i class="fas fa-check"></i> Unlocks <strong>Standard Tier (3.0x)</strong> + Economy (1.0x)</li>
-                            <li><i class="fas fa-check"></i> Thinking Mode: OFF · Web Search: Off</li>
+                            <li><i class="fas fa-check"></i> Unlocks <strong>Pro Engine</strong> + Core Engine</li>
                             <li><i class="fas fa-check"></i> Unlocks PDF &amp; ZIP uploads (10 MB)</li>
+                            <li class="disabled"><i class="fas fa-lock"></i> Thinking Mode &amp; Live Web Search locked</li>
                             <li><i class="fas fa-check"></i> Email Support: Response within 24 hours (Mon–Sat)</li>
                         </ul>
                         <button type="button" class="btn btn-outline js-plan-trigger" data-plan="lite" data-plan-label="Lite ($5/mo · 2,500 credits)" data-monthly-price="5" data-annual-price="48" data-monthly-credits="2,500">Upgrade to Lite</button>
@@ -119,7 +139,7 @@
                         <div class="popular-badge">Most Popular</div>
                         <div class="pricing-header">
                             <h3>Pro</h3>
-                            <p>For teams &amp; builders (~5M fast tokens + web grounding)</p>
+                            <p>For creators &amp; builders with live web search</p>
                         </div>
                         <div class="pricing-price">
                             <span class="amount" data-monthly="$15" data-annual="$12">$15</span><span class="period">/ mo</span>
@@ -127,9 +147,9 @@
                         <div class="annual-note" data-monthly="10,000 credits ($15 one-time)" data-annual="120,000 credits ($144/yr — Save 20%)">10,000 credits ($15 one-time)</div>
                         <ul class="pricing-features">
                             <li><i class="fas fa-check"></i> <strong>10,000</strong> credits/month</li>
-                            <li><i class="fas fa-check"></i> Economy (1.0x) &amp; <strong>Standard Tier (3.0x)</strong></li>
+                            <li><i class="fas fa-check"></i> Core &amp; <strong>Pro Engine</strong> for deeper analysis</li>
                             <li><i class="fas fa-check"></i> <strong>Low / Medium Thinking</strong> enabled</li>
-                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (max 15/day, +5 cr/req)</li>
+                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (15 searches/day)</li>
                             <li><i class="fas fa-check"></i> Files up to 25 MB (PDF, ZIP, Images)</li>
                         </ul>
                         <button type="button" class="btn btn-primary js-plan-trigger" data-plan="pro" data-plan-label="Pro ($15/mo · 10,000 credits)" data-monthly-price="15" data-annual-price="144" data-monthly-credits="10,000">Upgrade to Pro</button>
@@ -139,7 +159,7 @@
                     <div class="pricing-card">
                         <div class="pricing-header">
                             <h3>Max</h3>
-                            <p>High-volume workflows &amp; Flagship deep reasoning (~11M fast tokens)</p>
+                            <p>Deep reasoning &amp; high-volume team workflows</p>
                         </div>
                         <div class="pricing-price">
                             <span class="amount" data-monthly="$29" data-annual="$23.20">$29</span><span class="period">/ mo</span>
@@ -147,9 +167,9 @@
                         <div class="annual-note" data-monthly="22,000 credits ($29 one-time)" data-annual="264,000 credits ($278.40/yr — Save 20%)">22,000 credits ($29 one-time)</div>
                         <ul class="pricing-features">
                             <li><i class="fas fa-check"></i> <strong>22,000</strong> credits/month</li>
-                            <li><i class="fas fa-check"></i> Unlocks <strong>Flagship Reasoning (18.0x)</strong></li>
-                            <li><i class="fas fa-check"></i> <strong>High / Max Deep Thinking</strong> unlocked</li>
-                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (max 50/day, +5 cr/req)</li>
+                            <li><i class="fas fa-check"></i> Unlocks <strong>Deep Reasoning Engine</strong></li>
+                            <li><i class="fas fa-check"></i> <strong>High Thinking</strong> &amp; priority queues</li>
+                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (50 searches/day)</li>
                             <li><i class="fas fa-check"></i> Files up to 50 MB + 50 team seats</li>
                         </ul>
                         <button type="button" class="btn btn-outline js-plan-trigger" data-plan="max" data-plan-label="Max ($29/mo · 22,000 credits)" data-monthly-price="29" data-annual-price="278.40" data-monthly-credits="22,000">Upgrade to Max</button>
@@ -159,7 +179,7 @@
                     <div class="pricing-card">
                         <div class="pricing-header">
                             <h3>Ultra</h3>
-                            <p>Maximum Flagship capacity &amp; agency throughput (~20M fast tokens)</p>
+                            <p>Maximum reasoning depth &amp; agency scale</p>
                         </div>
                         <div class="pricing-price">
                             <span class="amount" data-monthly="$49" data-annual="$39.20">$49</span><span class="period">/ mo</span>
@@ -167,9 +187,9 @@
                         <div class="annual-note" data-monthly="40,000 credits ($49 one-time)" data-annual="480,000 credits ($470.40/yr — Save 20%)">40,000 credits ($49 one-time)</div>
                         <ul class="pricing-features">
                             <li><i class="fas fa-check"></i> <strong>40,000</strong> credits/month</li>
-                            <li><i class="fas fa-check"></i> Full <strong>Flagship Reasoning (18.0x)</strong> priority access</li>
-                            <li><i class="fas fa-check"></i> <strong>High / Max Deep Thinking</strong> unlocked</li>
-                            <li><i class="fas fa-check"></i> <strong>Live Web Search</strong> (max 150/day, +5 cr/req)</li>
+                            <li><i class="fas fa-check"></i> <strong>Maximum Deep Reasoning</strong> priority access</li>
+                            <li><i class="fas fa-check"></i> <strong>Max Thinking Depth</strong> &amp; longest context</li>
+                            <li><i class="fas fa-check"></i> <strong>Highest Live Web Search</strong> (150 searches/day)</li>
                             <li><i class="fas fa-check"></i> Files up to 100 MB + 250 team seats</li>
                         </ul>
                         <button type="button" class="btn btn-outline js-plan-trigger" data-plan="ultra" data-plan-label="Ultra ($49/mo · 40,000 credits)" data-monthly-price="49" data-annual-price="470.40" data-monthly-credits="40,000">Upgrade to Ultra</button>
@@ -177,39 +197,39 @@
                 </div>
 
                 <div class="routing-matrix-wrap">
-                    <h2>Transparent Model Routing, Thinking &amp; Grounding Matrix</h2>
-                    <p class="routing-matrix-sub">1 credit = 500 base tokens (input + output + thinking output tokens). Exact pinned model IDs ensure consistent latency and predictable cost.</p>
+                    <h2>Jevexa AI Engines, Thinking &amp; Web Search Matrix</h2>
+                    <p class="routing-matrix-sub">Choose the right engine for every task — from instant everyday drafting to deep architectural reasoning and live web-grounded research.</p>
                     <table class="routing-table">
                         <thead>
                             <tr>
-                                <th>Model Tier</th>
-                                <th>Pinned Models</th>
-                                <th>Credit Weight</th>
-                                <th>Eligible Plans</th>
-                                <th>Thinking &amp; Search Rules</th>
+                                <th>Jevexa Engine</th>
+                                <th>Best For</th>
+                                <th>Credit Rate</th>
+                                <th>Included Plans</th>
+                                <th>Thinking &amp; Web Search</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td><span class="routing-badge routing-badge-eco">Economy</span></td>
-                                <td><code>gemini-2.5-flash-lite</code> / <code>groq/llama-3.3-70b-versatile</code></td>
+                                <td><span class="routing-badge routing-badge-eco">Fast / Core Engine</span></td>
+                                <td>Fast everyday responses, drafting, summaries &amp; workflows</td>
                                 <td><strong>1.0x</strong></td>
                                 <td>Free, Lite, Pro, Max, Ultra</td>
-                                <td>Free capped at 15 cr/day · Thinking OFF on Free &amp; Lite</td>
+                                <td>Thinking Off · Great for high-speed daily automation</td>
                             </tr>
                             <tr>
-                                <td><span class="routing-badge routing-badge-std">Standard</span></td>
-                                <td><code>gemini-3.5-flash-lite</code> / <code>gemini-3.8-flash</code></td>
+                                <td><span class="routing-badge routing-badge-std">Pro Engine</span></td>
+                                <td>Deeper analysis, structured writing &amp; document work</td>
                                 <td><strong>3.0x</strong></td>
                                 <td>Lite, Pro, Max, Ultra</td>
-                                <td>Pro unlocks Low/Medium thinking &amp; 15 searches/day (+5 cr/search)</td>
+                                <td>Pro unlocks Low/Medium Thinking &amp; 15 Web Searches/day</td>
                             </tr>
                             <tr>
-                                <td><span class="routing-badge routing-badge-flg">Flagship Reasoning</span></td>
-                                <td><code>gemini-4-argon</code> / <code>gemini-4-carbon</code></td>
+                                <td><span class="routing-badge routing-badge-flg">Deep Reasoning Engine</span></td>
+                                <td>Heavy multi-step reasoning, complex strategy &amp; coding architecture</td>
                                 <td><strong>18.0x</strong></td>
-                                <td>Max &amp; Ultra Only</td>
-                                <td>High/Max deep thinking + 50/day (Max) or 150/day (Ultra) search</td>
+                                <td>Max &amp; Ultra</td>
+                                <td>Max: High Thinking + 50/day search · Ultra: Priority compute, Max Thinking &amp; 150/day search</td>
                             </tr>
                         </tbody>
                     </table>

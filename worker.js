@@ -90,12 +90,12 @@ ABOUT JEVEXA:
 - The app also provides account sign-in, a credit wallet, and a 100-credit welcome grant for new accounts.
 
 PRICING (facts — quote exactly):
-- Free ($0): 100 one-time welcome credits upon signup (capped at max 15 credits/day burn limit), Economy Tier models (1.0x), thinking OFF, web search disabled.
-- Lite: $5 monthly package = 2,500 credits (annual package $48 = 30,000 credits, 20% off). Unlocks Standard Tier models (3.0x), thinking OFF, Images + PDF + ZIP uploads.
-- Pro: $15 monthly package = 10,000 credits (annual $144 = 120,000 credits, 20% off). Economy (1.0x) + Standard (3.0x), Low/Medium thinking, Real-Time Web Search (max 15 searches/day, +5 credits/search).
-- Max: $29 monthly package = 22,000 credits (annual $278.40 = 264,000 credits, 20% off). Unlocks Flagship Reasoning Tier (18.0x), High/Max thinking, Real-Time Web Search (max 50 searches/day, +5 credits/search).
-- Ultra: $49 monthly package = 40,000 credits (annual $470.40 = 480,000 credits, 20% off). Full Flagship Reasoning Tier (18.0x), High/Max thinking, Real-Time Web Search (max 150 searches/day, +5 credits/search).
-- AI Chat uses transparent token-weighted billing: 1 credit per 500 processed tokens (input + output + thinking output tokens), with model tier weights across Economy (1.0x), Standard (3.0x), and Flagship Reasoning (18.0x), plus attachment surcharges (+2 cr Image, +4 cr PDF, +5 cr ZIP) and +5 credits per grounded web search request.
+- Free ($0): 100 one-time welcome credits upon signup (capped at max 15 credits/day burn limit), Fast / Core Engine (1.0x), thinking OFF, web search disabled.
+- Lite: $5 monthly package = 2,500 credits (annual package $48 = 30,000 credits, 20% off). Unlocks Pro Engine (3.0x), thinking OFF, Images + PDF + ZIP uploads.
+- Pro: $15 monthly package = 10,000 credits (annual $144 = 120,000 credits, 20% off). Core Engine (1.0x) + Pro Engine (3.0x), Low/Medium thinking, Real-Time Web Search (max 15 searches/day, +5 credits/search).
+- Max: $29 monthly package = 22,000 credits (annual $278.40 = 264,000 credits, 20% off). Unlocks Deep Reasoning Engine (18.0x), High thinking & priority queues, Real-Time Web Search (max 50 searches/day, +5 credits/search).
+- Ultra: $49 monthly package = 40,000 credits (annual $470.40 = 480,000 credits, 20% off). Maximum Deep Reasoning & priority compute, Max thinking depth, Real-Time Web Search (max 150 searches/day, +5 credits/search).
+- AI Chat uses transparent token-weighted billing across Jevexa Core Engine (1.0x), Pro Engine (3.0x), and Deep Reasoning Engine (18.0x), plus attachment surcharges (+2 cr Image, +4 cr PDF, +5 cr ZIP) and +5 credits per grounded web search request.
 - Packages are ONE-TIME credit purchases with no recurring subscriptions or auto-renewal, backed by our 7-day refund policy (if under 10% of credits are consumed).
 - Support SLA: Email Support: Response within 24 hours (Mon–Sat).
 
@@ -426,7 +426,7 @@ const PINNED_MODEL_TIERS = Object.freeze({
   economy: Object.freeze({
     id: "economy",
     tierKey: "lite",
-    label: "Economy (1.0x)",
+    label: "Core Engine (1.0x)",
     multiplier: 1.0,
     allowedPlans: ["free", "lite", "starter", "pro", "max", "business", "ultra"],
     geminiModels: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
@@ -436,7 +436,7 @@ const PINNED_MODEL_TIERS = Object.freeze({
   standard: Object.freeze({
     id: "standard",
     tierKey: "pro",
-    label: "Standard (3.0x)",
+    label: "Pro Engine (3.0x)",
     multiplier: 3.0,
     allowedPlans: ["lite", "starter", "pro", "max", "business", "ultra"],
     geminiModels: ["gemini-3.5-flash-lite", "gemini-3.8-flash"],
@@ -446,7 +446,7 @@ const PINNED_MODEL_TIERS = Object.freeze({
   flagship: Object.freeze({
     id: "flagship",
     tierKey: "max",
-    label: "Flagship Reasoning (18.0x)",
+    label: "Deep Reasoning (18.0x)",
     multiplier: 18.0,
     allowedPlans: ["max", "business", "ultra"],
     geminiModels: ["gemini-4-argon", "gemini-4-carbon"],
@@ -3193,7 +3193,7 @@ async function handleCreditQuote(request, env) {
         estimatedTokens: fixedCredits * 1000,
         tier: parsed.tier,
         webSearchSurcharge: webSearchExtra,
-        pricing: "Token-weighted credits: 1 credit per 500 tokens with model multipliers (1.0x / 3.0x / 18.0x), attachment surcharges, and +5 credits per web search."
+        pricing: "Token-weighted credits across Jevexa Core (1.0x), Pro (3.0x), and Deep Reasoning (18.0x) engines, plus attachment surcharges and +5 credits per web search."
       });
     }
   } catch (error) {
@@ -3205,7 +3205,7 @@ async function handleCreditQuote(request, env) {
     estimatedTokens: fixedCredits * 1000,
     tier: parsed.tier,
     webSearchSurcharge: webSearchExtra,
-    pricing: "Token-weighted credits: 1 credit per 500 tokens with model multipliers (1.0x / 3.0x / 18.0x), attachment surcharges, and +5 credits per web search."
+    pricing: "Token-weighted credits across Jevexa Core (1.0x), Pro (3.0x), and Deep Reasoning (18.0x) engines, plus attachment surcharges and +5 credits per web search."
   });
 }
 
@@ -8095,15 +8095,15 @@ function generateContextualSupportResponse(message, history = []) {
   }
 
   if (/price|pricing|\bplans?\b|ultra|pro|lite|max|annual|discount|subscription|buy|checkout|safepay/i.test(q)) {
-    return "JEVEXA offers 5 transparent tiers with an automatic 20% annual package discount:\n• Free: $0 — 100 one-time signup credits (capped at 15 credits/day), Economy models (1.0x), thinking OFF\n• Lite: $5/mo ($4/mo annual, $48/yr) — 2,500 credits/month (~1.25M fast tokens), Standard Tier (3.0x), thinking OFF, Images + PDF + ZIP\n• Pro: $15/mo ($12/mo annual, $144/yr) — 10,000 credits/month (~5M tokens), Standard Tier (3.0x), Low/Medium thinking, Web Search (15/day, +5 cr/search)\n• Max: $29/mo ($23.20/mo annual, $278.40/yr) — 22,000 credits/month (~11M tokens), Flagship Reasoning (18.0x), High/Max thinking, Web Search (50/day)\n• Ultra: $49/mo ($39.20/mo annual, $470.40/yr) — 40,000 credits/month (~20M tokens), Flagship Reasoning (18.0x), High/Max thinking, Web Search (150/day)\nAll paid packages are one-time purchases backed by our 7-day refund policy (/refund-policy). Visit /pricing or click Upgrade!";
+    return "JEVEXA offers 5 transparent tiers with an automatic 20% annual package discount:\n• Free: $0 — 100 one-time welcome credits, Fast / Core Engine (1.0x), thinking OFF\n• Lite: $5/mo ($4/mo annual, $48/yr) — 2,500 credits/month, Pro Engine (3.0x), thinking OFF, Images + PDF + ZIP\n• Pro: $15/mo ($12/mo annual, $144/yr) — 10,000 credits/month, Pro Engine (3.0x), Low/Medium thinking, Web Search (15/day, +5 cr/search)\n• Max: $29/mo ($23.20/mo annual, $278.40/yr) — 22,000 credits/month, Deep Reasoning Engine (18.0x), High thinking & priority queues, Web Search (50/day)\n• Ultra: $49/mo ($39.20/mo annual, $470.40/yr) — 40,000 credits/month, Maximum Deep Reasoning & priority compute, Max thinking depth, Web Search (150/day)\nAll paid packages are one-time purchases backed by our 7-day refund policy (/refund-policy). Visit /pricing or click Upgrade!";
   }
 
   if (/credit|token|balance|cost|quota|rate limit|welcome|refund/i.test(q)) {
-    return "JEVEXA includes 100 free signup credits (max 15 credits/day burn cap, no credit card required). Usage uses token-weighted billing (1 credit per 500 processed tokens, including thinking output tokens):\n• Economy Tier (1.0x): Free, Lite, Pro, Max, Ultra\n• Standard Tier (3.0x): Lite, Pro, Max, Ultra\n• Flagship Reasoning Tier (18.0x): Max & Ultra\n• Attachments: Image (+2 cr), PDF (+4 cr), ZIP (+5 cr)\n• Real-Time Web Search Grounding: +5 credits/request (Pro 15/day, Max 50/day, Ultra 150/day)\nPackages are eligible for a full refund within 7 days if less than 10% of credits are consumed (/refund-policy).";
+    return "JEVEXA includes 100 free welcome credits (no credit card required). Usage uses token-weighted billing:\n• Fast / Core Engine (1.0x): Free, Lite, Pro, Max, Ultra\n• Pro Engine (3.0x): Lite, Pro, Max, Ultra\n• Deep Reasoning Engine (18.0x): Max & Ultra\n• Attachments: Image (+2 cr), PDF (+4 cr), ZIP (+5 cr)\n• Real-Time Web Search Grounding: +5 credits/request (Pro 15/day, Max 50/day, Ultra 150/day)\nPackages are eligible for a full refund within 7 days if less than 10% of credits are consumed (/refund-policy).";
   }
 
   if (/think|reasoning|model|search|upload|attachment|pdf|zip|file/i.test(q)) {
-    return "JEVEXA model routing & capability limits:\n• Economy Tier (1.0x, gemini-2.5-flash-lite / llama-3.3-70b-versatile): All plans\n• Standard Tier (3.0x, gemini-3.5-flash-lite / gemini-3.8-flash): Lite, Pro, Max, Ultra\n• Flagship Reasoning Tier (18.0x, gemini-4-argon / gemini-4-carbon): Max & Ultra only\n• Thinking Mode: OFF on Free & Lite; Low/Medium on Pro; High/Max on Max & Ultra (thinking output tokens included in credit usage)\n• Real-Time Web Search: Disabled on Free & Lite; 15/day on Pro, 50/day on Max, 150/day on Ultra (+5 credits/search)\n• Uploads: Free allows up to 5 images (5 MB); Lite/Pro/Max/Ultra unlock PDF + ZIP + Images.";
+    return "JEVEXA AI engine & capability limits:\n• Fast / Core Engine (1.0x): All plans — fast everyday responses, drafting & workflows\n• Pro Engine (3.0x): Lite, Pro, Max, Ultra — deeper analysis & document work\n• Deep Reasoning Engine (18.0x): Max & Ultra (Ultra adds maximum thinking depth, priority compute & highest daily search/file limits)\n• Thinking Mode: OFF on Free & Lite; Low/Medium on Pro; High/Max on Max & Ultra\n• Real-Time Web Search: Disabled on Free & Lite; 15/day on Pro, 50/day on Max, 150/day on Ultra (+5 credits/search)\n• Uploads: Free allows up to 5 images (5 MB); Lite/Pro/Max/Ultra unlock PDF + ZIP + Images.";
   }
 
   if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
@@ -8114,7 +8114,7 @@ function generateContextualSupportResponse(message, history = []) {
     return "You can sign up or sign in using 'Get Started' or 'Sign In' at the top right. New accounts receive 100 free welcome credits across all 10 tools. Use 'Forgot password?' inside the login dialog if needed.";
   }
 
-  return "Hello! I am the JEVEXA Support Assistant. I can help with all 10 AI tools, token-weighted credits (1.0x Economy / 3.0x Standard / 18.0x Flagship), Web Search & Thinking caps, plans (/pricing), or our 7-day refund policy (/refund-policy). Email Support: Response within 24 hours (Mon–Sat).";
+  return "Hello! I am the JEVEXA Support Assistant. I can help with all 10 AI tools, token-weighted credits (Core 1.0x / Pro 3.0x / Deep Reasoning 18.0x), Web Search & Thinking caps, plans (/pricing), or our 7-day refund policy (/refund-policy). Email Support: Response within 24 hours (Mon–Sat).";
 }
 
 async function handleSupportAi(request, env) {
@@ -9132,7 +9132,7 @@ const TOOL_SEO_ROUTES = Object.freeze({
   "/tools/ai-chatbot": {
     canonical: "/tools/ai-chatbot",
     title: "AI Chatbot & Deep Reasoning Assistant | JEVEXA AI Studio",
-    description: "Run token-weighted multi-model AI chat across Economy (1.0x), Standard (3.0x), and Flagship Reasoning (18.0x) models with memory, PDF/ZIP analysis, and live web search.",
+    description: "Run token-weighted Jevexa AI chat across Core Engine (1.0x), Pro Engine (3.0x), and Deep Reasoning Engine (18.0x) with memory, PDF/ZIP analysis, and live web search.",
     h1: "AI Chatbot &amp; <span class=\"text-gradient\">Reasoning Studio</span>"
   },
   "/tools/chatbot": { alias: "/tools/ai-chatbot" },
@@ -9398,10 +9398,10 @@ export default {
               method: "POST",
               headers: { Prefer: "resolution=merge-duplicates" },
               body: JSON.stringify([
-                { service_key: "ai_chat", display_name: "AI Chat — Economy (1.0x)", integration_status: "available", fixed_credits: 1, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "ai_chat_pro", display_name: "AI Chat — Standard (3.0x)", integration_status: "available", fixed_credits: 3, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "ai_chat_max", display_name: "AI Chat — Flagship (18.0x)", integration_status: "available", fixed_credits: 18, credits_per_1000_tokens: null, enabled: true },
-                { service_key: "ai_chat_ultra", display_name: "AI Chat — Ultra Flagship (18.0x)", integration_status: "available", fixed_credits: 18, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat", display_name: "AI Chat — Core Engine (1.0x)", integration_status: "available", fixed_credits: 1, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat_pro", display_name: "AI Chat — Pro Engine (3.0x)", integration_status: "available", fixed_credits: 3, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat_max", display_name: "AI Chat — Deep Reasoning (18.0x)", integration_status: "available", fixed_credits: 18, credits_per_1000_tokens: null, enabled: true },
+                { service_key: "ai_chat_ultra", display_name: "AI Chat — Ultra Reasoning (Priority)", integration_status: "available", fixed_credits: 18, credits_per_1000_tokens: null, enabled: true },
                 { service_key: "content_generation", display_name: "Content Generation", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true },
                 { service_key: "mini_crm", display_name: "Mini CRM", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true },
                 { service_key: "email_outreach", display_name: "Email & Outreach AI", integration_status: "available", fixed_credits: null, credits_per_1000_tokens: 1, enabled: true },

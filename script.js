@@ -300,6 +300,8 @@ function openUpgradeModal(plan, feature, returnFocusElement = document.activeEle
     if (message) {
         if (/pdf|zip|file|upload/i.test(feature || '')) {
             message.textContent = 'Upgrade to any Paid plan (Lite, Pro, Max, or Ultra) to unlock PDF, ZIP, and document uploads.';
+        } else if (/web\s*search/i.test(feature || '')) {
+            message.textContent = 'Upgrade to Pro (15 searches/day), Max (50/day), or Ultra (150/day) to ground AI answers with real-time web results (+5 credits/request).';
         } else {
             message.textContent = `Upgrade to Jevexa ${cleanPlan} to unlock this feature and get more from your AI workspace.`;
         }
@@ -307,6 +309,8 @@ function openUpgradeModal(plan, feature, returnFocusElement = document.activeEle
     if (planLabel) {
         if (/pdf|zip|file|upload/i.test(feature || '')) {
             planLabel.textContent = 'JEVEXA PAID PLANS';
+        } else if (/web\s*search/i.test(feature || '')) {
+            planLabel.textContent = 'JEVEXA PRO · MAX · ULTRA';
         } else {
             planLabel.textContent = `JEVEXA ${cleanPlan.toUpperCase()}`;
         }
@@ -4845,7 +4849,7 @@ const JEVEXA_PLANS = {
     window.JEVEXA_UPDATE_CREDIT_BALANCE = updateCreditBalanceGlobal;
 
     const ROUTE_SEO_META = {
-        '/tools/ai-chatbot': { title: 'AI Chatbot & Deep Reasoning Assistant | JEVEXA AI Studio', desc: 'Run token-weighted multi-model AI chat across Economy (1.0x), Standard (3.0x), and Flagship Reasoning (18.0x) models.' },
+        '/tools/ai-chatbot': { title: 'AI Chatbot & Deep Reasoning Assistant | JEVEXA AI Studio', desc: 'Run token-weighted Jevexa AI chat across Core Engine (1.0x), Pro Engine (3.0x), and Deep Reasoning Engine (18.0x).' },
         '/tools/content-generator': { title: 'AI Content Generator | JEVEXA AI Studio', desc: 'Generate blogs, marketing emails, and ad copy in seconds.' },
         '/tools/ocr-extractor': { title: 'AI Document & Invoice OCR Extractor | JEVEXA AI Studio', desc: 'Extract structured line items, totals, and JSON/CSV from invoices and PDFs.' },
         '/tools/social-media-assistant': { title: 'AI Social Media Assistant | JEVEXA AI Studio', desc: 'Draft multi-platform posts, hooks, and content calendars.' },

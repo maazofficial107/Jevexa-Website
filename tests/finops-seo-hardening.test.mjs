@@ -238,3 +238,62 @@ test("SEO & Trust Cleanup: zero href=# links, zero dev leaks, demo labels presen
   assert.match(seoHtml, /<title>AI Document &amp; Invoice OCR Extractor \| JEVEXA<\/title>/);
   assert.match(seoHtml, /<link rel="canonical" href="https:\/\/jevexa\.net\/tools\/ocr-extractor">/);
 });
+
+test("Jevexa AI Branding & Web Search UX: zero raw model names, aligned 5-tier pricing, and interactive Web Search toggle", async () => {
+  const frontendFiles = [
+    "../index.html",
+    "../pricing.html",
+    "../about.html",
+    "../privacy-policy.html",
+    "../terms.html",
+    "../refund-policy.html",
+    "../contact.html",
+    "../credits.js",
+    "../script.js",
+    "../support.js"
+  ];
+  const rawModelPattern = /gemini-|llama-|argon|carbon|flash-lite|Economy Tier|Standard Tier|Flagship Reasoning|Ultra Flagship|Max 15\/day/i;
+  for (const file of frontendFiles) {
+    const content = await readFile(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(content, rawModelPattern, `${file} must not expose raw model IDs or legacy engine labels`);
+  }
+
+  const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const pricingHtml = await readFile(new URL("../pricing.html", import.meta.url), "utf8");
+  const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
+  const stylesCss = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const scriptJs = await readFile(new URL("../script.js", import.meta.url), "utf8");
+
+  // 5 tiers & exact credit allocations on both index.html and pricing.html
+  for (const html of [indexHtml, pricingHtml]) {
+    assert.match(html, /100/);
+    assert.match(html, /2,500/);
+    assert.match(html, /10,000/);
+    assert.match(html, /22,000/);
+    assert.match(html, /40,000/);
+    assert.match(html, /20%/);
+    assert.match(html, /Fast \/ Core Engine/);
+    assert.match(html, /Pro Engine/);
+    assert.match(html, /Deep Reasoning/);
+  }
+
+  // Max vs Ultra differentiation without duplicate 18.0x clutter in selector
+  assert.match(indexHtml, /data-value="max"[^>]*data-label="Deep Reasoning \(18\.0x\)"/);
+  assert.match(indexHtml, /data-value="ultra"[^>]*data-label="Ultra Reasoning"/);
+
+  // Interactive Web Search toggle wiring, composer badge, response badge, and upgrade modal gating
+  assert.match(indexHtml, /id="chatWebSearchBtn"[^>]*aria-pressed="false"/);
+  assert.match(indexHtml, /id="chatComposerWebBadge"/);
+  assert.match(creditsJs, /function isWebSearchAllowed\(\)/);
+  assert.match(creditsJs, /function syncWebSearchUI\(\)/);
+  assert.match(creditsJs, /Web Search ON \(\+5 cr\)/);
+  assert.match(creditsJs, /chat-web-grounded-badge/);
+  assert.match(creditsJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL\('Pro', 'Live Web Search', btn\)/);
+  assert.match(scriptJs, /\/web\\s\*search\/i\.test\(feature/);
+
+  // CSS specificity fix & dropdown layering
+  assert.doesNotMatch(stylesCss, /\.chat-tier-controls button\s*\{/);
+  assert.match(stylesCss, /\.chat-tier-controls \.chat-web-search-btn/);
+  assert.match(stylesCss, /\.chat-tier-controls \.chat-web-search-btn\[aria-pressed="true"\]/);
+  assert.match(stylesCss, /\.chat-select-menu\s*\{[^}]*z-index:\s*100005;/);
+});

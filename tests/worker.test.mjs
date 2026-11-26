@@ -1062,7 +1062,7 @@ test("public copy does not promise unavailable services or fabricate customer ra
   assert.match(html, /100 welcome credits included/);
   assert.match(html, /Fast daily AI workflows/);
   assert.match(html, /Built for creators &amp; builders/);
-  assert.match(html, /Flagship Reasoning &amp; high throughput/);
+  assert.match(html, /Deep reasoning &amp; high-volume team execution/);
   assert.match(html, /All 10 AI tools are live and unlocked/);
   assert.match(html, /10 AI tools for your business\. One credit wallet\. Start free with 100 credits\./);
   assert.equal((html.match(/data-hero-feature-card/g) || []).length, 3);
@@ -1971,7 +1971,7 @@ test("Ultra plan includes 20% annual discount and progressive feature hierarchy"
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-price/);
   assert.match(html, /data-pricing-plan="ultra"[\s\S]*?data-annual-discount/);
   assert.match(html, /40,000 credits monthly \/ 480,000 credits annually/);
-  assert.match(html, /Priority Flagship Reasoning Tier \(18\.0x/);
+  assert.match(html, /Maximum Deep Reasoning &amp; priority compute/);
   assert.match(script, /ultra:\s*Object\.freeze\(\{\s*monthlyPrice:\s*49,\s*annualEligible:\s*true\s*\}\)/);
   assert.match(script, /ultra:\s*\{\s*name:\s*'Ultra'\s*\}/);
 });
@@ -3990,9 +3990,9 @@ test("upgrade 2: animated Thinking/Generating UI states exist and clean up prope
   const contentCode = await readFile(new URL("../content.js", import.meta.url), "utf8");
   const stylesCode = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
-  // Chatbot live states (no misleading 'Searching the web...')
+  // Chatbot live states (thinking, generating, and web search grounding when enabled)
   assert.match(creditsCode, /live-status-indicator/);
-  assert.doesNotMatch(creditsCode, /Searching the web\.\.\./);
+  assert.match(creditsCode, /Searching the web\.\.\./);
   assert.match(creditsCode, /Thinking\.\.\./);
   assert.match(creditsCode, /Generating response\.\.\./);
   assert.match(creditsCode, /clearInterval\(typingStatusTimer\)/);
@@ -4793,17 +4793,17 @@ test("Fix 2: Remove (1 cr / 500 tok) suffix — show only 'Token-weighted'", asy
   const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
 
-  // In index.html, #chatCreditStatus has "⚡ Lite • Token-weighted" without "(1 cr / 500 tok)"
-  assert.match(indexHtml, /id="chatCreditStatus"[^>]*>\s*⚡ Lite • Token-weighted\s*<\/span>/);
+  // In index.html, #chatCreditStatus has "⚡ Core Engine • Token-weighted" without "(1 cr / 500 tok)"
+  assert.match(indexHtml, /id="chatCreditStatus"[^>]*>\s*⚡ Core Engine • Token-weighted\s*<\/span>/);
   assert.doesNotMatch(indexHtml, /id="chatCreditStatus"[^>]*>[\s\S]*?\(1 cr \/ 500 tok\)/);
 
-  // In index.html pricing features, 1.0x / 3.0x / 18.0x weights without legacy "(1 cr / 500 tok)"
-  assert.match(indexHtml, /Economy Tier \(1\.0x\)/);
+  // In index.html pricing features, Jevexa engines without legacy "(1 cr / 500 tok)"
+  assert.match(indexHtml, /Fast \/ Core Engine/);
   assert.doesNotMatch(indexHtml, /\(1 cr \/ 500 tok\)/);
 
   // In credits.js, status label setStatus uses "⚡ ... • Token-weighted" without "(1 cr / 500 tok)"
   assert.doesNotMatch(creditsJs, /setStatus\(`⚡[^\n`]*1 cr \/ 500 tok/);
-  assert.match(creditsJs, /setStatus\(`⚡ \$\{selectedTier\.toUpperCase\(\)\} • Token-weighted`\)/);
+  assert.match(creditsJs, /setStatus\([^)]*Token-weighted`\)/);
   assert.match(creditsJs, /• Token-weighted`/);
 
   // Live receipt footer remains intact
@@ -5035,8 +5035,8 @@ test("Chatbot Viewport & Compact Controls: Spacious thread layout, low-profile s
   assert.match(stylesCode, /\.msg-content\s*\{[^}]*max-width:\s*min\(92%,\s*1020px\);/);
   assert.match(stylesCode, /\.message\.bot\s+\.msg-content\s*\{[^}]*max-width:\s*min\(94%,\s*1040px\);/);
 
-  // Compact, sleek low-height selector toolbar for Model and Thinking
-  assert.match(stylesCode, /\.chat-tier-controls\s*\{[^}]*min-height:\s*48px;/);
+  // Compact, sleek low-height selector toolbar for Engine, Thinking, and Web Search
+  assert.match(stylesCode, /\.chat-tier-controls\s*\{[^}]*min-height:\s*(?:48|52)px;/);
   assert.match(stylesCode, /\.chat-select\s*\{[^}]*display:\s*flex;\s*align-items:\s*center;/);
 
   // Interactive controls maintain >= 44px touch target for accessibility
@@ -5340,7 +5340,7 @@ test("Chatbot upgrade: Stop-abort control, non-promotional system rules & bottom
   assert.match(credits, /receipt\.className = 'chat-credit-receipt'/);
   assert.match(credits, /⚡ Credits used:/);
   assert.match(credits, /Remaining:/);
-  assert.match(credits, /setStatus\(`⚡ \$\{tierDisplayName\} • Ready`\)/);
+  assert.match(credits, /setStatus\(`⚡ \$\{tierDisplayName\}\$\{webLabel\} • Ready`\)/);
 });
 
 test("Flagship upgrade: Mobile virtual keyboard viewport & visualViewport tracking", async () => {
@@ -6126,10 +6126,10 @@ test("Mobile UX & Ergonomics: Model & Thinking Selectors, Viewport Safety, Z-Ind
   // 1. HTML semantics and ARIA markup for Model and Thinking controls
   assert.match(html, /id="chatTierTrigger"[^>]*role="combobox"[^>]*aria-haspopup="listbox"[^>]*aria-controls="chatTierOptions"/);
   assert.match(html, /id="chatTierOptions"[^>]*role="listbox"/);
-  assert.match(html, /data-value="lite"[^>]*data-label="Economy \(1\.0x\)"/);
-  assert.match(html, /data-value="pro"[^>]*data-label="Standard \(3\.0x\)"/);
-  assert.match(html, /data-value="max"[^>]*data-label="Flagship \(18\.0x\)"/);
-  assert.match(html, /data-value="ultra"[^>]*data-label="Ultra Flagship \(18\.0x\)"/);
+  assert.match(html, /data-value="lite"[^>]*data-label="Core Engine \(1\.0x\)"/);
+  assert.match(html, /data-value="pro"[^>]*data-label="Pro Engine \(3\.0x\)"/);
+  assert.match(html, /data-value="max"[^>]*data-label="Deep Reasoning \(18\.0x\)"/);
+  assert.match(html, /data-value="ultra"[^>]*data-label="Ultra Reasoning"/);
 
   assert.match(html, /id="chatThinkingTrigger"[^>]*role="combobox"[^>]*aria-haspopup="listbox"[^>]*aria-controls="chatThinkingOptions"/);
   assert.match(html, /id="chatThinkingOptions"[^>]*role="listbox"/);

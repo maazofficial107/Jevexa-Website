@@ -19,7 +19,7 @@
             input: tierSelect,
             trigger: document.getElementById('chatTierTrigger'),
             menu: document.getElementById('chatTierOptions'),
-            label: 'Model'
+            label: 'Engine'
         },
         thinking: {
             input: thinkingSelect,
@@ -62,6 +62,44 @@
     const accountTiers = { free: 'lite', starter: 'pro', lite: 'pro', pro: 'pro', business: 'max', max: 'max', ultra: 'ultra' };
     const tierOrder = ['lite', 'pro', 'max', 'ultra'];
     const thinkingOrder = ['off', 'low', 'standard', 'max'];
+
+    function isWebSearchAllowed() {
+        return Boolean(activeAuthUserId)
+            && !['free', 'lite', 'starter'].includes(currentUserPlan)
+            && ['pro', 'max', 'ultra'].includes(maximumChatTier);
+    }
+
+    function syncWebSearchUI() {
+        const btn = document.getElementById('chatWebSearchBtn');
+        const badge = document.getElementById('chatComposerWebBadge');
+        const allowed = isWebSearchAllowed();
+        if (!allowed && webSearchEnabled) {
+            webSearchEnabled = false;
+        }
+        if (btn) {
+            btn.dataset.locked = String(!allowed);
+            btn.classList.toggle('is-locked', !allowed);
+            btn.setAttribute('aria-pressed', String(webSearchEnabled));
+            btn.classList.toggle('active', webSearchEnabled);
+            const labelEl = btn.querySelector('.chat-web-search-label') || btn.querySelector('span:not(.chat-web-search-pill)');
+            if (labelEl) {
+                labelEl.textContent = webSearchEnabled ? 'Web Search ON (+5 cr)' : 'Web Search (+5 cr)';
+            }
+            const pillEl = btn.querySelector('.chat-web-search-pill');
+            if (pillEl) {
+                pillEl.textContent = !allowed ? 'PRO' : (webSearchEnabled ? 'ON' : 'OFF');
+            }
+            btn.setAttribute(
+                'aria-label',
+                !allowed
+                    ? 'Live Web Search requires Pro, Max, or Ultra plan. Click to view upgrade options.'
+                    : `Live Web Search (+5 credits per request): ${webSearchEnabled ? 'On' : 'Off'}`
+            );
+        }
+        if (badge) {
+            badge.hidden = !webSearchEnabled;
+        }
+    }
 
     const PLAN_MEMORY_CONFIG = {
         free: { maxMemories: 5, maxMemoryChars: 200, maxHistoryMessages: 6, label: 'Free Plan' },
@@ -143,7 +181,7 @@
         control.menu.style.overscrollBehavior = 'contain';
         control.menu.style.webkitOverflowScrolling = 'touch';
 
-        const menuWidth = Math.min(260, Math.max(190, control.menu.offsetWidth || 210));
+        const menuWidth = Math.min(290, Math.max(220, control.menu.offsetWidth || 235));
         const menuHeight = Math.max(120, control.menu.offsetHeight || 180);
 
         const spaceAbove = triggerRect.top - vTop - margin;
@@ -237,7 +275,7 @@
         if (isLocked) {
             const requiredPlan = name === 'thinking'
                 ? value === 'max' ? 'Max' : 'Pro'
-                : ({ pro: 'Pro', max: 'Max', ultra: 'Ultra' })[value] || 'Pro';
+                : ({ pro: 'Lite', max: 'Max', ultra: 'Ultra' })[value] || 'Lite';
             closeSelector(name);
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
                 window.JEVEXA_SHOW_UPGRADE_MODAL(requiredPlan, option.dataset.label || control.label, control.trigger);
@@ -379,14 +417,16 @@
         updateSelectorDisplay('tier');
         tierSelect.setAttribute('aria-label', 'AI chat tier. Sign in to confirm your maximum tier.');
         if (thinkingSelect) {
-            maximumThinkingLevel = 'low';
-            currentThinkingLevel = 'low';
-            thinkingSelect.value = 'low';
+            maximumThinkingLevel = 'off';
+            currentThinkingLevel = 'off';
+            thinkingSelect.value = 'off';
             selectorOptions('thinking').forEach(option => {
-                option.dataset.locked = String(option.dataset.value !== 'low');
+                option.dataset.locked = String(option.dataset.value !== 'off');
             });
             updateSelectorDisplay('thinking');
         }
+        webSearchEnabled = false;
+        syncWebSearchUI();
     }
 
     function clearAccountChatState() {
@@ -1025,6 +1065,8 @@
         updateChatWelcome();
         pendingAttachments.length = 0;
         renderAttachments();
+        webSearchEnabled = false;
+        syncWebSearchUI();
         renderChatHistory();
         setStatus('New chat started.');
         document.getElementById('chatInput')?.focus();
@@ -1042,6 +1084,8 @@
             }
         }
         activeChatId = sessionId;
+        webSearchEnabled = Boolean(session.webSearch) && isWebSearchAllowed();
+        syncWebSearchUI();
         if (historyUserId) {
             try {
                 localStorage.setItem(activeChatKey(historyUserId), sessionId);
@@ -1051,7 +1095,7 @@
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = conversation.length > 0;
-        conversation.forEach((item, index) => appendMessage(item.text, item.role === 'user', index));
+        conversation.forEach((item, index) => appendMessage(item.text, item.role === 'user', index, item.meta || null));
         const emptyState = document.getElementById('chatEmptyState');
         if (emptyState) emptyState.hidden = conversation.length > 0;
         updateChatWelcome();
@@ -1282,22 +1326,14 @@
                 currentThinkingLevel = thinkingSelect.value;
                 updateSelectorDisplay('thinking');
             }
-            const webSearchBtn = document.getElementById('chatWebSearchBtn');
-            if (webSearchBtn) {
-                const searchAllowed = !['free', 'lite', 'starter'].includes(currentUserPlan) && ['pro', 'max', 'ultra'].includes(maximumTier);
-                if (!searchAllowed && webSearchEnabled) {
-                    webSearchEnabled = false;
-                    webSearchBtn.setAttribute('aria-pressed', 'false');
-                    webSearchBtn.classList.remove('active');
-                }
-                webSearchBtn.dataset.locked = String(!searchAllowed);
-            }
+            syncWebSearchUI();
         } catch (tierErr) {
             console.warn('Chat tier lookup notice, defaulting to lite:', tierErr?.message || tierErr);
             maximumChatTier = 'lite';
             currentTier = 'lite';
             if (tierSelect) tierSelect.value = 'lite';
             updateSelectorDisplay('tier');
+            syncWebSearchUI();
         }
     }
 
@@ -2066,6 +2102,7 @@
             const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
             if (!session) {
                 if (statusText) statusText.textContent = 'AI chat • Sign-in required';
+                lockChatTiers();
                 updateChatWelcome(null);
                 return;
             }
@@ -2635,11 +2672,20 @@
         if (!meta) return;
         const used = Number.isInteger(meta.creditsUsed) ? meta.creditsUsed : (Number.isInteger(meta.credits_used) ? meta.credits_used : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged : null));
         const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
-        const tierNameMap = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
-        const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Lite';
+        const tierNameMap = { lite: 'Jevexa Core', pro: 'Jevexa Pro', max: 'Jevexa Deep Reasoning', ultra: 'Jevexa Ultra Reasoning' };
+        const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Core';
         const fullModelName = activeModel.startsWith('Jevexa ') ? activeModel : `Jevexa ${activeModel}`;
+        const webGrounded = Boolean(meta.webSearch);
+        const webSurcharge = Number(meta.webSearchSurcharge) || 5;
         if (used !== null && remaining !== null) {
-            setStatus(`⚡ ${fullModelName} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
+            const webLabel = webGrounded ? ' • 🌐 Web Search ON' : '';
+            setStatus(`⚡ ${fullModelName}${webLabel} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
+        }
+        if (webGrounded) {
+            const webBadge = document.createElement('div');
+            webBadge.className = 'chat-web-grounded-badge';
+            webBadge.innerHTML = `<i class="fas fa-globe" aria-hidden="true"></i><span>Web Search Grounded (+${webSurcharge} cr)</span>`;
+            content.appendChild(webBadge);
         }
         const receipt = document.createElement('div');
         receipt.className = 'chat-credit-receipt';
@@ -2767,12 +2813,23 @@
         typing.id = 'typingMsg';
         typing.setAttribute('role', 'status');
         typing.setAttribute('aria-live', 'polite');
+        const isSearchingWeb = Boolean(webSearchEnabled && isWebSearchAllowed());
+        const liveStates = isSearchingWeb
+            ? [
+                { text: 'Searching the web...', icon: 'fa-globe' },
+                { text: 'Synthesizing live results...', icon: 'fa-wand-magic-sparkles' }
+            ]
+            : [
+                { text: 'Thinking...', icon: 'fa-brain' },
+                { text: 'Generating response...', icon: 'fa-wand-magic-sparkles' }
+            ];
+
         typing.innerHTML = `
             <div class="msg-avatar"><i class="fas fa-wand-magic-sparkles"></i></div>
             <div class="msg-content live-status-bubble">
                 <div class="live-status-indicator">
-                    <div class="live-status-icon-wrap"><i class="fas fa-brain" id="liveChatIcon"></i></div>
-                    <span class="live-status-text" id="liveChatStatusText">Thinking...</span>
+                    <div class="live-status-icon-wrap"><i class="fas ${liveStates[0].icon}" id="liveChatIcon"></i></div>
+                    <span class="live-status-text" id="liveChatStatusText">${liveStates[0].text}</span>
                     <div class="live-status-dots" aria-hidden="true">
                         <span class="live-dot"></span>
                         <span class="live-dot"></span>
@@ -2785,11 +2842,6 @@
         scrollChatToBottom(false);
 
         clearTypingTimers();
-
-        const liveStates = [
-            { text: 'Thinking...', icon: 'fa-brain' },
-            { text: 'Generating response...', icon: 'fa-wand-magic-sparkles' }
-        ];
 
         function setPhase(idx) {
             const textEl = document.getElementById('liveChatStatusText');
@@ -3053,10 +3105,10 @@
             return "Here is a professional outreach email template:\n\n**Subject:** Streamlining your AI workflow at [Company Name]\n\nHi [First Name],\n\nI noticed your team is scaling operations and thought you might be interested in automating repetitive content and customer queries.\n\nAt JEVEXA, our AI tools help teams save 15+ hours weekly with intelligent chat, automated drafting, and workflow integrations. Would you be open to a quick 5-minute look this week?\n\nBest regards,\n[Your Name]\n\n*Tip:* You can generate personalized email sequences using our Content Generation tool with your 100 free credits!";
         }
         if (/credit|token|balance|cost|quota/i.test(q)) {
-            return "JEVEXA credits power all 10 live studio tools with transparent unit economics:\n• **100 Free Signup Credits:** Included immediately upon sign-up (capped at 15 credits/day burn limit).\n• **Token-Weighted Chat:** 1 credit per 500 base tokens (input + output + thinking tokens), scaled across Economy (1.0x), Standard (3.0x), and Flagship Reasoning (18.0x) models + attachment surcharges.\n• **Real-Time Web Search:** +5 credits per grounded search request (Pro 15/day, Max 50/day, Ultra 150/day).\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount** and a 7-day refund policy!";
+            return "JEVEXA credits power all 10 live studio tools with transparent unit economics:\n• **100 Free Welcome Credits:** Included immediately upon sign-up.\n• **Token-Weighted Chat:** Usage scales cleanly across Fast / Core Engine (1.0x), Pro Engine (3.0x), and Deep Reasoning Engine (18.0x) + attachment surcharges.\n• **Real-Time Web Search:** +5 credits per grounded search request (Pro 15/day, Max 50/day, Ultra 150/day).\n• **Credit Packages:** One-time purchases with an automatic **20% annual discount** and a 7-day refund policy!";
         }
         if (/price|pricing|plan|ultra|pro|lite|max|annual|discount/i.test(q)) {
-            return "JEVEXA offers 5 transparent tiers with an automatic 20% annual package discount:\n• **Free ($0):** 100 signup credits (max 15/day), Economy Tier (1.0x), thinking OFF\n• **Lite:** $5/mo ($4/mo annual, $48/yr) — 2,500 monthly credits (~1.25M fast tokens), Standard Tier (3.0x), PDF + ZIP unlocked\n• **Pro:** $15/mo ($12/mo annual, $144/yr) — 10,000 monthly credits (~5M tokens), Low/Medium thinking, Web Search (15/day, +5 cr/req)\n• **Max:** $29/mo ($23.20/mo annual, $278.40/yr) — 22,000 monthly credits (~11M tokens), Flagship Reasoning (18.0x), High/Max thinking, Web Search (50/day)\n• **Ultra:** $49/mo ($39.20/mo annual, $470.40/yr) — 40,000 monthly credits (~20M tokens), Priority Flagship (18.0x), Web Search (150/day).\nAll annual packages are discounted by 20% and paid once!";
+            return "JEVEXA offers 5 transparent tiers with an automatic 20% annual package discount:\n• **Free ($0):** 100 welcome credits, Fast / Core Engine (1.0x), thinking OFF\n• **Lite:** $5/mo ($4/mo annual, $48/yr) — 2,500 monthly credits, Pro Engine (3.0x), PDF + ZIP unlocked\n• **Pro:** $15/mo ($12/mo annual, $144/yr) — 10,000 monthly credits, Low/Medium thinking, Web Search (15/day, +5 cr/req)\n• **Max:** $29/mo ($23.20/mo annual, $278.40/yr) — 22,000 monthly credits, Deep Reasoning Engine (18.0x), High thinking & priority queues, Web Search (50/day)\n• **Ultra:** $49/mo ($39.20/mo annual, $470.40/yr) — 40,000 monthly credits, Maximum Deep Reasoning & priority compute, Max thinking depth, Web Search (150/day).\nAll annual packages are discounted by 20% and paid once!";
         }
         if (/tool|feature|capabilities|model|ocr|crm/i.test(q)) {
             return "All 10 JEVEXA AI Studio tools are live today: AI Chat, Content Generation, Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, Team Admin, Workflow Automation, and Data Management. Sign in to test all 10 tools with 100 free credits!";
@@ -3397,7 +3449,7 @@
                 return;
             }
 
-            setStatus(`⚡ ${selectedTier.toUpperCase()} • Token-weighted`);
+            setStatus(webSearchEnabled ? `⚡ ${selectedTier.toUpperCase()} • Web Search ON • Token-weighted` : `⚡ ${selectedTier.toUpperCase()} • Token-weighted`);
 
             let streamedText = '';
             let streamBubble = null;
@@ -3476,7 +3528,10 @@
 
                 removeTyping();
                 const replyText = String(result.reply || streamedText || '').trim();
-                conversation.push({ role: 'assistant', text: replyText });
+                const replyMeta = result?.webSearch
+                    ? { webSearch: true, webSearchSurcharge: Number(result.webSearchSurcharge) || 5 }
+                    : null;
+                conversation.push({ role: 'assistant', text: replyText, ...(replyMeta ? { meta: replyMeta } : {}) });
                 trimConversationToMax(100);
                 const assistantMsgIndex = conversation.length - 1;
 
@@ -3516,10 +3571,11 @@
                 }
                 const tierDisplayName = result?.modelName || result?.model || (selectedTier ? (selectedTier[0].toUpperCase() + selectedTier.slice(1)) : 'Lite');
                 const fullTierName = tierDisplayName.startsWith('Jevexa ') ? tierDisplayName : `Jevexa ${tierDisplayName}`;
+                const webLabel = result?.webSearch ? ' • 🌐 Web Search ON' : '';
                 if (used !== null && remaining !== null) {
-                    setStatus(`⚡ ${fullTierName} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
+                    setStatus(`⚡ ${fullTierName}${webLabel} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
                 } else {
-                    setStatus(`⚡ ${tierDisplayName} • Ready`);
+                    setStatus(`⚡ ${tierDisplayName}${webLabel} • Ready`);
                 }
                 await refreshDisplayedCredits();
             } catch (error) {
@@ -3991,6 +4047,8 @@
             updateChatWelcome(session?.user || null);
             if (userId) {
                 void initializeChatSession();
+            } else {
+                lockChatTiers();
             }
         });
     }
@@ -4082,9 +4140,14 @@
         }
         currentTier = tier;
         updateSelectorDisplay('tier');
-        const tierMultipliers = { lite: '1.0x', pro: '3.0x', max: '18.0x', ultra: '18.0x' };
-        setStatus(`⚡ ${tierMultipliers[tier] || '1.0x'} Model • Token-weighted`);
-        const activeModelName = ({ lite: 'Economy (1.0x)', pro: 'Standard (3.0x)', max: 'Flagship (18.0x)', ultra: 'Ultra Flagship (18.0x)' })[tier] || 'Economy (1.0x)';
+        const tierStatusLabels = {
+            lite: 'Core Engine (1.0x)',
+            pro: 'Pro Engine (3.0x)',
+            max: 'Deep Reasoning (18.0x)',
+            ultra: 'Ultra Reasoning'
+        };
+        const activeModelName = tierStatusLabels[tier] || 'Core Engine (1.0x)';
+        setStatus(`⚡ ${activeModelName}${webSearchEnabled ? ' • 🌐 Web Search ON' : ''} • Token-weighted`);
         const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
         if (statusText && activeAuthUserId) statusText.textContent = `${activeModelName} • Online`;
     });
@@ -4108,24 +4171,35 @@
         currentThinkingLevel = selected;
         updateSelectorDisplay('thinking');
     });
-    document.getElementById('chatWebSearchBtn')?.addEventListener('click', () => {
+    const webSearchBtnEl = document.getElementById('chatWebSearchBtn');
+    bindSafe(webSearchBtnEl, 'click', () => {
         const btn = document.getElementById('chatWebSearchBtn');
-        const searchAllowed = !['free', 'lite', 'starter'].includes(currentUserPlan) && ['pro', 'max', 'ultra'].includes(maximumChatTier);
-        if (!searchAllowed) {
+        if (!isWebSearchAllowed()) {
+            webSearchEnabled = false;
+            syncWebSearchUI();
             if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'Real-Time Web Search Grounding (Pro 15/day, Max 50/day, Ultra 150/day)', btn);
+                window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'Live Web Search', btn);
             } else {
-                setStatus('Real-Time Web Search requires Pro ($15/mo), Max ($29/mo), or Ultra ($49/mo).');
+                setStatus('Live Web Search requires Pro ($15/mo), Max ($29/mo), or Ultra ($49/mo).', true);
             }
             return;
         }
         webSearchEnabled = !webSearchEnabled;
-        if (btn) {
-            btn.setAttribute('aria-pressed', String(webSearchEnabled));
-            btn.classList.toggle('active', webSearchEnabled);
+        if (activeChatId) {
+            const activeSess = chatSessions.find(item => item.id === activeChatId);
+            if (activeSess) {
+                activeSess.webSearch = webSearchEnabled;
+                saveChatSessions();
+            }
         }
-        setStatus(webSearchEnabled ? '🌐 Web Search Grounding ON (+5 cr/request)' : '⚡ Token-weighted');
+        syncWebSearchUI();
+        setStatus(webSearchEnabled ? '🌐 Web Search ON (+5 cr/request)' : '⚡ Core Engine • Token-weighted');
+    }, {
+        getKey: () => document.getElementById('chatWebSearchBtn'),
+        preventDefaultOnDebounce: false,
+        debounceMs: 80
     });
+    syncWebSearchUI();
     document.getElementById('chatTheme')?.addEventListener('change', event => {
         const themeVal = event.target.value || 'dark';
         chatCustomSettings.theme = themeVal;

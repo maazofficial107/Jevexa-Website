@@ -411,6 +411,31 @@
                     submitBtn.textContent = 'Request Activation & Payment Link';
                 }
             });
+
+            try {
+                const params = new URLSearchParams(window.location.search || '');
+                const requestedPlan = (params.get('plan') || '').trim().toLowerCase();
+                const cardSelectorMap = {
+                    free: 'starter', starter: 'lite', lite: 'lite',
+                    pro: 'pro',
+                    business: 'max', max: 'max',
+                    ultra: 'ultra'
+                };
+                const targetPlan = cardSelectorMap[requestedPlan];
+                if (targetPlan) {
+                    const dataPlan = targetPlan === 'lite' ? 'starter' : (targetPlan === 'max' ? 'business' : targetPlan);
+                    const targetTrigger = document.querySelector(`.js-plan-trigger[data-plan="${dataPlan}"]`);
+                    const targetCard = targetTrigger?.closest('.pricing-card');
+                    if (targetCard) {
+                        setTimeout(() => {
+                            targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            targetCard.style.borderColor = '#22d3ee';
+                            targetCard.style.boxShadow = '0 0 0 2px rgba(34, 211, 238, 0.45), 0 24px 60px rgba(139, 92, 246, 0.28)';
+                            targetTrigger.focus({ preventScroll: true });
+                        }, 180);
+                    }
+                }
+            } catch (_) {}
         })();
     </script>
 </body>

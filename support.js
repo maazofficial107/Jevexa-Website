@@ -77,6 +77,7 @@
     function addAiMessage(text, user = false) {
         const message = document.createElement('p');
         message.className = `support-ai-message${user ? ' user' : ''}`;
+        message.style.whiteSpace = 'pre-line';
         message.textContent = text;
         aiMessages.appendChild(message);
         aiMessages.scrollTop = aiMessages.scrollHeight;
@@ -109,7 +110,14 @@
     });
 
     function generateClientSupportReply(userMessage) {
-        const q = String(userMessage || '').toLowerCase().trim();
+        const raw = String(userMessage || '').trim();
+        const q = raw.toLowerCase();
+        if (/\b(?:kya|kaise|kese|hai|hain|hoon|mujhe|batao|samjhao|karo|krdo|kar\s+do|shukriya|salam|bhai|madad)\b/i.test(q)) {
+            if (/price|pricing|plan|pro|max|ultra|lite|cost|kharch|kitna/i.test(q)) {
+                return "JEVEXA ke 5 transparent plans hain (20% annual discount ke saath):\n• Free ($0): 100 welcome credits, Core Engine (1.0x)\n• Lite ($5/mo): 2,500 credits/mo, Pro Engine (3.0x), PDF/ZIP uploads\n• Pro ($15/mo): 10,000 credits/mo, Low/Medium thinking, Web Search (15/day)\n• Max ($29/mo): 22,000 credits/mo, Deep Reasoning (18.0x), High thinking, Web Search (50/day)\n• Ultra ($49/mo): 40,000 credits/mo, Ultra Reasoning, Web Search (150/day)\nDetails ke liye /pricing dekhein ya 'Talk to Human' click karein.";
+            }
+            return "Assalam-o-Alaikum! Main JEVEXA Support Assistant hoon. Aap mujhse pricing (/pricing), 100 free credits, 10 AI tools, Web Search ya Thinking levels ke baare mein pooch sakte hain. Agar account issue ho toh 'Talk to Human' par click karein.";
+        }
         if (/reconcil|stuck|hold|held|awaiting safe|locked|unlock/i.test(q)) {
             return "If an AI message or credit reservation ever displays 'awaiting reconciliation', our system automatically releases any stale pending hold older than 15–30 seconds and restores the held credits to your wallet. You can also click 'Clear & Unlock Chat' in the chat header to reset your session immediately. If you need any manual account adjustment, click 'Talk to Human' below!";
         }
@@ -134,10 +142,7 @@
         if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
             return "You can sign up or sign in using the 'Get Started' or 'Sign In' button at the top right of the page. Once signed in, your account receives 100 free welcome credits immediately to use across all 10 AI tools. If you forgot your password, use the 'Forgot password?' link in the login dialog.";
         }
-        if (/^(hi|hello|hey|greetings|howdy|salam|aoa)\b/i.test(q)) {
-            return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our 10 live AI tools (AI Chat, Content Generation, Outreach, CRM, OCR, Social, Analytics, Team Admin, Workflows, Data Management), token-weighted credit rates (1 credit per 500 tokens), progressive file upload rules, pricing plans (Lite, Pro, Max, Ultra with 20% annual discount), or account setup. You can also click 'Talk to Human' to reach Maaz directly!";
-        }
-        return "Hello! I am the JEVEXA Support Assistant. I can help answer questions about our AI tools, credit packages (Lite, Pro, Max, Ultra with 20% annual discount), platform features, and account setup. For complex queries or direct account assistance, feel free to click 'Talk to Human' to reach Maaz and our team!";
+        return "I can help with JEVEXA plans (/pricing), credit rates, Web Search & Thinking caps, uploads, or any of our 10 live AI tools. Ask your exact question or click 'Talk to Human' for account help.";
     }
 
     bindSafe(aiForm, 'submit', async event => {
@@ -153,12 +158,12 @@
         aiInput.disabled = true;
         addAiMessage(message, true);
         aiInput.value = '';
-        const typing = addAiMessage('Connecting to Jevexa Support AI…');
+        const typing = addAiMessage('Thinking…');
         let controller = null;
         let timeoutId = null;
         try {
             controller = new AbortController();
-            timeoutId = window.setTimeout(() => controller.abort(), 20000);
+            timeoutId = window.setTimeout(() => controller.abort(), 12000);
             const response = await fetch('/api/support/ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

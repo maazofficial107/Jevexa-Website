@@ -259,14 +259,14 @@ function detectScriptAndLanguage(text) {
   const lower = raw.toLowerCase();
   const strongRomanMarkers = [
     /\b(?:kese|kaise)\s+ho\b/,
-    /\bkya\s+(?:haal|hal|chal|scene|hua|hai|kar)\b/,
-    /\b(?:samjha\s+do|samjhao|batao|bataiye|likh\s+do|kar\s+do|kardo|chahiye|chahta|chahti|mujhe|mujhko|aapka|aapko|tumhara|tumko|hamara|shukriya|salam|assalam|walaikum|kyunki|kyunke|nahi|nhi|theek\s+hai|bohot|bahut)\b/
+    /\bkya\s+(?:haal|hal|chal|scene|hua|hai|kar|kr)\b/,
+    /\b(?:samjha\s*do|samjhao|batao|btao|batado|bata\s*do|bataiye|likh\s*do|likho|kar\s*do|kardo|kr\s*do|krdo|bana\s*do|banado|banao|chahiye|chahta|chahti|mujhe|mujhko|aapka|aapko|tumhara|tumko|hamara|shukriya|salam|assalam|walaikum|kyunki|kyunke|kyunkay|nahi|nhi|theek\s+hai|bohot|bahut)\b/
   ];
   if (strongRomanMarkers.some(rx => rx.test(lower))) {
     return { code: "roman_urdu", label: "Roman Urdu" };
   }
 
-  const romanWordTokens = lower.match(/\b(?:kya|kaise|kese|kaisa|kaisi|hai|hain|hun|hoon|mein|hum|tum|aap|mera|meri|mere|apna|apni|apne|karo|karna|krna|karen|karein|hoga|hogi|honge|tha|thi|the|gaya|gayi|gaye|raha|rahi|rahe|bhai|yaar|dost|sawal|jawab|masla|madad|abhi|phir|pehle|baad|kyun|kab|kahan|kitna|kitne|koi|kuch|sab|zyada|acha|accha|sahi|galat|aur|lekin|magar|wala|wali|wale|walay|bhi|sirf|bilkul)\b/g) || [];
+  const romanWordTokens = lower.match(/\b(?:kya|kaise|kese|kaisa|kaisi|hai|hain|hun|hoon|mein|hum|tum|aap|mera|meri|mere|apna|apni|apne|ye|yeh|wo|woh|kar|kr|karo|karna|krna|karen|karein|hoga|hogi|honge|tha|thi|the|gaya|gayi|gaye|raha|rahi|rahe|bhai|yaar|dost|sawal|jawab|masla|madad|abhi|phir|pehle|baad|kyun|kab|kahan|kitna|kitne|koi|kuch|sab|zyada|acha|accha|theek|sahi|galat|matlab|zaroor|aur|lekin|magar|wala|wali|wale|walay|bhi|sirf|bilkul)\b/g) || [];
   if (new Set(romanWordTokens).size >= 2) {
     return { code: "roman_urdu", label: "Roman Urdu" };
   }
@@ -312,16 +312,51 @@ function resolveConversationLanguage(message, history = [], customLanguage = "au
   };
 }
 
-function buildChatSystemPrompt(tier = "lite", thinkingLevel = "low", options = {}) {
+function buildChatSystemPrompt(tier = "lite", thinkingLevel = "off", options = {}) {
   const activeModel = JEVEXA_MODEL_NAMES[tier] || "Jevexa Lite";
-  const thinkingDesc = thinkingLevel === "max" ? "Max reasoning depth" : (thinkingLevel === "standard" ? "Standard reasoning depth" : "Low reasoning depth");
+  const normThinking = typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "off";
+  const thinkingProfiles = {
+    off: {
+      label: "Off (Fast & Direct)",
+      instruction: "THINKING DEPTH = OFF: Deliver crisp, fast, straight-to-the-point answers. Skip verbose preambles and focus directly on the exact solution."
+    },
+    low: {
+      label: "Low reasoning depth",
+      instruction: "THINKING DEPTH = LOW: Quickly verify key facts and edge cases, then give a concise, structured, practical answer."
+    },
+    standard: {
+      label: "Standard reasoning depth",
+      instruction: "THINKING DEPTH = MEDIUM: Think carefully through steps, constraints, and alternatives before answering cleanly with concrete examples or code."
+    },
+    medium: {
+      label: "Standard reasoning depth",
+      instruction: "THINKING DEPTH = MEDIUM: Think carefully through steps, constraints, and alternatives before answering cleanly with concrete examples or code."
+    },
+    max: {
+      label: "Max reasoning depth",
+      instruction: "THINKING DEPTH = MAX / DEEP: Perform deep first-principles step-by-step analysis. Evaluate trade-offs, failure modes, edge cases, and security/performance implications, then deliver a thorough, executive-grade final answer."
+    },
+    high: {
+      label: "Max reasoning depth",
+      instruction: "THINKING DEPTH = MAX / DEEP: Perform deep first-principles step-by-step analysis. Evaluate trade-offs, failure modes, edge cases, and security/performance implications, then deliver a thorough, executive-grade final answer."
+    }
+  };
+  const thinkingProfile = thinkingProfiles[normThinking] || thinkingProfiles.off;
+  const tierCalibration = {
+    lite: "ENGINE PROFILE (Core Engine 1.0x): Fast, sharp, everyday problem-solving with clean structure and zero bloat.",
+    pro: "ENGINE PROFILE (Pro Engine 3.0x): Higher analytical depth, sharper coding/architecture judgment, and balanced detail.",
+    max: "ENGINE PROFILE (Deep Reasoning 18.0x): Flagship systematic reasoning, multi-angle synthesis, edge-case coverage, and production-grade engineering.",
+    ultra: "ENGINE PROFILE (Ultra Reasoning): Maximum depth, precision, strategic synthesis, and end-to-end execution clarity."
+  }[tier] || "ENGINE PROFILE (Core Engine 1.0x): Fast, clear, practical assistance.";
 
   let prompt = `${SYSTEM_PROMPT}
 
 ACTIVE JEVEXA MODEL IDENTITY:
-- You are currently operating as **${activeModel}** (Tier: ${activeModel}, Thinking Mode: ${thinkingDesc}).
+- You are currently operating as **${activeModel}** (Tier: ${activeModel}, Thinking Mode: ${thinkingProfile.label}).
 - If asked "which model is currently working?", "what model are you?", "which AI model is this?", "who is active?", or any question regarding your current model identity, you must state clearly and directly that you are **${activeModel}**.
-- Always identify yourself as **${activeModel}**. Never claim to be a different tier.`;
+- Always identify yourself as **${activeModel}**. Never claim to be a different tier.
+- ${tierCalibration}
+- ${thinkingProfile.instruction}`;
 
   const custom = options?.customSettings && typeof options.customSettings === "object" ? options.customSettings : {};
   const langResolution = options?.languageResolution || resolveConversationLanguage(
@@ -1416,8 +1451,10 @@ function buildGeminiGenerationConfig(baseConfig, model, thinkingLevel = "off") {
     const budget = (normThinking === "max" || normThinking === "high")
       ? 4096
       : (normThinking === "standard" || normThinking === "medium")
-        ? 1024
-        : 0;
+        ? 1536
+        : (normThinking === "low")
+          ? 512
+          : 0;
     // gemini-2.5-pro requires thinkingBudget >= 128 when thinkingConfig is provided
     if (model.includes("pro") && budget === 0) {
       config.thinkingConfig = { thinkingBudget: 128 };
@@ -3770,6 +3807,10 @@ async function handleChat(request, env, ctx) {
   let lastProviderError = null;
   let activeProviderName = "AI";
 
+  const effectiveTemperature = effectiveThinkingLevel === "max"
+    ? 0.45
+    : (effectiveThinkingLevel === "off" ? 0.6 : 0.55);
+
   const executeGroqChat = async ({ stream = false, onToken = null } = {}) => {
     if (!groqApiKey) return false;
     if (hasPdfAttachments) return false;
@@ -3781,7 +3822,7 @@ async function handleChat(request, env, ctx) {
       systemInstruction: tierSystemPrompt,
       messages: groqMessages,
       maxTokens: parsed.maxOutputTokens,
-      temperature: 0.6,
+      temperature: effectiveTemperature,
       requestId,
       serviceName: "Chat",
       models: groqModels,
@@ -3816,7 +3857,7 @@ async function handleChat(request, env, ctx) {
     const userParts = await buildGeminiUserParts(parsed.message, parsed.attachments);
     const contents = buildGeminiContents(parsed.history, userParts);
     const generationConfig = {
-      temperature: 0.6,
+      temperature: effectiveTemperature,
       maxOutputTokens: parsed.maxOutputTokens
     };
 
@@ -8241,7 +8282,21 @@ async function handleSupportAi(request, env) {
     return json({ reply: generateContextualSupportResponse(message, history) });
   }
 
-  const supportPrompt = "You are Jevexa Support AI. Answer FAQs about JEVEXA pricing, credits, account setup, and how to use the available tools. Match the user's language (English, Urdu, or Roman Urdu). NEVER claim to be human. Always offer 'Talk to Human' for complex issues, billing disputes, account-specific requests, or anything you cannot verify. Do not invent policies, prices, features, or account details. Keep responses concise and safe.";
+  const detectedLang = detectScriptAndLanguage(message);
+  const supportPrompt = `You are Jevexa Support AI for jevexa.net. Answer the user's EXACT question directly, accurately, cleanly, and concisely with short bullets when helpful. Avoid generic fluff, repetition, or robotic filler.
+
+LANGUAGE RULE: Always respond in ${detectedLang.label || "the exact language and script of the user's message"} (English, Roman Urdu, Urdu script, Arabic, Hindi, etc.).
+
+ACCURATE PLATFORM FACTS:
+- 10 live Studio tools: AI Chat, Content Generation, Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, Team Admin, Workflow Automation, and Data Management.
+- Plans (one-time credit purchases, no auto-renewal, 20% annual discount, 7-day refund policy if <10% used at /refund-policy):
+  * Free ($0): 100 welcome credits (15 cr/day cap), Core Engine (1.0x), Thinking Off, Web Search locked, up to 5 images (5 MB).
+  * Lite ($5/mo, $48/yr): 2,500 credits/mo, Pro Engine (3.0x), Thinking Off, Images + PDF + ZIP unlocked.
+  * Pro ($15/mo, $144/yr): 10,000 credits/mo, Core & Pro Engines, Low/Medium Thinking, Live Web Search (15/day, +5 cr/request).
+  * Max ($29/mo, $278.40/yr): 22,000 credits/mo, Deep Reasoning Engine (18.0x), High/Max Thinking, Web Search (50/day).
+  * Ultra ($49/mo, $470.40/yr): 40,000 credits/mo, Ultra Reasoning & priority compute, Max Thinking, Web Search (150/day).
+- Credit billing: Token-weighted (1.0x / 3.0x / 18.0x) + Web Search (+5 cr/req) + attachments (+2 Image, +4 PDF, +5 ZIP). Stuck reservations auto-release after 15–30s or via header reset.
+- Human support: Click 'Talk to Human' or email hello@jevexa.net (Response within 24 hours, Mon–Sat). Never claim to be human or invent policies.`;
 
   const executeSupportGroq = async () => {
     if (!groqApiKey) return false;
@@ -8251,8 +8306,8 @@ async function handleSupportAi(request, env) {
       apiKey: groqApiKey,
       systemInstruction: supportPrompt,
       messages: groqMessages,
-      maxTokens: 350,
-      temperature: 0.3,
+      maxTokens: 320,
+      temperature: 0.25,
       requestId: "support-ai",
       serviceName: "SupportAI",
       models: groqModels
@@ -8273,7 +8328,7 @@ async function handleSupportAi(request, env) {
       apiKey: geminiApiKey,
       systemInstruction: supportPrompt,
       contents: supportContents,
-      generationConfig: { temperature: 0.3, maxOutputTokens: 350 },
+      generationConfig: { temperature: 0.25, maxOutputTokens: 320 },
       requestId: "support-ai",
       serviceName: "SupportAI",
       models: geminiModels
@@ -8298,51 +8353,23 @@ async function handleSupportAi(request, env) {
     if (geminiReply) return json({ reply: geminiReply });
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": "https://jevexa.net",
-        "X-Title": "Jevexa"
-      },
-      body: JSON.stringify({
-        model: DEFAULT_OPENROUTER_MODELS.lite,
-        messages: [
-          {
-            role: "system",
-            content: "You are Jevexa Support AI. Answer FAQs about JEVEXA pricing, credits, account setup, and how to use the available tools. NEVER claim to be human. Always offer 'Talk to Human' for complex issues, billing disputes, account-specific requests, or anything you cannot verify. Do not invent policies, prices, features, or account details. Keep responses concise and safe."
-          },
-          ...history,
-          { role: "user", content: message }
-        ],
-        max_tokens: 350,
-        temperature: 0.3
-      })
+  if (apiKey) {
+    const orResult = await executeOpenRouterWithFallback({
+      apiKey,
+      systemInstruction: supportPrompt,
+      messages: [...history, { role: "user", content: message }],
+      maxTokens: 320,
+      temperature: 0.25,
+      requestId: "support-ai",
+      serviceName: "SupportAI",
+      model: DEFAULT_OPENROUTER_MODELS.lite,
+      fallbackModel: DEFAULT_OPENROUTER_MODELS.pro
     });
-    const data = await readJsonResponse(response);
-    if (!response.ok) {
-      console.warn("Support AI provider rejected request, serving contextual fallback:", response.status);
-      return json({ reply: generateContextualSupportResponse(message, history) });
+    if (orResult.ok && orResult.reply) {
+      return json({ reply: orResult.reply });
     }
-    const reply = typeof data?.choices?.[0]?.message?.content === "string"
-      ? data.choices[0].message.content.trim()
-      : "";
-    if (!reply) {
-      return json({ reply: generateContextualSupportResponse(message, history) });
-    }
-    return json({ reply });
-  } catch (error) {
-    const timedOut = error?.name === "AbortError";
-    console.warn("Support AI request failed, serving contextual fallback:", timedOut ? "timeout" : error?.message || "network");
-    return json({ reply: generateContextualSupportResponse(message, history) });
-  } finally {
-    clearTimeout(timeoutId);
   }
+  return json({ reply: generateContextualSupportResponse(message, history) });
 }
 
 

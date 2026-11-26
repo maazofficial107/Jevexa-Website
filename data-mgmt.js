@@ -698,27 +698,29 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
         });
 
         // Copy TSV to Clipboard
-        bindSafe(copyClipboardBtn, 'click', () => {
+        bindSafe(copyClipboardBtn, 'click', async () => {
             if (!ensureCleanedRecordsForExport()) return;
             const headers = Object.keys(state.cleanedRecords[0] || {});
             const rows = state.cleanedRecords.map(r => headers.map(h => String(r[h] ?? '')).join('\t'));
             const tsv = [headers.join('\t'), ...rows].join('\n');
-            const fallbackTsvDownload = () => {
-                downloadFile(`Cleaned_TSV_${new Date().toISOString().split('T')[0]}.tsv`, tsv, 'text/tab-separated-values');
-                window.showToast?.('Cleaned TSV downloaded as file!');
-            };
-            if (navigator.clipboard?.writeText) {
-                navigator.clipboard.writeText(tsv)
-                    .then(() => {
-                        window.showToast?.('Cleaned data copied to clipboard (TSV format, ready for Excel/Sheets)!');
-                        if (statusEl) {
-                            statusEl.textContent = 'TSV data copied to clipboard.';
-                            statusEl.className = 'data-status-msg success';
-                        }
-                    })
-                    .catch(fallbackTsvDownload);
-            } else {
-                fallbackTsvDownload();
+            const ok = typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function'
+                ? await window.JEVEXA_COPY_TO_CLIPBOARD(tsv, {
+                    button: copyClipboardBtn,
+                    copiedHtml: '<i class="fas fa-check"></i> Copied!',
+                    toastMessage: 'TSV copied to clipboard (ready for Excel/Sheets)'
+                })
+                : await (async () => {
+                    try {
+                        await navigator.clipboard.writeText(tsv);
+                        window.showToast?.('TSV copied to clipboard');
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                })();
+            if (ok && statusEl) {
+                statusEl.textContent = 'TSV data copied to clipboard.';
+                statusEl.className = 'data-status-msg success';
             }
         });
 

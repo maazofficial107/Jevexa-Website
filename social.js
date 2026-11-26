@@ -559,25 +559,32 @@
         }
 
         // Copy Post
-        bindSafe(copyPostBtn, 'click', () => {
+        bindSafe(copyPostBtn, 'click', async () => {
             if (!postBodyEl) return;
-            const fullContent = `${postBodyEl.value}\n\n${(state.currentPost?.hashtags || []).join(' ')}`;
-            const fallbackDownload = () => {
-                downloadFile(`Social_Post_${new Date().toISOString().split('T')[0]}.txt`, fullContent, 'text/plain');
-                window.showToast?.('Post draft saved to file!');
-            };
-            if (navigator.clipboard?.writeText) {
-                navigator.clipboard.writeText(fullContent)
-                    .then(() => {
-                        window.showToast?.('Post draft and hashtags copied to clipboard!');
-                        if (statusEl) {
-                            statusEl.textContent = 'Post copied to clipboard.';
-                            statusEl.className = 'social-status-msg success';
-                        }
-                    })
-                    .catch(fallbackDownload);
-            } else {
-                fallbackDownload();
+            const tags = (state.currentPost?.hashtags || []).join(' ').trim();
+            const fullContent = [postBodyEl.value.trim(), tags].filter(Boolean).join('\n\n');
+            if (!fullContent) {
+                window.showToast?.('Generate or enter post copy first.');
+                return;
+            }
+            const ok = typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function'
+                ? await window.JEVEXA_COPY_TO_CLIPBOARD(fullContent, {
+                    button: copyPostBtn,
+                    copiedHtml: '<i class="fas fa-check"></i> Copied!',
+                    toastMessage: 'Post draft copied to clipboard'
+                })
+                : await (async () => {
+                    try {
+                        await navigator.clipboard.writeText(fullContent);
+                        window.showToast?.('Post draft copied to clipboard');
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                })();
+            if (ok && statusEl) {
+                statusEl.textContent = 'Post copied to clipboard.';
+                statusEl.className = 'social-status-msg success';
             }
         });
 

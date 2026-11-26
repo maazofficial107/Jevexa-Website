@@ -873,29 +873,31 @@ Terms: Net 30`
         bindSafe(tabText, 'click', () => switchTab('text'));
 
         // Copy JSON action
-        bindSafe(copyJsonBtn, 'click', () => {
+        bindSafe(copyJsonBtn, 'click', async () => {
             if (!state.currentResult) {
                 const curText = textInput ? textInput.value.trim() : '';
                 state.currentResult = deterministicClientOcr(curText || SAMPLE_DOCS.saas_invoice, 'auto', 'USD');
                 renderExtraction(state.currentResult, curText || SAMPLE_DOCS.saas_invoice);
             }
             const jsonStr = JSON.stringify(state.currentResult, null, 2);
-            const fallbackDownload = () => {
-                downloadFile(`OCR_${state.currentResult.invoice_number || 'document'}.json`, jsonStr, 'application/json');
-                window.showToast?.('Extracted JSON downloaded as file!');
-            };
-            if (navigator.clipboard?.writeText) {
-                navigator.clipboard.writeText(jsonStr)
-                    .then(() => {
-                        window.showToast?.('Extracted JSON copied to clipboard!');
-                        if (statusEl) {
-                            statusEl.textContent = 'JSON copied to clipboard.';
-                            statusEl.className = 'ocr-status-msg success';
-                        }
-                    })
-                    .catch(fallbackDownload);
-            } else {
-                fallbackDownload();
+            const ok = typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function'
+                ? await window.JEVEXA_COPY_TO_CLIPBOARD(jsonStr, {
+                    button: copyJsonBtn,
+                    copiedHtml: '<i class="fas fa-check"></i> Copied!',
+                    toastMessage: 'Extracted JSON copied to clipboard'
+                })
+                : await (async () => {
+                    try {
+                        await navigator.clipboard.writeText(jsonStr);
+                        window.showToast?.('Extracted JSON copied to clipboard');
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                })();
+            if (ok && statusEl) {
+                statusEl.textContent = 'JSON copied to clipboard.';
+                statusEl.className = 'ocr-status-msg success';
             }
         });
 
@@ -918,7 +920,7 @@ Terms: Net 30`
         }
 
         // Copy Text action
-        bindSafe(copyTextBtn, 'click', () => {
+        bindSafe(copyTextBtn, 'click', async () => {
             if (!state.currentResult) {
                 const curText = textInput ? textInput.value.trim() : '';
                 state.currentResult = deterministicClientOcr(curText || SAMPLE_DOCS.saas_invoice, 'auto', 'USD');
@@ -926,22 +928,24 @@ Terms: Net 30`
             }
             const sym = getCurrencySymbol(state.currentResult.currency);
             const summary = `Vendor: ${state.currentResult.vendor_name}\nDoc #: ${state.currentResult.invoice_number}\nDate: ${state.currentResult.date}\nDue Date: ${state.currentResult.due_date}\nSubtotal: ${sym}${state.currentResult.subtotal}\nTax: ${sym}${state.currentResult.tax_amount}\nTotal: ${sym}${state.currentResult.total_amount}\nPayment Status: ${state.currentResult.payment_status}`;
-            const fallbackDownload = () => {
-                downloadFile(`OCR_Summary_${state.currentResult.invoice_number || 'document'}.txt`, summary, 'text/plain');
-                window.showToast?.('Summary downloaded as text file!');
-            };
-            if (navigator.clipboard?.writeText) {
-                navigator.clipboard.writeText(summary)
-                    .then(() => {
-                        window.showToast?.('Formatted summary copied to clipboard!');
-                        if (statusEl) {
-                            statusEl.textContent = 'Summary copied to clipboard.';
-                            statusEl.className = 'ocr-status-msg success';
-                        }
-                    })
-                    .catch(fallbackDownload);
-            } else {
-                fallbackDownload();
+            const ok = typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function'
+                ? await window.JEVEXA_COPY_TO_CLIPBOARD(summary, {
+                    button: copyTextBtn,
+                    copiedHtml: '<i class="fas fa-check"></i> Copied!',
+                    toastMessage: 'Formatted summary copied to clipboard'
+                })
+                : await (async () => {
+                    try {
+                        await navigator.clipboard.writeText(summary);
+                        window.showToast?.('Formatted summary copied to clipboard');
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                })();
+            if (ok && statusEl) {
+                statusEl.textContent = 'Summary copied to clipboard.';
+                statusEl.className = 'ocr-status-msg success';
             }
         });
 

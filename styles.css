@@ -1127,14 +1127,37 @@ section { padding: 100px 0; position: relative; }
 
 /* Toast */
 .toast {
-    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
-    background: var(--surface-2); backdrop-filter: blur(20px);
-    border: 1px solid var(--border-glow); color: var(--text);
-    padding: 16px 28px; border-radius: 50px; font-size: 14px; font-weight: 600;
-    z-index: 10000; opacity: 0; transition: all 0.4s; pointer-events: none;
-    box-shadow: var(--shadow-glow);
+    position: fixed;
+    bottom: max(26px, env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(15, 19, 38, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(167, 139, 250, 0.42);
+    color: #f8fafc;
+    padding: 12px 22px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 650;
+    line-height: 1.35;
+    max-width: min(92vw, 440px);
+    text-align: center;
+    z-index: 100100;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0.22s ease;
+    pointer-events: none;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.48), 0 0 24px rgba(139, 92, 246, 0.22);
 }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+    .toast { transition: opacity 0.1s linear; transform: translateX(-50%); }
+}
 
 /* ===== ADVANCED PREMIUM CHATBOT ===== */
 .chatbot { position: static; z-index: 99999; }
@@ -10003,6 +10026,7 @@ body.chat-is-resizing {
     .chat-tier-controls {
         padding: 8px 10px;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
@@ -17257,6 +17281,9 @@ html.jevexa-reduce-motion *::after {
 }
 
 .chat-tier-controls .chat-web-search-btn {
+    position: relative;
+    z-index: 2;
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -17276,6 +17303,9 @@ html.jevexa-reduce-motion *::after {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+.chat-tier-controls .chat-web-search-btn > * {
+    pointer-events: none;
 }
 .chat-tier-controls .chat-web-search-btn > i {
     font-size: 12.5px;

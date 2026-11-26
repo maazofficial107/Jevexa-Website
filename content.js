@@ -511,27 +511,37 @@
         const text = output.textContent || '';
         if (!text) return;
         try {
-            if (navigator.clipboard?.writeText && window.isSecureContext) {
-                await navigator.clipboard.writeText(text);
+            let ok = false;
+            if (typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function') {
+                ok = await window.JEVEXA_COPY_TO_CLIPBOARD(text, {
+                    button: copyButton,
+                    copiedHtml: '<i class="fas fa-check" aria-hidden="true"></i> Copied!',
+                    toastMessage: 'Copied to clipboard'
+                });
             } else {
-                const temporaryInput = document.createElement('textarea');
-                temporaryInput.value = text;
-                temporaryInput.setAttribute('readonly', '');
-                temporaryInput.style.position = 'fixed';
-                temporaryInput.style.opacity = '0';
-                document.body.appendChild(temporaryInput);
-                let copied = false;
-                try {
-                    temporaryInput.select();
-                    copied = document.execCommand('copy');
-                } finally {
-                    temporaryInput.remove();
+                if (navigator.clipboard?.writeText && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    ok = true;
+                } else {
+                    const temporaryInput = document.createElement('textarea');
+                    temporaryInput.value = text;
+                    temporaryInput.setAttribute('readonly', '');
+                    temporaryInput.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;';
+                    document.body.appendChild(temporaryInput);
+                    try {
+                        temporaryInput.select();
+                        ok = document.execCommand('copy');
+                    } finally {
+                        temporaryInput.remove();
+                    }
                 }
-                if (!copied) throw new Error('Clipboard access was denied.');
+                if (ok) window.showToast?.('Copied to clipboard');
             }
+            if (!ok) throw new Error('Clipboard access was denied.');
             setStatus('Content copied to your clipboard.', 'success');
         } catch {
             setStatus('Copy failed. Select the generated text and copy it manually.', 'error');
+            window.showToast?.('Copy failed. Select text manually.');
         }
     });
 

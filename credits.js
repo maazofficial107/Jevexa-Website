@@ -845,20 +845,28 @@
             }
 
             try {
-                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                let copied = false;
+                if (typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function') {
+                    copied = await window.JEVEXA_COPY_TO_CLIPBOARD(shareText, {
+                        toastMessage: '✓ Chat link copied to clipboard'
+                    });
+                } else if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
                     await navigator.clipboard.writeText(shareText);
-                } else {
+                    copied = true;
+                    window.showToast?.('✓ Chat link copied to clipboard');
+                }
+                if (!copied) {
                     const ta = document.createElement('textarea');
                     ta.value = shareText;
-                    ta.style.position = 'fixed';
-                    ta.style.opacity = '0';
+                    ta.setAttribute('readonly', '');
+                    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;';
                     document.body.appendChild(ta);
                     ta.select();
-                    document.execCommand('copy');
+                    copied = Boolean(document.execCommand('copy'));
                     ta.remove();
+                    if (copied) window.showToast?.('✓ Chat link copied to clipboard');
                 }
-                if (typeof window.showToast === 'function') window.showToast('✓ Chat link copied to clipboard!');
-                else setStatus('Chat link copied to clipboard!');
+                if (!copied) setStatus('Could not copy link to clipboard.');
             } catch (_) {
                 if (typeof window.showToast === 'function') window.showToast('Could not copy link to clipboard');
             }
@@ -3185,10 +3193,23 @@
     }
 
     function generateChatbotGuestReply(queryText) {
-        const q = String(queryText || '').toLowerCase().trim();
+        const raw = String(queryText || '').trim();
+        const q = raw.toLowerCase();
         const activeTier = tierSelect?.value || 'lite';
         const modelNames = { lite: 'Jevexa Lite', pro: 'Jevexa Pro', max: 'Jevexa Max', ultra: 'Jevexa Ultra' };
         const activeModelName = modelNames[activeTier] || 'Jevexa Lite';
+        if (/[\u0600-\u06FF]/.test(raw)) {
+            const isUrdu = /[\u0679\u0688\u0691\u06BA\u06C1\u06BE\u06CC\u06D2\u06AF\u0686\u067E\u06A9]/.test(raw);
+            return isUrdu
+                ? `میں اس وقت ${activeModelName} کے طور پر کام کر رہا ہوں۔ مکمل AI چیٹ استعمال کرنے اور 100 مفت کریڈٹس حاصل کرنے کے لیے براہِ کرم سائن ان کریں۔`
+                : `أنا أعمل الآن بنموذج ${activeModelName}. يُرجى تسجيل الدخول لفتح المحادثة الكاملة والحصول على 100 رصيد مجاني.`;
+        }
+        if (/[\u0900-\u097F]/.test(raw)) {
+            return `मैं अभी ${activeModelName} पर चल रहा हूँ। पूरा AI चैट इस्तेमाल करने और 100 मुफ्त क्रेडिट पाने के लिए कृपया साइन इन करें।`;
+        }
+        if (/\b(?:kya|kaise|kese|hai|hain|hoon|mujhe|batao|samjhao|karo|kardo|kar\s+do|shukriya|salam|bhai|yaar)\b/i.test(q)) {
+            return `Main abhi ${activeModelName} par kaam kar raha hoon. Poora AI chat aur 100 free welcome credits istemal karne ke liye barah-e-karam sign in karein.`;
+        }
         if (/which model|what model|model are you|model is working|active model|current model|who is running/i.test(q)) {
             return `I am currently operating as **${activeModelName}** in JEVEXA AI Studio. My reasoning depth and responses are powered by active ${activeModelName} configuration with transparent token-weighted credit accounting.`;
         }
@@ -3384,6 +3405,44 @@
             return;
         }
 
+        const attachments = pendingAttachments.map(item => ({ ...item }));
+        const displayText = text || `Attached: ${attachments.map(item => item.name).join(', ')}`;
+        const selectedTier = tierSelect?.value || 'lite';
+        const isPaid = isPaidPlanActive();
+
+        // Gate non-image attachments BEFORE mutating conversation or clearing composer
+        if (!isPaid && attachments.some(item => !item.type.startsWith('image/'))) {
+            setStatus('PDF and ZIP uploads require a Paid plan. Upgrade to unlock document and archive files.', true);
+            if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
+                window.JEVEXA_SHOW_UPGRADE_MODAL('Lite', 'PDF & ZIP file uploads', attachButton);
+            }
+            return;
+        }
+
+        // Reconcile any interrupted request BEFORE mutating conversation state
+        try {
+            if (await reconcilePendingRequest(session)) {
+                return;
+            }
+        } catch (_) {}
+
+        // Guarantee active session and user ID
+        historyUserId = session.user.id;
+        activeAuthUserId = session.user.id;
+        if (!activeChatId) {
+            activeChatId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            chatSessions.unshift({
+                id: activeChatId,
+                title: (text || 'New chat').slice(0, 48),
+                updatedAt: Date.now(),
+                pinned: false,
+                messages: []
+            });
+            try {
+                localStorage.setItem(activeChatKey(historyUserId), activeChatId);
+            } catch (_) {}
+        }
+
         // Setup unique AbortController and RequestId for this exact send
         abortInFlightChatRequest();
         const currentAbortController = new AbortController();
@@ -3402,26 +3461,6 @@
         }
         if (input) input.disabled = true;
         if (attachButton) attachButton.disabled = true;
-
-        const attachments = pendingAttachments.map(item => ({ ...item }));
-        const displayText = text || `Attached: ${attachments.map(item => item.name).join(', ')}`;
-
-        // Guarantee active session and user ID
-        historyUserId = session.user.id;
-        activeAuthUserId = session.user.id;
-        if (!activeChatId) {
-            activeChatId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            chatSessions.unshift({
-                id: activeChatId,
-                title: (text || 'New chat').slice(0, 48),
-                updatedAt: Date.now(),
-                pinned: false,
-                messages: []
-            });
-            try {
-                localStorage.setItem(activeChatKey(historyUserId), activeChatId);
-            } catch (_) {}
-        }
 
         // Optimistically record user prompt in conversation and render user bubble immediately
         conversation.push({ role: 'user', text: displayText });
@@ -3451,29 +3490,14 @@
         setStatus('Checking sign-in, tier access, and credit cost…');
 
         try {
-            if (await reconcilePendingRequest(session)) {
-                removeTyping();
-                return;
-            }
-
-            const selectedTier = tierSelect?.value || 'lite';
-            const isPaid = isPaidPlanActive();
-            if (!isPaid && attachments.some(item => !item.type.startsWith('image/'))) {
-                removeTyping();
-                setStatus('PDF and ZIP uploads require a Paid plan. Upgrade to unlock document and archive files.', true);
-                if (typeof window.JEVEXA_SHOW_UPGRADE_MODAL === 'function') {
-                    window.JEVEXA_SHOW_UPGRADE_MODAL('Lite', 'PDF & ZIP file uploads', attachButton);
-                }
-                return;
-            }
-
             const planLimits = getUserPlanMemoryLimits();
             const historyForApi = conversation.slice(0, -1).slice(-planLimits.maxHistoryMessages);
+            const effectiveWebSearch = isWebSearchAllowed() && Boolean(webSearchEnabled);
             const chatPayload = {
                 message: text,
                 tier: selectedTier,
                 thinkingLevel: thinkingSelect?.value || 'off',
-                webSearch: webSearchEnabled,
+                webSearch: effectiveWebSearch,
                 attachments,
                 history: historyForApi,
                 customSettings: getActiveCustomSettings(),
@@ -3482,7 +3506,7 @@
 
             const tierMultipliers = { lite: 1.0, pro: 3.0, max: 18.0, ultra: 18.0 };
             const multiplier = tierMultipliers[selectedTier] || 1.0;
-            let attachmentSurcharge = webSearchEnabled ? 5 : 0;
+            let attachmentSurcharge = effectiveWebSearch ? 5 : 0;
             for (const att of attachments) {
                 const t = (att?.type || '').toLowerCase();
                 if (t.startsWith('image/')) attachmentSurcharge += 2;
@@ -3537,7 +3561,7 @@
             if (wallet && Number(wallet.balance) < estimatedCredits) {
                 removeTyping();
                 const requiredPlanName = selectedTier === 'lite' ? 'Lite' : selectedTier === 'pro' ? 'Pro' : selectedTier === 'max' ? 'Max' : 'Ultra';
-                const warningMsg = `Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ~${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](#pricing) to top up.`;
+                const warningMsg = `Not enough credits for this ${selectedTier.toUpperCase()} message. It costs ~${estimatedCredits} credits; your balance is ${wallet.balance}. [View Upgrade Plans](/pricing) to top up.`;
                 setStatus(`This ${selectedTier.toUpperCase()} message costs ~${estimatedCredits} token-weighted credits; your available balance is ${wallet.balance}. Choose a plan to continue.`, true);
                 conversation.push({ role: 'assistant', text: warningMsg });
                 trimConversationToMax(100);
@@ -3686,7 +3710,8 @@
                 if (streamBubble && !streamFinalized) {
                     streamFinalized = true;
                     streamBubble.row.classList.remove('is-streaming');
-                    if (!streamedText.trim()) streamBubble.row.remove();
+                    streamBubble.row.remove();
+                    streamBubble = null;
                 }
                 removeTyping();
                 await refreshDisplayedCredits();
@@ -3849,6 +3874,10 @@
     });
 
     async function writeClipboardText(text) {
+        if (typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function') {
+            const ok = await window.JEVEXA_COPY_TO_CLIPBOARD(text, { silent: true });
+            if (ok) return true;
+        }
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             try {
                 await navigator.clipboard.writeText(text);
@@ -3858,8 +3887,9 @@
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.setAttribute('readonly', '');
-        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;font-size:16px;';
         document.body.appendChild(ta);
+        ta.focus({ preventScroll: true });
         ta.select();
         let ok = false;
         try { ok = document.execCommand('copy'); } catch (_) {}
@@ -3880,6 +3910,9 @@
             button.classList.remove('copied', 'is-copied');
             button._copyTimer = null;
         }, 2000);
+        if (typeof window.showToast === 'function') {
+            window.showToast('Copied to clipboard');
+        }
         if (statusMsg) setStatus(statusMsg);
     }
 
@@ -4264,8 +4297,12 @@
         currentThinkingLevel = selected;
         updateSelectorDisplay('thinking');
     });
-    const webSearchBtnEl = document.getElementById('chatWebSearchBtn');
-    bindSafe(webSearchBtnEl, 'click', () => {
+    function handleWebSearchButtonActivation(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        closeOtherSelectors();
         const btn = document.getElementById('chatWebSearchBtn');
         if (!isWebSearchAllowed()) {
             webSearchEnabled = false;
@@ -4274,6 +4311,7 @@
                 window.JEVEXA_SHOW_UPGRADE_MODAL('Pro', 'Live Web Search', btn);
             } else {
                 setStatus('Live Web Search requires Pro ($15/mo), Max ($29/mo), or Ultra ($49/mo).', true);
+                window.showToast?.('Live Web Search requires Pro, Max, or Ultra. Visit /pricing to upgrade.');
             }
             return;
         }
@@ -4289,11 +4327,27 @@
         }
         syncWebSearchUI();
         setStatus(formatMinimalStatus({ tier: currentTier, webSearch: webSearchEnabled }));
-    }, {
-        getKey: () => document.getElementById('chatWebSearchBtn'),
-        preventDefaultOnDebounce: false,
-        debounceMs: 80
-    });
+    }
+
+    const tierControlsContainer = document.querySelector('.chat-tier-controls');
+    if (tierControlsContainer) {
+        bindSafe(tierControlsContainer, 'click', event => {
+            const btn = event.target instanceof Element ? event.target.closest('#chatWebSearchBtn') : null;
+            if (!btn) return;
+            handleWebSearchButtonActivation(event);
+        }, {
+            matches: event => event.target instanceof Element && Boolean(event.target.closest('#chatWebSearchBtn')),
+            getKey: () => document.getElementById('chatWebSearchBtn') || tierControlsContainer,
+            preventDefaultOnDebounce: false,
+            debounceMs: 50
+        });
+    } else {
+        bindSafe(document.getElementById('chatWebSearchBtn'), 'click', handleWebSearchButtonActivation, {
+            getKey: () => document.getElementById('chatWebSearchBtn'),
+            preventDefaultOnDebounce: false,
+            debounceMs: 50
+        });
+    }
     syncWebSearchUI();
     document.getElementById('chatTheme')?.addEventListener('change', event => {
         const themeVal = event.target.value || 'dark';

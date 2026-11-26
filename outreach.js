@@ -709,21 +709,27 @@
         const body = emailBodyInput?.value || '';
         const fullText = `Subject: ${subject}\n\n${body}`;
 
+        if (typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function') {
+            await window.JEVEXA_COPY_TO_CLIPBOARD(fullText, {
+                button: copyEmailBtn,
+                copiedHtml: '<i class="fas fa-check"></i> Copied!',
+                toastMessage: 'Subject and email body copied to clipboard'
+            });
+            return;
+        }
         try {
             await navigator.clipboard.writeText(fullText);
-            if (typeof window.showToast === 'function') {
-                window.showToast('Subject and email body copied to clipboard!');
-            }
+            window.showToast?.('Subject and email body copied to clipboard');
         } catch {
             const ta = document.createElement('textarea');
             ta.value = fullText;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none;';
             document.body.appendChild(ta);
             ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            if (typeof window.showToast === 'function') {
-                window.showToast('Copied to clipboard!');
-            }
+            try { document.execCommand('copy'); } catch (_) {}
+            ta.remove();
+            window.showToast?.('Copied to clipboard');
         }
     }
 

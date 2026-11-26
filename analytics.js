@@ -2067,27 +2067,29 @@
         }
 
         // Copy Report Action
-        bindSafe(el.copyReportBtn, 'click', () => {
+        bindSafe(el.copyReportBtn, 'click', async () => {
             if (!state.report || !state.kpis) updateAllViews();
             const curr = state.activeCurrency;
             const text = `JEVEXA EXECUTIVE REPORT\nBusiness Model: ${PRESETS[state.activePreset]?.name || 'Active Data Engine'}\nTime Horizon: ${state.kpis?.timeframe || 'Last 90 Days'}\nHealth Score: ${state.report?.health_score}/100\n\nExecutive Summary:\n${state.report?.executive_summary}\n\nKey Metrics:\n• MRR: ${formatCurrency(state.kpis?.mrr, curr)}\n• ARR: ${formatCurrency(state.kpis?.arr, curr)}\n• Trailing Revenue: ${formatCurrency(state.kpis?.revenue, curr)}\n• Net Margin: ${state.kpis?.net_margin}%\n• LTV/CAC Ratio: ${state.kpis?.ltv_cac_ratio}x\n• Logo Churn: ${state.kpis?.churn_rate}%\n\nRevenue Scenarios (30/60/90-Day):\n• Conservative: ${formatCurrency(state.report?.forecast?.conservative, curr)}\n• Expected: ${formatCurrency(state.report?.forecast?.expected, curr)}\n• Aggressive: ${formatCurrency(state.report?.forecast?.aggressive, curr)}\n\nCore Strengths:\n${(state.report?.top_strengths || []).map(s => '• ' + s).join('\n')}\n\nRisks & Bottlenecks:\n${(state.report?.top_risks || []).map(r => '• ' + r).join('\n')}\n\nStrategic Actions:\n${(state.report?.strategic_actions || []).map((a, i) => `P${i + 1}: ${a}`).join('\n')}`;
 
-            const fallbackReportDownload = () => {
-                downloadFile(`Jevexa_Executive_Report_${new Date().toISOString().split('T')[0]}.txt`, text, 'text/plain');
-                window.showToast?.('Executive report saved as text file!');
-            };
-            if (navigator.clipboard?.writeText) {
-                navigator.clipboard.writeText(text)
-                    .then(() => {
-                        window.showToast?.('Executive report copied to clipboard!');
-                        if (el.status) {
-                            el.status.textContent = 'Report copied to clipboard.';
-                            el.status.className = 'analytics-status-msg success';
-                        }
-                    })
-                    .catch(fallbackReportDownload);
-            } else {
-                fallbackReportDownload();
+            const ok = typeof window.JEVEXA_COPY_TO_CLIPBOARD === 'function'
+                ? await window.JEVEXA_COPY_TO_CLIPBOARD(text, {
+                    button: el.copyReportBtn,
+                    copiedHtml: '<i class="fas fa-check"></i> Copied!',
+                    toastMessage: 'Executive report copied to clipboard'
+                })
+                : await (async () => {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        window.showToast?.('Executive report copied to clipboard');
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                })();
+            if (ok && el.status) {
+                el.status.textContent = 'Report copied to clipboard.';
+                el.status.className = 'analytics-status-msg success';
             }
         });
 

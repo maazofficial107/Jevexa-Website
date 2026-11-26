@@ -290,20 +290,31 @@ function openUpgradeModal(plan, feature, returnFocusElement = document.activeEle
         showToast(`Upgrade to ${plan} to unlock ${feature}.`);
         return;
     }
+    if (window.__jevexaUpgradeCloseTimer !== undefined && window.__jevexaUpgradeCloseTimer !== null) {
+        window.clearTimeout(window.__jevexaUpgradeCloseTimer);
+        window.__jevexaUpgradeCloseTimer = null;
+    }
     const title = document.getElementById('upgradeModalTitle');
     const message = document.getElementById('upgradeModalMessage');
     const planLabel = document.getElementById('upgradeModalPlan');
+    const plansLink = document.getElementById('upgradeModalPlans');
+    const normalizedPlan = (plan || 'lite').toLowerCase().trim();
+    const pricingPlanKey = normalizedPlan === 'max' ? 'business' : (normalizedPlan === 'starter' ? 'lite' : normalizedPlan);
     modal.returnFocusElement = returnFocusElement;
-    modal.dataset.requiredPlan = (plan || 'lite').toLowerCase();
+    modal.dataset.requiredPlan = normalizedPlan;
     const cleanPlan = plan || 'Lite';
     if (title) title.textContent = `Unlock ${feature}`;
     if (message) {
         if (/pdf|zip|file|upload/i.test(feature || '')) {
-            message.textContent = 'Upgrade to any Paid plan (Lite, Pro, Max, or Ultra) to unlock PDF, ZIP, and document uploads.';
+            message.textContent = 'Upgrade to any Paid plan (Lite $5/mo, Pro $15/mo, Max $29/mo, or Ultra $49/mo) to unlock PDF, ZIP, and document uploads.';
         } else if (/web\s*search/i.test(feature || '')) {
-            message.textContent = 'Upgrade to Pro (15 searches/day), Max (50/day), or Ultra (150/day) to ground AI answers with real-time web results (+5 credits/request).';
+            message.textContent = 'Live Web Search is locked on your current plan. Upgrade to Pro ($15/mo · 15 searches/day), Max ($29/mo · 50/day), or Ultra ($49/mo · 150/day) to ground answers with live web results (+5 credits/request).';
+        } else if (/thinking/i.test(feature || '')) {
+            message.textContent = normalizedPlan === 'max'
+                ? 'High / Max thinking depth requires Max ($29/mo) or Ultra ($49/mo).'
+                : 'Low and Medium thinking depth requires Pro ($15/mo), Max ($29/mo), or Ultra ($49/mo).';
         } else {
-            message.textContent = `Upgrade to Jevexa ${cleanPlan} to unlock this feature and get more from your AI workspace.`;
+            message.textContent = `Upgrade to Jevexa ${cleanPlan} to unlock ${feature} and higher engine capacity in your AI workspace.`;
         }
     }
     if (planLabel) {
@@ -315,48 +326,67 @@ function openUpgradeModal(plan, feature, returnFocusElement = document.activeEle
             planLabel.textContent = `JEVEXA ${cleanPlan.toUpperCase()}`;
         }
     }
+    if (plansLink) {
+        plansLink.setAttribute('href', `/pricing?plan=${encodeURIComponent(pricingPlanKey)}`);
+    }
     modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    void modal.offsetWidth;
+    modal.classList.add('is-open');
     requestAnimationFrame(() => modal.classList.add('is-open'));
     document.getElementById('upgradeModalClose')?.focus({ preventScroll: true });
 }
 
 function initializeUpgradeModal() {
     const modal = document.getElementById('upgradeModal');
-    if (!modal) return;
-    let closeTimer = null;
-    const close = () => {
+    if (!modal || modal.dataset.upgradeInit === 'true') return;
+    modal.dataset.upgradeInit = 'true';
+    const close = (restoreFocus = true) => {
         modal.classList.remove('is-open');
-        if (closeTimer !== null) window.clearTimeout(closeTimer);
-        closeTimer = window.setTimeout(() => {
+        modal.setAttribute('aria-hidden', 'true');
+        if (window.__jevexaUpgradeCloseTimer !== undefined && window.__jevexaUpgradeCloseTimer !== null) {
+            window.clearTimeout(window.__jevexaUpgradeCloseTimer);
+        }
+        window.__jevexaUpgradeCloseTimer = window.setTimeout(() => {
             modal.hidden = true;
-            closeTimer = null;
-            modal.returnFocusElement?.focus?.({ preventScroll: true });
+            window.__jevexaUpgradeCloseTimer = null;
+            if (restoreFocus) {
+                modal.returnFocusElement?.focus?.({ preventScroll: true });
+            }
             modal.returnFocusElement = null;
         }, 220);
     };
     window.JEVEXA_SAFE_INTERACTION.bind(
         document.getElementById('upgradeModalClose'),
         'click',
-        close
+        () => close(true),
+        { debounceMs: 50 }
     );
     window.JEVEXA_SAFE_INTERACTION.bind(
         document.getElementById('upgradeModalCloseSecondary'),
         'click',
-        close
+        () => close(true),
+        { debounceMs: 50 }
     );
     window.JEVEXA_SAFE_INTERACTION.bind(
         document.getElementById('upgradeModalPlans'),
         'click',
         (event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                close(false);
+                return;
+            }
             event.preventDefault();
             const requiredPlan = (modal.dataset.requiredPlan || 'pro').toLowerCase();
-            close();
-            navigateToPricingAndHighlight(requiredPlan);
-        }
+            const pricingPlanKey = requiredPlan === 'max' ? 'business' : (requiredPlan === 'starter' ? 'lite' : requiredPlan);
+            close(false);
+            window.location.assign(`/pricing?plan=${encodeURIComponent(pricingPlanKey)}`);
+        },
+        { debounceMs: 80 }
     );
     window.JEVEXA_SAFE_INTERACTION.bind(modal, 'click', event => {
-        if (event.target === modal) close();
-    }, { matches: event => event.target === modal, getKey: () => modal });
+        if (event.target === modal) close(true);
+    }, { matches: event => event.target === modal, getKey: () => modal, debounceMs: 50 });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && !modal.hidden) {
             event.preventDefault();
@@ -404,8 +434,8 @@ window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
     if (href === '#pricing') {
         if (link.closest('#chatbotWindow, #contentWorkspace, #upgradeModal, #supportModal, #jevexaAccountBackdrop') || document.body.classList.contains('chat-modal-open') || document.body.classList.contains('workspace-open')) {
             event.preventDefault();
-            const plan = link.dataset.plan || link.getAttribute('data-pricing-plan') || 'pro';
-            navigateToPricingAndHighlight(plan);
+            const requiredPlan = link.dataset.plan || link.getAttribute('data-pricing-plan') || 'pro';
+            navigateToPricingAndHighlight(requiredPlan);
             return;
         }
     }
@@ -3496,14 +3526,81 @@ let toastTimer = null;
 function showToast(message) {
     const toast = document.getElementById('toast');
     if (!toast) return;
-    toast.textContent = message;
+    const msg = String(message || '').trim() || 'Done';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.textContent = msg;
+    toast.classList.remove('show');
+    void toast.offsetWidth;
     toast.classList.add('show');
     if (toastTimer !== null) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
         toast.classList.remove('show');
         toastTimer = null;
-    }, 3500);
+    }, 2800);
 }
+window.showToast = showToast;
+window.JEVEXA_COPY_TO_CLIPBOARD = async function copyTextWithToast(text, options = {}) {
+    const value = text == null ? '' : String(text);
+    if (!value) {
+        if (!options.silent) showToast(options.emptyMessage || 'Nothing to copy.');
+        return false;
+    }
+    let copied = false;
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(value);
+            copied = true;
+        } catch (_) {}
+    }
+    if (!copied && typeof document !== 'undefined' && document.body) {
+        const activeBefore = document.activeElement;
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', '');
+        ta.setAttribute('aria-hidden', 'true');
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;font-size:16px;';
+        document.body.appendChild(ta);
+        try {
+            ta.focus({ preventScroll: true });
+            ta.select();
+            ta.setSelectionRange(0, value.length);
+            copied = Boolean(document.execCommand('copy'));
+        } catch (_) {
+            copied = false;
+        } finally {
+            ta.remove();
+            try { activeBefore?.focus?.({ preventScroll: true }); } catch (_) {}
+        }
+    }
+    if (!copied) {
+        if (!options.silent) {
+            showToast(options.errorMessage || 'Copy failed. Please select text manually.');
+        }
+        return false;
+    }
+    const button = options.button;
+    if (button && button instanceof Element) {
+        const originalHtml = button.dataset.origHtml || button.innerHTML;
+        button.dataset.origHtml = originalHtml;
+        if (options.copiedHtml) {
+            button.innerHTML = options.copiedHtml;
+        }
+        button.classList.add('copied', 'is-copied');
+        if (button._copyTimer) clearTimeout(button._copyTimer);
+        button._copyTimer = setTimeout(() => {
+            if (options.copiedHtml) {
+                button.innerHTML = originalHtml;
+            }
+            button.classList.remove('copied', 'is-copied');
+            button._copyTimer = null;
+        }, 2000);
+    }
+    if (!options.silent) {
+        showToast(options.toastMessage || 'Copied to clipboard');
+    }
+    return true;
+};
 window.JEVEXA_SHOW_UPGRADE_MODAL = openUpgradeModal;
 
 

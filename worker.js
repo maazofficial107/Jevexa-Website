@@ -1,6 +1,9 @@
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, apikey, X-Client-Info, Cache-Control, Pragma",
@@ -1223,6 +1226,9 @@ const SSE_HEADERS = Object.freeze({
   "Cache-Control": "no-cache, no-transform",
   "Connection": "keep-alive",
   "X-Accel-Buffering": "no",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, apikey, X-Client-Info, Cache-Control, Pragma"
@@ -8362,7 +8368,17 @@ function getSupabaseConfig(env) {
 }
 
 function handleClientConfig(request, env) {
-  if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed.", { status: 405 });
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed.", {
+      status: 405,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+      }
+    });
+  }
 
   let cfg;
   try {
@@ -8370,7 +8386,13 @@ function handleClientConfig(request, env) {
   } catch {
     return new Response(request.method === "HEAD" ? null : "Service temporarily unavailable. Please refresh or try again shortly.", {
       status: 503,
-      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+      }
     });
   }
 
@@ -8395,6 +8417,8 @@ function handleClientConfig(request, env) {
         "Cache-Control": "no-store",
         "Content-Type": "application/javascript; charset=utf-8",
         "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
         "Access-Control-Allow-Origin": "*"
       }
     }
@@ -9080,6 +9104,72 @@ function getAssetMimeType(pathname) {
   return null;
 }
 
+function isLocalDevelopmentHost(hostname = "") {
+  const host = String(hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost"
+    || host === "127.0.0.1"
+    || host === "::1"
+    || host === "0.0.0.0"
+    || host.endsWith(".localhost")
+    || host.endsWith(".local");
+}
+
+function buildContentSecurityPolicy({ upgradeInsecure = true } = {}) {
+  const directives = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://challenges.cloudflare.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://unpkg.com",
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://cdn.jsdelivr.net https://sandbox.api.getsafepay.com https://api.getsafepay.com",
+    "frame-src 'self' https://challenges.cloudflare.com https://sandbox.api.getsafepay.com https://api.getsafepay.com",
+    "frame-ancestors 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "manifest-src 'self'"
+  ];
+  if (upgradeInsecure) {
+    directives.push("upgrade-insecure-requests");
+  }
+  return directives.join("; ");
+}
+
+function buildCanonicalHttpsRedirect(request, url) {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  const hostname = String(url.hostname || "").toLowerCase();
+  if (isLocalDevelopmentHost(hostname)) return null;
+
+  const forwardedProto = (request.headers.get("x-forwarded-proto") || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const isInsecureProtocol = url.protocol === "http:" || forwardedProto === "http";
+  const isWwwCustomDomain = hostname === "www.jevexa.net";
+
+  // Keep health probes on non-www hosts responsive without redirect interference
+  if (!isWwwCustomDomain && url.pathname === "/api/health") {
+    return null;
+  }
+
+  if (isWwwCustomDomain || isInsecureProtocol) {
+    const targetHost = isWwwCustomDomain ? "jevexa.net" : url.host;
+    const targetUrl = `https://${targetHost}${url.pathname}${url.search}`;
+    return new Response(null, {
+      status: 301,
+      headers: {
+        "Location": targetUrl,
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Cache-Control": "public, max-age=300"
+      }
+    });
+  }
+
+  return null;
+}
+
 function secureAssetResponse(assetResponse, options = {}) {
   const isBodyless = assetResponse.status === 101 || assetResponse.status === 204 || assetResponse.status === 205 || assetResponse.status === 304 || Boolean(options.isHead);
   const secured = isBodyless ? new Response(null, assetResponse) : new Response(assetResponse.body, assetResponse);
@@ -9098,6 +9188,9 @@ function secureAssetResponse(assetResponse, options = {}) {
   secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   if (!options.isStaticAsset) {
     secured.headers.set("X-Frame-Options", "SAMEORIGIN");
+  }
+  if (options.isHtml && assetResponse.status !== 304) {
+    secured.headers.set("Content-Security-Policy", buildContentSecurityPolicy({ upgradeInsecure: !options.isLocalhost }));
   }
   secured.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   secured.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -9237,11 +9330,12 @@ export default {
   async fetch(request, env, ctx) {
     try {
     const url = new URL(request.url);
+    const isLocalhost = isLocalDevelopmentHost(url.hostname);
 
-    // Canonicalize www / plain HTTP on production custom domain for GET/HEAD to prevent auth/redirect mismatches
-    if ((request.method === "GET" || request.method === "HEAD")
-      && (url.hostname === "www.jevexa.net" || (url.protocol === "http:" && url.hostname === "jevexa.net"))) {
-      return Response.redirect(`https://jevexa.net${url.pathname}${url.search}`, 301);
+    // Enforce HTTPS & canonicalize www -> apex on non-local hosts without breaking health checks or local dev
+    const canonicalRedirect = buildCanonicalHttpsRedirect(request, url);
+    if (canonicalRedirect) {
+      return canonicalRedirect;
     }
 
     // Handle CORS preflight for everything
@@ -9471,7 +9565,7 @@ export default {
           pageReq = new Request(new URL("/index.html", request.url), request);
           assetResponse = await env.ASSETS.fetch(pageReq);
         }
-        return secureAssetResponse(assetResponse, { isHtml: true, isHead: request.method === "HEAD", cacheControl: "public, max-age=0, must-revalidate" });
+        return secureAssetResponse(assetResponse, { isHtml: true, isHead: request.method === "HEAD", isLocalhost, cacheControl: "public, max-age=0, must-revalidate" });
       }
 
       if (url.pathname.startsWith("/tools/") || url.pathname === "/tools") {
@@ -9500,6 +9594,7 @@ export default {
         return secureAssetResponse(assetResponse, {
           isStaticAsset,
           isHead: request.method === "HEAD",
+          isLocalhost,
           mime: isStaticAsset ? getAssetMimeType(targetPath) : null,
           isHtml: !isStaticAsset,
           cacheControl: isStaticAsset ? "public, max-age=86400, stale-while-revalidate=604800" : "public, max-age=0, must-revalidate"
@@ -9521,6 +9616,7 @@ export default {
       return secureAssetResponse(assetResponse, {
         isStaticAsset: !isHtml,
         isHead: request.method === "HEAD",
+        isLocalhost,
         mime,
         isHtml,
         cacheControl
@@ -9528,7 +9624,12 @@ export default {
     }
 
     return new Response("JEVEXA API is running.", {
-      headers: { "Content-Type": "text/plain" }
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+      }
     });
     } catch (fatalEdgeError) {
       console.error("Fatal Worker Edge Catch:", fatalEdgeError?.stack || fatalEdgeError?.message || fatalEdgeError);

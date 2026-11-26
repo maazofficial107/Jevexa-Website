@@ -7203,6 +7203,108 @@ test("Flagship Chatbot Sidebar & Deletion Modal: flex row truncation, zero horiz
   assert.match(credits, /updateChatWelcome\(\);/);
 });
 
+test("Transport & Mixed-Content Security: HTTPS redirects, HSTS, CSP, _headers, and zero http:// subresources", async () => {
+  const mockAssetsEnv = {
+    ASSETS: {
+      fetch: async () => new Response("<html><head></head><body>ok</body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      })
+    }
+  };
+
+  // 1. x-forwarded-proto: http on non-localhost redirects cleanly to HTTPS (301)
+  const forwardedHttpRes = await worker.fetch(
+    new Request("https://jevexa.net/pricing?plan=pro", {
+      method: "GET",
+      headers: { "x-forwarded-proto": "http" }
+    }),
+    mockAssetsEnv
+  );
+  assert.equal(forwardedHttpRes.status, 301);
+  assert.equal(forwardedHttpRes.headers.get("Location"), "https://jevexa.net/pricing?plan=pro");
+  assert.equal(forwardedHttpRes.headers.get("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+
+  // 2. workers.dev plain http:// redirects to https://
+  const workersDevHttpRes = await worker.fetch(
+    new Request("http://jevexa-website.workers.dev/about", { method: "HEAD" }),
+    mockAssetsEnv
+  );
+  assert.equal(workersDevHttpRes.status, 301);
+  assert.equal(workersDevHttpRes.headers.get("Location"), "https://jevexa-website.workers.dev/about");
+
+  // 3. Health check and POST requests are not disrupted by plain http / x-forwarded-proto
+  const healthHttpRes = await worker.fetch(
+    new Request("http://jevexa.net/api/health", {
+      method: "GET",
+      headers: { "x-forwarded-proto": "http" }
+    }),
+    mockAssetsEnv
+  );
+  assert.equal(healthHttpRes.status, 200);
+  assert.equal(healthHttpRes.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(healthHttpRes.headers.get("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+
+  // 4. Localhost dev requests (127.0.0.1 / localhost) stay on HTTP and omit upgrade-insecure-requests
+  const localRes = await worker.fetch(
+    new Request("http://127.0.0.1:8788/pricing", {
+      method: "GET",
+      headers: { "x-forwarded-proto": "http" }
+    }),
+    mockAssetsEnv
+  );
+  assert.equal(localRes.status, 200);
+  const localCsp = localRes.headers.get("Content-Security-Policy") || "";
+  assert.ok(localCsp.includes("default-src 'self'"));
+  assert.ok(!localCsp.includes("upgrade-insecure-requests"), "Localhost HTML must not force upgrade-insecure-requests");
+
+  // 5. Production HTML responses enforce strict CSP (allowing inline, Supabase, Google Fonts, Turnstile) + upgrade-insecure-requests
+  const prodHtmlRes = await worker.fetch(new Request("https://jevexa.net/pricing"), mockAssetsEnv);
+  assert.equal(prodHtmlRes.status, 200);
+  const prodCsp = prodHtmlRes.headers.get("Content-Security-Policy") || "";
+  assert.match(prodCsp, /script-src[^;]*'unsafe-inline'/);
+  assert.match(prodCsp, /script-src[^;]*https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(prodCsp, /script-src[^;]*https:\/\/challenges\.cloudflare\.com/);
+  assert.match(prodCsp, /style-src[^;]*https:\/\/fonts\.googleapis\.com/);
+  assert.match(prodCsp, /font-src[^;]*https:\/\/fonts\.gstatic\.com/);
+  assert.match(prodCsp, /connect-src[^;]*https:\/\/\*\.supabase\.co/);
+  assert.match(prodCsp, /frame-src[^;]*https:\/\/challenges\.cloudflare\.com/);
+  assert.match(prodCsp, /upgrade-insecure-requests/);
+  assert.equal(prodHtmlRes.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin");
+  assert.equal(prodHtmlRes.headers.get("X-Content-Type-Options"), "nosniff");
+
+  // 6. /config.js includes HSTS, nosniff, and Referrer-Policy
+  const configRes = await worker.fetch(new Request("https://jevexa.net/config.js"), {
+    SUPABASE_URL: "https://byopcuspgnhwsrmsxqvm.supabase.co",
+    SUPABASE_ANON_KEY: "unit-anon",
+    JEVEXA_ENVIRONMENT: "production"
+  });
+  assert.equal(configRes.status, 200);
+  assert.equal(configRes.headers.get("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+  assert.equal(configRes.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(configRes.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin");
+
+  // 7. _headers enforces HSTS, nosniff, Referrer-Policy, and CSP on static HTML routes
+  const headersFile = await readFile(new URL("../_headers", import.meta.url), "utf8");
+  assert.match(headersFile, /Strict-Transport-Security:\s*max-age=31536000;\s*includeSubDomains/);
+  assert.match(headersFile, /Referrer-Policy:\s*strict-origin-when-cross-origin/);
+  assert.match(headersFile, /Content-Security-Policy:[\s\S]*upgrade-insecure-requests/);
+
+  // 8. Zero hardcoded http:// subresources or canonical links in HTML/JS/CSS/SEO configs
+  const filesToAudit = [
+    "../index.html", "../pricing.html", "../about.html", "../contact.html",
+    "../privacy-policy.html", "../terms.html", "../refund-policy.html", "../admin.html",
+    "../script.js", "../credits.js", "../crm.js", "../styles.css", "../premium.css",
+    "../robots.txt", "../site.webmanifest"
+  ];
+  for (const rel of filesToAudit) {
+    const content = await readFile(new URL(rel, import.meta.url), "utf8");
+    assert.doesNotMatch(content, /http:\/\//i, `${rel} must not contain insecure http:// URLs`);
+  }
+  const sitemapXml = await readFile(new URL("../sitemap.xml", import.meta.url), "utf8");
+  assert.doesNotMatch(sitemapXml, /<loc>\s*http:\/\//i, "sitemap.xml <loc> entries must use https://");
+});
+
 
 
 

@@ -16,6 +16,16 @@
         }
     };
 
+    // Helper: normalize external website links safely without allowing unsafe URI schemes
+    function normalizeExternalUrl(rawUrl) {
+        const trimmed = String(rawUrl || '').trim();
+        if (!trimmed) return '';
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
+            return '';
+        }
+        return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    }
+
     // Helper: RFC4122 v4 UUID generator (guaranteed to match /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     function generateUuid() {
         if (typeof window.crypto?.randomUUID === 'function') {
@@ -462,7 +472,7 @@
                     <td>
                         <div class="crm-table-company-cell">
                             <span>${escapeHtml(lead.company || '—')}</span>
-                            ${lead.website ? `<a href="${escapeHtml(lead.website.startsWith('http') ? lead.website : 'https://' + lead.website)}" target="_blank" rel="noopener" class="crm-web-link"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                            ${(() => { const safeSite = normalizeExternalUrl(lead.website); return safeSite ? `<a href="${escapeHtml(safeSite)}" target="_blank" rel="noopener noreferrer" class="crm-web-link"><i class="fas fa-external-link-alt"></i></a>` : ''; })()}
                         </div>
                     </td>
                     <td>
@@ -1029,8 +1039,9 @@
                 : '<span class="text-muted">Not provided</span>';
         }
         if (drawerWebsite) {
-            drawerWebsite.innerHTML = lead.website
-                ? `<a href="${escapeHtml(lead.website.startsWith('http') ? lead.website : 'https://' + lead.website)}" target="_blank" rel="noopener">${escapeHtml(lead.website)} <i class="fas fa-external-link-alt"></i></a>`
+            const safeSite = normalizeExternalUrl(lead.website);
+            drawerWebsite.innerHTML = safeSite
+                ? `<a href="${escapeHtml(safeSite)}" target="_blank" rel="noopener noreferrer">${escapeHtml(lead.website)} <i class="fas fa-external-link-alt"></i></a>`
                 : '<span class="text-muted">Not provided</span>';
         }
         if (drawerValue) drawerValue.textContent = formatCurrency(lead.deal_value);

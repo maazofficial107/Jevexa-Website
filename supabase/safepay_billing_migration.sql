@@ -15,6 +15,29 @@ alter table public.billing_orders
   add column if not exists checkout_url text,
   add column if not exists paid_at timestamptz;
 
+do $$
+declare
+  v_constraint_name text;
+begin
+  for v_constraint_name in
+    select c.conname
+    from pg_catalog.pg_constraint c
+    join pg_catalog.pg_class t on t.oid = c.conrelid
+    join pg_catalog.pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'billing_orders'
+      and c.contype = 'c'
+      and pg_catalog.pg_get_constraintdef(c.oid) ilike '%plan%'
+  loop
+    execute format('alter table public.billing_orders drop constraint if exists %I', v_constraint_name);
+  end loop;
+
+  alter table public.billing_orders
+    add constraint billing_orders_plan_check
+    check (plan in ('starter', 'pro', 'business', 'ultra'));
+end;
+$$;
+
 create unique index if not exists billing_orders_provider_order_id_unique_idx
   on public.billing_orders(provider_order_id)
   where provider_order_id is not null;

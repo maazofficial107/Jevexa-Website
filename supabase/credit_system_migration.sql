@@ -25,7 +25,7 @@ create table if not exists public.credit_transactions (
 create table if not exists public.billing_orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  plan text not null check (plan in ('starter','pro','business')),
+  plan text not null check (plan in ('starter','pro','business','ultra')),
   billing_cycle text not null check (billing_cycle in ('monthly','yearly')),
   amount numeric(12,2) not null check (amount > 0),
   currency text not null default 'USD',
@@ -313,10 +313,14 @@ begin
 end;
 $$;
 
+drop function if exists public.jevexa_credit_settle(uuid, uuid, integer);
+drop function if exists public.jevexa_credit_settle(uuid, uuid, integer, integer, jsonb);
 create or replace function public.jevexa_credit_settle(
   p_user_id uuid,
   p_request_id uuid,
-  p_usage_tokens integer
+  p_usage_tokens integer,
+  p_extra_credits integer default 0,
+  p_metadata jsonb default '{}'::jsonb
 )
 returns jsonb
 language plpgsql
@@ -326,6 +330,11 @@ as $$
 declare
   v_balance integer;
   v_charge integer;
+  v_extra integer;
+  v_applied_extra integer;
+  v_total_charged integer;
+  v_available_after_base integer;
+  v_metadata jsonb;
   v_reservation public.credit_reservations%rowtype;
 begin
   if p_usage_tokens is null or p_usage_tokens < 1 or p_usage_tokens > 50000 then
@@ -341,8 +350,11 @@ begin
   if not found then raise exception 'Credit reservation was not found'; end if;
 
   if v_reservation.status = 'settled' then
+    v_applied_extra := coalesce((v_reservation.provider_usage->>'extra_credits')::integer, 0);
     return pg_catalog.jsonb_build_object(
       'ok', true, 'duplicate', true, 'charged_credits', v_reservation.charged_credits,
+      'extra_credits_charged', v_applied_extra,
+      'total_charged_credits', v_reservation.charged_credits + v_applied_extra,
       'balance', v_balance
     );
   end if;
@@ -364,27 +376,40 @@ begin
     v_charge := v_reservation.reserved_credits;
   end if;
 
+  v_available_after_base := v_balance + v_reservation.reserved_credits - v_charge;
+  v_extra := greatest(0, coalesce(p_extra_credits, 0));
+  v_applied_extra := least(v_extra, greatest(0, v_available_after_base));
+  v_total_charged := v_charge + v_applied_extra;
+  v_metadata := coalesce(p_metadata, '{}'::jsonb)
+    || pg_catalog.jsonb_build_object(
+      'total_tokens', p_usage_tokens,
+      'base_credits', v_charge,
+      'extra_credits', v_applied_extra
+    );
+
   update public.user_credits
-  set balance = balance + v_reservation.reserved_credits - v_charge,
+  set balance = v_available_after_base - v_applied_extra,
       updated_at = pg_catalog.now()
   where user_id = p_user_id
   returning balance into v_balance;
 
   update public.credit_reservations
   set status = 'settled', charged_credits = v_charge,
-      provider_usage = pg_catalog.jsonb_build_object('total_tokens', p_usage_tokens),
+      provider_usage = v_metadata,
       completed_at = pg_catalog.now()
   where id = v_reservation.id;
 
   insert into public.credit_transactions
     (user_id, amount, description, type, reference, service, status, request_id, metadata)
   values
-    (p_user_id, -v_charge, 'AI chatbot usage', 'usage',
+    (p_user_id, -v_total_charged, 'AI chatbot usage', 'usage',
      'usage:' || p_request_id::text, v_reservation.service, 'settled',
-     p_request_id, pg_catalog.jsonb_build_object('total_tokens', p_usage_tokens));
+     p_request_id, v_metadata);
 
   return pg_catalog.jsonb_build_object(
     'ok', true, 'duplicate', false, 'charged_credits', v_charge,
+    'extra_credits_charged', v_applied_extra,
+    'total_charged_credits', v_total_charged,
     'balance', v_balance, 'total_tokens', p_usage_tokens
   );
 end;
@@ -494,13 +519,13 @@ $$;
 revoke all on function public.jevexa_reject_credit_ledger_mutation() from public, anon, authenticated;
 revoke all on function public.jevexa_credit_quote(text, integer) from public, anon, authenticated;
 revoke all on function public.jevexa_credit_reserve(uuid, uuid, text, integer) from public, anon, authenticated;
-revoke all on function public.jevexa_credit_settle(uuid, uuid, integer) from public, anon, authenticated;
+revoke all on function public.jevexa_credit_settle(uuid, uuid, integer, integer, jsonb) from public, anon, authenticated;
 revoke all on function public.jevexa_credit_release(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.jevexa_credit_adjust(uuid, uuid, integer, text, text, text) from public, anon, authenticated;
 
 grant execute on function public.jevexa_credit_quote(text, integer) to service_role;
 grant execute on function public.jevexa_credit_reserve(uuid, uuid, text, integer) to service_role;
-grant execute on function public.jevexa_credit_settle(uuid, uuid, integer) to service_role;
+grant execute on function public.jevexa_credit_settle(uuid, uuid, integer, integer, jsonb) to service_role;
 grant execute on function public.jevexa_credit_release(uuid, uuid) to service_role;
 grant execute on function public.jevexa_credit_adjust(uuid, uuid, integer, text, text, text) to service_role;
 

@@ -834,9 +834,9 @@ test("chat tier pricing migration is idempotent and does not change wallet balan
   const migration = await readFile(new URL("../supabase/chat_tiers_migration.sql", import.meta.url), "utf8");
   assert.match(migration, /on conflict \(service_key\) do update/i);
   assert.match(migration, /\('ai_chat', 'AI Chat — Lite', 'available', 1, null, true\)/);
-  assert.match(migration, /\('ai_chat_pro', 'AI Chat — Pro', 'available', 2, null, true\)/);
-  assert.match(migration, /\('ai_chat_max', 'AI Chat — Max', 'available', 4, null, true\)/);
-  assert.match(migration, /\('ai_chat_ultra', 'AI Chat — Ultra', 'available', 8, null, true\)/);
+  assert.match(migration, /\('ai_chat_pro', 'AI Chat — Pro', 'available', 3, null, true\)/);
+  assert.match(migration, /\('ai_chat_max', 'AI Chat — Max', 'available', 18, null, true\)/);
+  assert.match(migration, /\('ai_chat_ultra', 'AI Chat — Ultra', 'available', 18, null, true\)/);
   assert.doesNotMatch(migration, /update public\.user_credits|insert into public\.user_credits/i);
 });
 

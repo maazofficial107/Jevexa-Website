@@ -31,7 +31,7 @@ create index if not exists credit_transactions_user_created_idx
 create table if not exists public.billing_orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  plan text not null check (plan in ('starter','pro','business')),
+  plan text not null check (plan in ('starter','pro','business','ultra')),
   billing_cycle text not null check (billing_cycle in ('monthly','yearly')),
   amount numeric(12,2) not null check (amount > 0),
   currency text not null default 'USD',

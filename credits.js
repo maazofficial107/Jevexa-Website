@@ -4353,6 +4353,30 @@
     function appendServicePricing(services) {
         const content = document.getElementById('settingsContent');
         if (!content || content.querySelector('#creditServicePricing')) return;
+        const legacyRetiredKeys = new Set([
+            'document_ai',
+            'social_media',
+            'analytics',
+            'user_admin',
+            'rpa',
+            'voice_ai',
+            'lead_scoring',
+            'data_enrichment',
+            'enterprise_security'
+        ]);
+        const chatTierMultipliers = {
+            ai_chat: 1.0,
+            ai_chat_pro: 3.0,
+            ai_chat_max: 18.0,
+            ai_chat_ultra: 18.0
+        };
+        const visibleServices = (Array.isArray(services) ? services : []).filter(service => {
+            const key = typeof service?.service_key === 'string' ? service.service_key.trim().toLowerCase() : '';
+            if (legacyRetiredKeys.has(key)) return false;
+            if (!service?.enabled || service?.integration_status === 'unavailable') return false;
+            if (service?.display_name === 'Legacy service (disabled)') return false;
+            return true;
+        });
         const card = document.createElement('section');
         card.className = 'settings-card';
         card.id = 'creditServicePricing';
@@ -4361,16 +4385,17 @@
         heading.innerHTML = '<h3>Service availability &amp; pricing</h3><p>Only connected services can use credits. Variable AI usage is charged from provider-reported tokens.</p>';
         card.appendChild(heading);
 
-        services.forEach(service => {
+        visibleServices.forEach(service => {
             const row = document.createElement('div');
             row.className = 'settings-service-row';
             const name = document.createElement('strong');
             name.textContent = service.display_name;
             const price = document.createElement('span');
-            if (!service.enabled || service.integration_status === 'unavailable') {
-                price.textContent = 'Unavailable — provider integration not connected';
-            } else if (service.fixed_credits) {
-                price.textContent = `${service.fixed_credits} credit baseline (1 cr / 500 tokens)`;
+            if (service.fixed_credits) {
+                const multiplier = chatTierMultipliers[service.service_key] || Number(service.fixed_credits) || 1;
+                const multLabel = Number.isInteger(multiplier) ? `${multiplier}.0x` : `${multiplier}x`;
+                const creditWord = service.fixed_credits === 1 ? 'credit' : 'credits';
+                price.textContent = `${service.fixed_credits} ${creditWord} baseline (${multLabel} · ${service.fixed_credits} cr / 500 tokens)`;
             } else if (service.credits_per_1000_tokens) {
                 price.textContent = `${service.credits_per_1000_tokens} credit(s) per 1,000 measured tokens`;
             } else {

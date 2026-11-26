@@ -96,7 +96,7 @@ alter table public.credit_reservations
 create table if not exists public.billing_orders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  plan text not null check (plan in ('starter','pro','business')),
+  plan text not null check (plan in ('starter','pro','business','ultra')),
   billing_cycle text not null check (billing_cycle in ('monthly','yearly')),
   amount numeric(12,2) not null check (amount > 0),
   currency text not null default 'USD',
@@ -110,12 +110,35 @@ create table if not exists public.billing_orders (
   paid_at timestamptz
 );
 
--- Ensure all columns exist on billing_orders
+-- Ensure all columns and plan constraints exist on billing_orders
 alter table public.billing_orders
   add column if not exists provider text,
   add column if not exists provider_order_id text,
   add column if not exists checkout_url text,
   add column if not exists paid_at timestamptz;
+
+do $$
+declare
+  v_constraint_name text;
+begin
+  for v_constraint_name in
+    select c.conname
+    from pg_catalog.pg_constraint c
+    join pg_catalog.pg_class t on t.oid = c.conrelid
+    join pg_catalog.pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'billing_orders'
+      and c.contype = 'c'
+      and pg_catalog.pg_get_constraintdef(c.oid) ilike '%plan%'
+  loop
+    execute format('alter table public.billing_orders drop constraint if exists %I', v_constraint_name);
+  end loop;
+
+  alter table public.billing_orders
+    add constraint billing_orders_plan_check
+    check (plan in ('starter', 'pro', 'business', 'ultra'));
+end;
+$$;
 
 -- 2.6 Support Tickets (Customer Support Inquiries)
 create table if not exists public.support_tickets (
@@ -289,7 +312,7 @@ insert into public.user_credits(user_id, balance, monthly_allowance, plan)
 select id, 100, 100, 'free' from auth.users
 on conflict (user_id) do nothing;
 
--- 8. SERVICE PRICING SEED DATA (CHAT TIERS + CONTENT GENERATION + SERVICES)
+-- 8. SERVICE PRICING SEED DATA (CHAT TIERS + LIVE STUDIO SERVICES)
 insert into public.jevexa_service_pricing
   (service_key, display_name, integration_status, fixed_credits, credits_per_1000_tokens, enabled)
 values
@@ -298,14 +321,13 @@ values
   ('ai_chat_max', 'AI Chat — Max', 'available', 18, null, true),
   ('ai_chat_ultra', 'AI Chat — Ultra', 'available', 18, null, true),
   ('content_generation', 'Content Generation', 'available', null, 1, true),
-  ('email_outreach', 'Email & Outreach AI', 'unavailable', null, null, false),
-  ('mini_crm', 'Mini CRM', 'unavailable', null, null, false),
-  ('document_ai', 'Document AI & OCR', 'unavailable', null, null, false),
-  ('social_media', 'Social Media Assistant', 'unavailable', null, null, false),
-  ('analytics', 'Business Analytics', 'unavailable', null, null, false),
-  ('user_admin', 'User & Admin Management', 'unavailable', null, null, false),
-  ('workflow_automation', 'Workflow Automation', 'unavailable', null, null, false),
-  ('data_management', 'Data Management', 'unavailable', null, null, false)
+  ('email_outreach', 'Email & Outreach AI', 'available', null, 1, true),
+  ('mini_crm', 'Mini CRM', 'available', null, 1, true),
+  ('document_ocr', 'Document AI & OCR', 'available', null, 1, true),
+  ('social_assistant', 'Social Media Assistant', 'available', null, 1, true),
+  ('business_analytics', 'Business Analytics', 'available', null, 1, true),
+  ('workflow_automation', 'Workflow Automation', 'available', null, 1, true),
+  ('data_management', 'Data Management', 'available', null, 1, true)
 on conflict (service_key) do update
 set display_name = excluded.display_name,
     integration_status = excluded.integration_status,
@@ -314,21 +336,15 @@ set display_name = excluded.display_name,
     enabled = excluded.enabled,
     updated_at = now();
 
--- Ensure content_generation is enabled with 1 credit per 1000 tokens
-update public.jevexa_service_pricing
-set integration_status = 'available',
-    credits_per_1000_tokens = 1,
-    fixed_credits = null,
-    enabled = true,
-    updated_at = now()
-where service_key = 'content_generation';
-
--- Clean up any legacy service keys if present
+-- Clean up any legacy service keys if present (including retired disabled keys)
 do $$
 declare
   v_legacy_key text;
 begin
-  foreach v_legacy_key in array array['rpa', 'voice_ai', 'lead_scoring', 'data_enrichment', 'enterprise_security']
+  foreach v_legacy_key in array array[
+    'rpa', 'voice_ai', 'lead_scoring', 'data_enrichment', 'enterprise_security',
+    'document_ai', 'social_media', 'analytics', 'user_admin'
+  ]
   loop
     if exists (
       select 1 from public.credit_reservations
@@ -509,11 +525,15 @@ begin
 end;
 $$;
 
--- 9.3 Atomic Credit Settle RPC (Charges measured usage & refunds excess)
+-- 9.3 Atomic Credit Settle RPC (Charges measured usage & extra surcharges, refunds excess)
+drop function if exists public.jevexa_credit_settle(uuid, uuid, integer);
+drop function if exists public.jevexa_credit_settle(uuid, uuid, integer, integer, jsonb);
 create or replace function public.jevexa_credit_settle(
   p_user_id uuid,
   p_request_id uuid,
-  p_usage_tokens integer
+  p_usage_tokens integer,
+  p_extra_credits integer default 0,
+  p_metadata jsonb default '{}'::jsonb
 )
 returns jsonb
 language plpgsql
@@ -523,6 +543,11 @@ as $$
 declare
   v_balance integer;
   v_charge integer;
+  v_extra integer;
+  v_applied_extra integer;
+  v_total_charged integer;
+  v_available_after_base integer;
+  v_metadata jsonb;
   v_reservation public.credit_reservations%rowtype;
   v_tokens integer;
   v_description text;
@@ -541,10 +566,13 @@ begin
 
   -- Idempotency check: if already settled, return settled status
   if v_reservation.status = 'settled' then
+    v_applied_extra := coalesce((v_reservation.provider_usage->>'extra_credits')::integer, 0);
     return pg_catalog.jsonb_build_object(
       'ok', true,
       'duplicate', true,
       'charged_credits', v_reservation.charged_credits,
+      'extra_credits_charged', v_applied_extra,
+      'total_charged_credits', v_reservation.charged_credits + v_applied_extra,
       'balance', v_balance
     );
   end if;
@@ -563,14 +591,25 @@ begin
     raise exception 'Service pricing is not configured';
   end if;
 
-  -- Never charge more than was originally reserved
+  -- Never charge base reservation more than was originally reserved
   if v_charge > v_reservation.reserved_credits then
     v_charge := v_reservation.reserved_credits;
   end if;
 
-  -- Credit back any uncharged reserved difference to user balance
+  v_available_after_base := v_balance + v_reservation.reserved_credits - v_charge;
+  v_extra := greatest(0, coalesce(p_extra_credits, 0));
+  v_applied_extra := least(v_extra, greatest(0, v_available_after_base));
+  v_total_charged := v_charge + v_applied_extra;
+  v_metadata := coalesce(p_metadata, '{}'::jsonb)
+    || pg_catalog.jsonb_build_object(
+      'total_tokens', v_tokens,
+      'base_credits', v_charge,
+      'extra_credits', v_applied_extra
+    );
+
+  -- Credit back any uncharged reserved difference and deduct any extra usage/surcharge
   update public.user_credits
-  set balance = balance + v_reservation.reserved_credits - v_charge,
+  set balance = v_available_after_base - v_applied_extra,
       updated_at = pg_catalog.now()
   where user_id = p_user_id
   returning balance into v_balance;
@@ -579,7 +618,7 @@ begin
   update public.credit_reservations
   set status = 'settled',
       charged_credits = v_charge,
-      provider_usage = pg_catalog.jsonb_build_object('total_tokens', v_tokens),
+      provider_usage = v_metadata,
       completed_at = pg_catalog.now()
   where id = v_reservation.id;
 
@@ -597,20 +636,22 @@ begin
     user_id, amount, description, type, reference, service, status, request_id, metadata
   ) values (
     p_user_id,
-    -v_charge,
+    -v_total_charged,
     v_description,
     'usage',
     'usage:' || p_request_id::text,
     v_reservation.service,
     'settled',
     p_request_id,
-    pg_catalog.jsonb_build_object('total_tokens', v_tokens)
+    v_metadata
   );
 
   return pg_catalog.jsonb_build_object(
     'ok', true,
     'duplicate', false,
     'charged_credits', v_charge,
+    'extra_credits_charged', v_applied_extra,
+    'total_charged_credits', v_total_charged,
     'balance', v_balance,
     'total_tokens', v_tokens
   );
@@ -814,7 +855,7 @@ $$;
 revoke all on function public.jevexa_reject_credit_ledger_mutation() from public, anon, authenticated;
 revoke all on function public.jevexa_credit_quote(text, integer) from public, anon, authenticated;
 revoke all on function public.jevexa_credit_reserve(uuid, uuid, text, integer) from public, anon, authenticated;
-revoke all on function public.jevexa_credit_settle(uuid, uuid, integer) from public, anon, authenticated;
+revoke all on function public.jevexa_credit_settle(uuid, uuid, integer, integer, jsonb) from public, anon, authenticated;
 revoke all on function public.jevexa_credit_release(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.jevexa_credit_adjust(uuid, uuid, integer, text, text, text) from public, anon, authenticated;
 revoke all on function public.jevexa_apply_safepay_payment(text, bigint, text) from public, anon, authenticated;
@@ -827,7 +868,7 @@ revoke all on function public.jevexa_apply_safepay_payment(text, bigint, text) f
 -- FIX: Remove `authenticated` from the grant below.
 grant execute on function public.jevexa_credit_quote(text, integer) to service_role;
 grant execute on function public.jevexa_credit_reserve(uuid, uuid, text, integer) to service_role;
-grant execute on function public.jevexa_credit_settle(uuid, uuid, integer) to service_role;
+grant execute on function public.jevexa_credit_settle(uuid, uuid, integer, integer, jsonb) to service_role;
 grant execute on function public.jevexa_credit_release(uuid, uuid) to service_role;
 grant execute on function public.jevexa_credit_adjust(uuid, uuid, integer, text, text, text) to service_role;
 grant execute on function public.jevexa_apply_safepay_payment(text, bigint, text) to service_role;

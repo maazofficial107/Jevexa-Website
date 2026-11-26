@@ -29,6 +29,17 @@ function escapeHtml(value = "") {
 
 const FREE_DAILY_CREDIT_BURN_LIMIT = 15;
 const WEB_SEARCH_CREDIT_SURCHARGE = 5;
+const LEGACY_RETIRED_SERVICE_KEYS = new Set([
+  "document_ai",
+  "social_media",
+  "analytics",
+  "user_admin",
+  "rpa",
+  "voice_ai",
+  "lead_scoring",
+  "data_enrichment",
+  "enterprise_security"
+]);
 
 const TIER_PLAN_LIMITS = Object.freeze({
   free: {
@@ -1699,6 +1710,7 @@ async function executeGeminiWithFallback({
                 ok: true,
                 model,
                 reply: trimmedReply,
+                webSearchGrounded: Boolean(activeTools),
                 totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
                 promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
                 completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
@@ -1783,6 +1795,7 @@ async function executeGeminiWithFallback({
               ok: true,
               model,
               reply: text,
+              webSearchGrounded: Boolean(activeTools),
               totalTokens: Number.isInteger(totalTokens) && totalTokens > 0 ? totalTokens : null,
               promptTokens: Number.isInteger(promptTokens) && promptTokens > 0 ? promptTokens : null,
               completionTokens: Number.isInteger(completionTokens) && completionTokens >= 0 ? completionTokens : null,
@@ -3245,7 +3258,13 @@ async function handleCreditPricing(request, env) {
     if (request.method === "HEAD") {
       return new Response(null, { status: 200, headers: JSON_HEADERS });
     }
-    return json({ services });
+    const filteredServices = services.filter(service => {
+      const key = typeof service?.service_key === "string" ? service.service_key.trim().toLowerCase() : "";
+      if (LEGACY_RETIRED_SERVICE_KEYS.has(key)) return false;
+      if (service?.display_name === "Legacy service (disabled)") return false;
+      return true;
+    });
+    return json({ services: filteredServices });
   } catch (error) {
     console.error("Credit pricing request failed:", error?.message || "network");
     return json({ error: "Service pricing is temporarily unavailable." }, 503);
@@ -3747,6 +3766,7 @@ async function handleChat(request, env, ctx) {
   let thinkingTokens = 0;
   let tokenCountMeasured = false;
   let executionSuccess = false;
+  let webSearchGrounded = false;
   let lastProviderError = null;
   let activeProviderName = "AI";
 
@@ -3782,6 +3802,7 @@ async function handleChat(request, env, ctx) {
         tokenCountMeasured = true;
       }
       executionSuccess = true;
+      webSearchGrounded = false;
       activeProviderName = "Groq";
       return true;
     }
@@ -3827,6 +3848,7 @@ async function handleChat(request, env, ctx) {
         tokenCountMeasured = true;
       }
       executionSuccess = true;
+      webSearchGrounded = Boolean(parsed.webSearch && geminiResult.webSearchGrounded);
       activeProviderName = "Gemini";
       return true;
     }
@@ -3880,6 +3902,7 @@ async function handleChat(request, env, ctx) {
         tokenCountMeasured = true;
       }
       executionSuccess = true;
+      webSearchGrounded = false;
       activeProviderName = "OpenRouter";
       return true;
     }
@@ -3915,7 +3938,8 @@ async function handleChat(request, env, ctx) {
   };
 
   const settleChatCredits = async () => {
-    const webSearchSurcharge = parsed.webSearch ? WEB_SEARCH_CREDIT_SURCHARGE : 0;
+    const appliedWebSearch = Boolean(parsed.webSearch && webSearchGrounded);
+    const webSearchSurcharge = appliedWebSearch ? WEB_SEARCH_CREDIT_SURCHARGE : 0;
     const usage = calculateUsageCredits({
       tier: parsed.tier,
       thinkingLevel: effectiveThinkingLevel,
@@ -3935,18 +3959,30 @@ async function handleChat(request, env, ctx) {
 
     let chargedCredits = fixedCredits;
     let remainingCredits = reservation.balance;
+    const safeTotalTokens = Math.max(1, Math.min(50000, Math.round(Number(totalTokens) || 1000)));
+    const settleMetadata = {
+      total_tokens: safeTotalTokens,
+      thinking_tokens: usage.thinkingTokens,
+      model_multiplier: usage.modelMultiplier,
+      attachment_surcharge: usage.attachmentSurcharge,
+      web_search: appliedWebSearch,
+      web_search_surcharge: webSearchSurcharge,
+      tier: parsed.tier
+    };
 
     if (reservation?.fallbackDirect) {
-      chargedCredits = Math.max(fixedCredits, usage.credits);
+      const desiredCredits = Math.max(fixedCredits, usage.credits);
+      const maxAffordableTotal = reservedCredits + Math.max(0, reservation.balance || 0);
+      chargedCredits = Math.min(desiredCredits, maxAffordableTotal);
       const balanceDelta = reservedCredits - chargedCredits;
       let finalBal = reservation.balance;
       if (balanceDelta !== 0) {
-        try {
-          finalBal = Math.max(0, finalBal + balanceDelta);
-          await syncUserCreditsAndProfile(cfg, user.id, finalBal);
-        } catch (err) {
-          console.warn("Direct settlement delta notice:", err?.message || err, requestId);
-        }
+        finalBal = Math.max(0, finalBal + balanceDelta);
+      }
+      try {
+        await syncUserCreditsAndProfile(cfg, user.id, finalBal);
+      } catch (err) {
+        console.warn("Direct settlement delta notice:", err?.message || err, requestId);
       }
       remainingCredits = finalBal;
       try {
@@ -3962,12 +3998,9 @@ async function handleChat(request, env, ctx) {
             status: "settled",
             request_id: requestId,
             metadata: {
-              total_tokens: totalTokens,
-              thinking_tokens: usage.thinkingTokens,
-              model_multiplier: usage.modelMultiplier,
-              web_search: parsed.webSearch,
-              web_search_surcharge: webSearchSurcharge,
-              tier: parsed.tier
+              ...settleMetadata,
+              base_credits: fixedCredits,
+              extra_credits: Math.max(0, chargedCredits - fixedCredits)
             }
           })
         });
@@ -3977,21 +4010,35 @@ async function handleChat(request, env, ctx) {
     } else {
       let settlementResponse;
       let settlement;
-      const safeTotalTokens = Math.max(1, Math.min(50000, Math.round(Number(totalTokens) || 1000)));
+      const extraCreditsRequested = Math.max(0, usage.credits - fixedCredits);
+      const extendedSettlePayload = {
+        p_user_id: user.id,
+        p_request_id: requestId,
+        p_usage_tokens: safeTotalTokens,
+        p_extra_credits: extraCreditsRequested,
+        p_metadata: settleMetadata
+      };
+      const legacySettlePayload = {
+        p_user_id: user.id,
+        p_request_id: requestId,
+        p_usage_tokens: safeTotalTokens
+      };
+      let usedLegacySignature = false;
       try {
-        settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", {
-          p_user_id: user.id,
-          p_request_id: requestId,
-          p_usage_tokens: safeTotalTokens
-        });
+        settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", extendedSettlePayload);
         settlement = await readJsonResponse(settlementResponse);
+        if (!settlementResponse.ok && (settlementResponse.status === 404 || settlementResponse.status === 400)) {
+          usedLegacySignature = true;
+          settlementResponse = await callCreditRpc(cfg, "jevexa_credit_settle", legacySettlePayload);
+          settlement = await readJsonResponse(settlementResponse);
+        }
         if (!settlementResponse.ok && settlementResponse.status >= 500) {
           try {
-            const retryRes = await callCreditRpc(cfg, "jevexa_credit_settle", {
-              p_user_id: user.id,
-              p_request_id: requestId,
-              p_usage_tokens: safeTotalTokens
-            });
+            const retryRes = await callCreditRpc(
+              cfg,
+              "jevexa_credit_settle",
+              usedLegacySignature ? legacySettlePayload : extendedSettlePayload
+            );
             const retryData = await readJsonResponse(retryRes);
             if (retryRes.ok && retryData?.ok) {
               settlementResponse = retryRes;
@@ -4031,20 +4078,62 @@ async function handleChat(request, env, ctx) {
           }
         };
       }
-      chargedCredits = settlement.charged_credits;
-      remainingCredits = settlement.balance;
-      const extraCredits = usage.credits - chargedCredits;
-      if (extraCredits > 0 && remainingCredits > 0) {
-        const appliedExtra = Math.min(extraCredits, remainingCredits);
-        try {
-          remainingCredits = Math.max(0, remainingCredits - appliedExtra);
-          chargedCredits += appliedExtra;
-          await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
-        } catch (extraErr) {
-          console.warn("Incremental usage adjustment notice:", extraErr?.message || extraErr, requestId);
-        }
-      } else {
+
+      const rpcHandledTotal = Number.isInteger(settlement.total_charged_credits)
+        && settlement.total_charged_credits >= settlement.charged_credits;
+      if (rpcHandledTotal) {
+        chargedCredits = settlement.total_charged_credits;
+        remainingCredits = settlement.balance;
         await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+      } else {
+        chargedCredits = settlement.charged_credits;
+        remainingCredits = settlement.balance;
+        const extraCredits = Math.max(0, usage.credits - chargedCredits);
+        const appliedExtra = (!settlement.duplicate && extraCredits > 0 && remainingCredits > 0)
+          ? Math.min(extraCredits, remainingCredits)
+          : 0;
+        if (appliedExtra > 0) {
+          try {
+            remainingCredits = Math.max(0, remainingCredits - appliedExtra);
+            chargedCredits += appliedExtra;
+            await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+          } catch (extraErr) {
+            console.warn("Incremental usage adjustment notice:", extraErr?.message || extraErr, requestId);
+          }
+        } else {
+          await syncUserCreditsAndProfile(cfg, user.id, remainingCredits);
+        }
+
+        if (!settlement.duplicate && (appliedExtra > 0 || appliedWebSearch)) {
+          const ledgerDescription = appliedWebSearch && appliedExtra === webSearchSurcharge && appliedExtra > 0
+            ? `Web search grounding (${parsed.tier.toUpperCase()})`
+            : (appliedWebSearch
+                ? `AI chatbot extra usage & web search (${parsed.tier.toUpperCase()})`
+                : `AI chatbot extra usage (${parsed.tier.toUpperCase()})`);
+          try {
+            await sbRequest(cfg, "/rest/v1/credit_transactions", {
+              method: "POST",
+              body: JSON.stringify({
+                user_id: user.id,
+                amount: -appliedExtra,
+                description: ledgerDescription,
+                type: "usage",
+                reference: `usage-extra:${requestId}`,
+                service: parsed.service,
+                status: "settled",
+                request_id: null,
+                metadata: {
+                  ...settleMetadata,
+                  parent_request_id: requestId,
+                  base_credits: settlement.charged_credits,
+                  extra_credits: appliedExtra
+                }
+              })
+            });
+          } catch (ledgerErr) {
+            console.warn("Supplementary ledger sync notice:", ledgerErr?.message || ledgerErr, requestId);
+          }
+        }
       }
     }
 
@@ -4057,7 +4146,7 @@ async function handleChat(request, env, ctx) {
         modelName: activeModelName,
         thinkingLevel: effectiveThinkingLevel,
         thinkingTokens: usage.thinkingTokens,
-        webSearch: parsed.webSearch,
+        webSearch: appliedWebSearch,
         webSearchSurcharge,
         modelMultiplier: usage.modelMultiplier,
         creditsCharged: chargedCredits,

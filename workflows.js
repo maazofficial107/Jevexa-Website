@@ -528,9 +528,10 @@
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
             const wfCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
             const wfRemaining = usage?.remaining ?? result.remaining_credits;
+            const engineLabel = window.JEVEXA_SANITIZE_ENGINE_NAME?.(usage?.tier || result.tier || 'Core Engine') || 'Core Engine';
             const chargedNote = wfCharged !== null && wfRemaining !== undefined
-                ? ` (Used credit: ${wfCharged} · Remaining credit: ${wfRemaining})`
-                : (wfCharged ? ` (Used credit: ${wfCharged})` : '');
+                ? ` (${engineLabel}   Used credit: ${wfCharged}   Remaining credit: ${wfRemaining})`
+                : (wfCharged ? ` (${engineLabel}   Used credit: ${wfCharged})` : '');
             if (execProgressText) execProgressText.textContent = `Sequence completed successfully in ${result.durationMs || 120}ms!${chargedNote}`;
 
             if (typeof wfRemaining === 'number') {

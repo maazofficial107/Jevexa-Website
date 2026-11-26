@@ -488,9 +488,10 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
+                const engineLabel = window.JEVEXA_SANITIZE_ENGINE_NAME?.(usage?.tier || result.tier || 'Core Engine') || 'Core Engine';
                 const costText = dataCharged !== null && dataRemaining !== undefined
-                    ? ` • Used credit: ${dataCharged} · Remaining credit: ${dataRemaining}`
-                    : (dataCharged ? ` • Used credit: ${dataCharged}` : '');
+                    ? `   ${engineLabel}   Used credit: ${dataCharged}   Remaining credit: ${dataRemaining}`
+                    : (dataCharged ? `   ${engineLabel}   Used credit: ${dataCharged}` : '');
                 statusEl.textContent = `Cleaned ${result.summary?.cleanedCount || 0} records (${result.summary?.duplicatesRemoved || 0} duplicates purged)${costText}.`;
                 statusEl.className = 'data-status-msg success';
             }

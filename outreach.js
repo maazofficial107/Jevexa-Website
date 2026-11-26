@@ -651,9 +651,10 @@
 
             updateSequenceStatusPill('Draft');
             switchStep(1);
+            const engineLabel = window.JEVEXA_SANITIZE_ENGINE_NAME?.(usage?.tier || data.tier || 'Core Engine') || 'Core Engine';
             const costText = outreachCharged !== null && outreachRemaining !== undefined
-                ? ` (Used credit: ${outreachCharged} · Remaining credit: ${outreachRemaining})`
-                : (outreachCharged ? ` (Used credit: ${outreachCharged})` : '');
+                ? ` (${engineLabel}   Used credit: ${outreachCharged}   Remaining credit: ${outreachRemaining})`
+                : (outreachCharged ? ` (${engineLabel}   Used credit: ${outreachCharged})` : '');
             setStatus(`3-step outreach sequence generated successfully!${costText}`, 'success');
             await loadSavedSequences();
 

@@ -407,9 +407,10 @@
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
+                const engineLabel = window.JEVEXA_SANITIZE_ENGINE_NAME?.(usage?.tier || result.tier || 'Core Engine') || 'Core Engine';
                 const costText = socialCharged !== null && socialRemaining !== undefined
-                    ? ` (Used credit: ${socialCharged} · Remaining credit: ${socialRemaining})`
-                    : (socialCharged ? ` (Used credit: ${socialCharged})` : '');
+                    ? ` (${engineLabel}   Used credit: ${socialCharged}   Remaining credit: ${socialRemaining})`
+                    : (socialCharged ? ` (${engineLabel}   Used credit: ${socialCharged})` : '');
                 statusEl.textContent = `Post draft and viral hooks generated!${costText}`;
                 statusEl.className = 'social-status-msg success';
             }

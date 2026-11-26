@@ -59,6 +59,7 @@
     let maximumThinkingLevel = 'off';
     let currentThinkingLevel = 'off';
     let webSearchEnabled = false;
+    let lastTurnCreditUsage = null;
     const accountTiers = { free: 'lite', starter: 'pro', lite: 'pro', pro: 'pro', business: 'max', max: 'max', ultra: 'ultra' };
     const tierOrder = ['lite', 'pro', 'max', 'ultra'];
     const thinkingOrder = ['off', 'low', 'standard', 'max'];
@@ -109,20 +110,22 @@
     function formatMinimalStatus({ tier = currentTier, webSearch = webSearchEnabled, used = null, remaining = undefined } = {}) {
         const engine = getActiveEngineLabel(tier);
         const rem = Number.isInteger(remaining) ? remaining : getCachedRemainingCredits();
-        const parts = [engine];
-        if (webSearch && isWebSearchAllowed()) {
-            parts.push('Web Search (+5 cr)');
+        const effectiveUsed = Number.isInteger(used) && used >= 0
+            ? used
+            : (lastTurnCreditUsage && Number.isInteger(lastTurnCreditUsage.used) && Number.isInteger(rem) && lastTurnCreditUsage.remaining === rem
+                ? lastTurnCreditUsage.used
+                : null);
+        const enginePrefix = (webSearch && isWebSearchAllowed()) ? `${engine} (Web Search +5 cr)` : engine;
+        if (Number.isInteger(effectiveUsed) && effectiveUsed >= 0 && Number.isInteger(rem)) {
+            return `${enginePrefix}   Used credit: ${effectiveUsed}   Remaining credit: ${rem.toLocaleString()}`;
         }
-        if (Number.isInteger(used) && used >= 0 && Number.isInteger(rem)) {
-            parts.push(`Used credit: ${used} · Remaining credit: ${rem.toLocaleString()}`);
-        } else if (Number.isInteger(rem)) {
-            parts.push(`${rem.toLocaleString()} credits remaining`);
-        } else if (!activeAuthUserId) {
-            parts.push('Sign in for 100 free credits');
-        } else {
-            parts.push('Ready');
+        if (Number.isInteger(rem)) {
+            return `${enginePrefix}   Remaining credit: ${rem.toLocaleString()}`;
         }
-        return parts.join(' • ');
+        if (!activeAuthUserId) {
+            return `${enginePrefix}   Sign in for 100 free credits`;
+        }
+        return `${enginePrefix}   Ready`;
     }
 
     function updateChatHeaderTitle(overrideTitle = null) {
@@ -533,6 +536,7 @@
         activeChatId = null;
         historyUserId = null;
         ambiguousRequestId = null;
+        lastTurnCreditUsage = null;
         currentUserPlan = 'free';
         renamingSessionId = null;
         openMenuSessionId = null;
@@ -1162,6 +1166,7 @@
     function createChatSession() {
         abortInFlightChatRequest();
         activeChatId = null;
+        lastTurnCreditUsage = null;
         conversation.length = 0;
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
@@ -2430,14 +2435,14 @@
 
     function setStatus(message, showUpgrade = false) {
         if (!status) return;
-        const turnMatch = typeof message === 'string' && message.match(/^(.+?)\s*•\s*Used credit:\s*([\d,]+)\s*·\s*Remaining credit:\s*([\d,]+)$/i);
-        const remMatch = !turnMatch && typeof message === 'string' && message.match(/^(.+?)\s*•\s*([\d,]+)\s+credits remaining$/i);
+        const turnMatch = typeof message === 'string' && message.match(/^(.+?)\s+(?:•\s*)?Used credit:\s*([\d,]+)\s+(?:·\s*)?Remaining credit:\s*([\d,]+)$/i);
+        const remOnlyMatch = !turnMatch && typeof message === 'string' && message.match(/^(.+?)\s+(?:•\s*)?Remaining credit:\s*([\d,]+)$/i);
         if (turnMatch) {
             const [, prefixPart, usedVal, remainingVal] = turnMatch;
-            status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-sep" aria-hidden="true">·</span> <span class="chat-status-stat">Used credit: <strong class="chat-credit-used-val">${escapeMarkdownHtml(usedVal)}</strong></span> <span class="chat-status-sep" aria-hidden="true">·</span> <span class="chat-status-stat">Remaining credit: <strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong></span>`;
-        } else if (remMatch) {
-            const [, prefixPart, remainingVal] = remMatch;
-            status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-sep" aria-hidden="true">•</span> <span class="chat-status-stat"><strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong> credits remaining</span>`;
+            status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-stat">Used credit: <strong class="chat-credit-used-val">${escapeMarkdownHtml(usedVal)}</strong></span> <span class="chat-status-stat">Remaining credit: <strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong></span>`;
+        } else if (remOnlyMatch) {
+            const [, prefixPart, remainingVal] = remOnlyMatch;
+            status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-stat">Remaining credit: <strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong></span>`;
         } else {
             status.textContent = message;
         }
@@ -2824,8 +2829,8 @@
             if (Number.isInteger(liveBal) && liveBal >= 0) remaining = liveBal;
         }
 
-        const tierNameMap = { lite: 'Jevexa Core', pro: 'Jevexa Pro', max: 'Jevexa Deep Reasoning', ultra: 'Jevexa Ultra Reasoning' };
-        const fallbackModel = (meta.tier && tierNameMap[String(meta.tier).toLowerCase()]) || 'Jevexa Core';
+        const tierNameMap = { lite: 'Core Engine', pro: 'Pro Engine', max: 'Deep Reasoning', ultra: 'Ultra Reasoning' };
+        const fallbackModel = (meta.tier && tierNameMap[String(meta.tier).toLowerCase()]) || 'Core Engine';
         const rawModel = extracted?.model || meta.modelName || meta.model || fallbackModel;
         const activeModel = window.JEVEXA_SANITIZE_ENGINE_NAME
             ? window.JEVEXA_SANITIZE_ENGINE_NAME(rawModel, fallbackModel)
@@ -2852,15 +2857,15 @@
                 receipt.dataset.remainingCredits = String(remaining);
             }
             const remHtml = (remaining !== null && remaining >= 0)
-                ? ` <span class="chat-receipt-sep" aria-hidden="true">·</span> <span>Remaining credit: <strong>${remaining}</strong></span>`
+                ? ` <span class="chat-receipt-rem">Remaining credit: <strong>${remaining}</strong></span>`
                 : '';
-            receipt.innerHTML = `<span class="chat-receipt-main">⚡ Used credit: <strong>${used}</strong>${remHtml}</span> <span class="chat-receipt-tier">${escapeHtml(activeModel)}</span>`;
+            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span class="chat-receipt-used">⚡ Used credit: <strong>${used}</strong></span>${remHtml}`;
             content.appendChild(receipt);
         } else if (meta.unconfirmedSettlement) {
             const receipt = document.createElement('div');
             receipt.className = 'chat-credit-receipt';
             receipt.setAttribute('role', 'status');
-            receipt.innerHTML = `<span class="chat-receipt-main">⚡ Credit settlement pending reconciliation</span> <span class="chat-receipt-tier">${escapeHtml(activeModel)}</span>`;
+            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span class="chat-receipt-used">⚡ Credit settlement pending reconciliation</span>`;
             content.appendChild(receipt);
         }
     }
@@ -3555,6 +3560,7 @@
 
         showTyping();
         setStatus('Checking sign-in, tier access, and credit cost…');
+        const prevCreditsBeforeSend = getCachedRemainingCredits();
 
         try {
             const planLimits = getUserPlanMemoryLimits();
@@ -3719,16 +3725,34 @@
 
                 removeTyping();
                 const replyText = String(result.reply || streamedText || '').trim();
-                const usedCreditsMeta = Number.isInteger(result?.creditsUsed)
-                    ? result.creditsUsed
-                    : (Number.isInteger(result?.credits_used) ? result.credits_used : (Number.isInteger(result?.creditsCharged) ? result.creditsCharged : null));
-                const remCreditsMeta = Number.isInteger(result?.remainingCredits)
-                    ? result.remainingCredits
-                    : (Number.isInteger(result?.remaining_credits) ? result.remaining_credits : (Number.isInteger(result?.creditsRemaining) ? result.creditsRemaining : null));
+                const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result, { fallbackToLiveBalance: false });
+                const remaining = creditUsage?.remaining ?? (
+                    Number.isInteger(result.remainingCredits)
+                        ? result.remainingCredits
+                        : (Number.isInteger(result.remaining_credits)
+                            ? result.remaining_credits
+                            : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : getCachedRemainingCredits()))
+                );
+                let usedCreditsMeta = creditUsage?.used ?? (
+                    Number.isInteger(result?.creditsUsed)
+                        ? result.creditsUsed
+                        : (Number.isInteger(result?.credits_used) ? result.credits_used : (Number.isInteger(result?.creditsCharged) ? result.creditsCharged : null))
+                );
+                if (usedCreditsMeta === null) {
+                    usedCreditsMeta = (Number.isInteger(prevCreditsBeforeSend) && Number.isInteger(remaining))
+                        ? Math.max(0, prevCreditsBeforeSend - remaining)
+                        : 0;
+                }
+                const resolvedMeta = {
+                    ...result,
+                    tier: String(result?.tier || selectedTier),
+                    creditsUsed: usedCreditsMeta,
+                    ...(Number.isInteger(remaining) && remaining >= 0 ? { remainingCredits: remaining } : {})
+                };
                 const replyMeta = {};
                 if (usedCreditsMeta !== null && usedCreditsMeta >= 0) replyMeta.creditsUsed = usedCreditsMeta;
-                if (remCreditsMeta !== null && remCreditsMeta >= 0) replyMeta.remainingCredits = remCreditsMeta;
-                if (result?.tier || selectedTier) replyMeta.tier = String(result?.tier || selectedTier);
+                if (remaining !== null && remaining >= 0) replyMeta.remainingCredits = remaining;
+                if (resolvedMeta.tier) replyMeta.tier = resolvedMeta.tier;
                 if (result?.modelName || result?.model) replyMeta.modelName = String(result.modelName || result.model);
                 if (result?.webSearch) {
                     replyMeta.webSearch = true;
@@ -3751,24 +3775,15 @@
                     streamBubble.row.classList.remove('is-streaming');
                     streamBubble.row.dataset.messageIndex = String(assistantMsgIndex);
                     streamBubble.body.innerHTML = renderMarkdown(replyText, { streaming: false });
-                    applyBotMetaStatus(streamBubble.content, result);
+                    applyBotMetaStatus(streamBubble.content, resolvedMeta);
                     (streamBubble.col || streamBubble.content).appendChild(buildBotActionButtons());
                     if (!userScrolledUpDuringStream) scrollChatToBottom(false);
                 } else {
-                    appendMessage(replyText, false, assistantMsgIndex, result);
+                    appendMessage(replyText, false, assistantMsgIndex, resolvedMeta);
                 }
 
                 persistConversation(session.user.id);
                 updateChatHeaderTitle();
-                const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result, { fallbackToLiveBalance: false });
-                const remaining = creditUsage?.remaining ?? (
-                    Number.isInteger(result.remainingCredits)
-                        ? result.remainingCredits
-                        : (Number.isInteger(result.remaining_credits)
-                            ? result.remaining_credits
-                            : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null))
-                );
-                const usedForStatus = creditUsage?.used ?? usedCreditsMeta;
                 if (remaining !== null) {
                     const countEl = document.getElementById('creditsCount');
                     if (countEl) countEl.textContent = String(remaining);
@@ -3780,10 +3795,13 @@
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                     window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
                 }
+                if (usedCreditsMeta !== null && usedCreditsMeta >= 0 && Number.isInteger(remaining) && remaining >= 0) {
+                    lastTurnCreditUsage = { used: usedCreditsMeta, remaining };
+                }
                 setStatus(formatMinimalStatus({
                     tier: selectedTier,
                     webSearch: Boolean(result?.webSearch),
-                    used: usedForStatus,
+                    used: usedCreditsMeta,
                     remaining: remaining !== null ? remaining : undefined
                 }));
                 await refreshDisplayedCredits();

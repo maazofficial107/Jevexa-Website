@@ -597,9 +597,10 @@ Terms: Net 30`
             window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
 
             if (statusEl) {
+                const engineLabel = window.JEVEXA_SANITIZE_ENGINE_NAME?.(usage?.tier || result.tier || 'Core Engine') || 'Core Engine';
                 const costText = ocrCharged !== null && ocrRemaining !== undefined
-                    ? ` (Used credit: ${ocrCharged} · Remaining credit: ${ocrRemaining})`
-                    : (ocrCharged ? ` (Used credit: ${ocrCharged})` : '');
+                    ? ` (${engineLabel}   Used credit: ${ocrCharged}   Remaining credit: ${ocrRemaining})`
+                    : (ocrCharged ? ` (${engineLabel}   Used credit: ${ocrCharged})` : '');
                 statusEl.textContent = `Data extracted successfully!${costText}`;
                 statusEl.className = 'ocr-status-msg success';
             }

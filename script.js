@@ -632,15 +632,15 @@ window.JEVEXA_GET_CREDITS_BALANCE = function getLiveCreditsBalance() {
 /**
  * Sanitize engine/model label so raw internal provider model names are never exposed.
  */
-window.JEVEXA_SANITIZE_ENGINE_NAME = function sanitizeEngineName(raw, fallback = 'Jevexa Core') {
+window.JEVEXA_SANITIZE_ENGINE_NAME = function sanitizeEngineName(raw, fallback = 'Core Engine') {
     if (typeof raw !== 'string') return fallback;
     const trimmed = raw.trim();
     if (!trimmed) return fallback;
     const lower = trimmed.toLowerCase();
-    if (lower === 'lite' || lower === 'core' || /core\s*engine|jevexa\s*(?:lite|core)/i.test(trimmed)) return 'Jevexa Core';
-    if (lower === 'pro' || /pro\s*engine|jevexa\s*pro/i.test(trimmed)) return 'Jevexa Pro';
-    if (lower === 'max' || /deep\s*reasoning|jevexa\s*max/i.test(trimmed)) return 'Jevexa Deep Reasoning';
-    if (lower === 'ultra' || /ultra\s*reasoning|jevexa\s*ultra/i.test(trimmed)) return 'Jevexa Ultra Reasoning';
+    if (lower === 'lite' || lower === 'core' || /core\s*engine|jevexa\s*(?:lite|core)/i.test(trimmed)) return 'Core Engine';
+    if (lower === 'pro' || /pro\s*engine|jevexa\s*pro/i.test(trimmed)) return 'Pro Engine';
+    if (lower === 'max' || /deep\s*reasoning|jevexa\s*max/i.test(trimmed)) return 'Deep Reasoning';
+    if (lower === 'ultra' || /ultra\s*reasoning|jevexa\s*ultra/i.test(trimmed)) return 'Ultra Reasoning';
     if (/llama|gpt|claude|gemini|qwen|deepseek|mistral|mixtral|groq|openrouter|anthropic|openai|google\//i.test(lower)) {
         return fallback;
     }
@@ -694,7 +694,7 @@ window.JEVEXA_EXTRACT_CREDIT_USAGE = function extractCreditUsage(payload, option
     const rawModel = typeof payload?.modelName === 'string' && payload.modelName.trim()
         ? payload.modelName.trim()
         : (typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : null);
-    const model = rawModel ? window.JEVEXA_SANITIZE_ENGINE_NAME(rawModel, tier ? window.JEVEXA_SANITIZE_ENGINE_NAME(tier) : 'Jevexa Core') : null;
+    const model = rawModel ? window.JEVEXA_SANITIZE_ENGINE_NAME(rawModel, tier ? window.JEVEXA_SANITIZE_ENGINE_NAME(tier) : 'Core Engine') : null;
     return { used, remaining, tier, model };
 };
 
@@ -738,6 +738,19 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
     footer.dataset.usedCredits = String(usedVal);
     footer.replaceChildren();
 
+    const engineName = options.model
+        ? window.JEVEXA_SANITIZE_ENGINE_NAME(String(options.model))
+        : (options.tier ? window.JEVEXA_SANITIZE_ENGINE_NAME(String(options.tier)) : 'Core Engine');
+    const engineSpan = document.createElement('span');
+    engineSpan.className = 'used-credits-tier';
+    engineSpan.textContent = engineName;
+    footer.appendChild(engineSpan);
+
+    const appendPart = (node) => {
+        footer.appendChild(document.createTextNode('   '));
+        footer.appendChild(node);
+    };
+
     const labelSpan = document.createElement('span');
     labelSpan.className = 'used-credits-label';
     const boltIcon = document.createElement('i');
@@ -746,23 +759,7 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
     const usedStrong = document.createElement('strong');
     usedStrong.textContent = String(usedVal);
     labelSpan.append(boltIcon, document.createTextNode(' Used credit: '), usedStrong);
-    footer.appendChild(labelSpan);
-
-    const appendPart = (text, strongVal = null, cls = 'used-credits-meta') => {
-        const sep = document.createElement('span');
-        sep.className = 'used-credits-sep';
-        sep.setAttribute('aria-hidden', 'true');
-        sep.textContent = '·';
-        const part = document.createElement('span');
-        part.className = cls;
-        part.append(document.createTextNode(text));
-        if (strongVal !== null) {
-            const strong = document.createElement('strong');
-            strong.textContent = String(strongVal);
-            part.appendChild(strong);
-        }
-        footer.append(sep, part);
-    };
+    appendPart(labelSpan);
 
     let remVal = null;
     if (options.remaining !== null && options.remaining !== undefined && options.remaining !== '') {
@@ -774,18 +771,21 @@ window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(cont
 
     if (Number.isInteger(remVal) && remVal >= 0) {
         footer.dataset.remainingCredits = String(remVal);
-        appendPart('Remaining credit: ', remVal, 'used-credits-rem');
+        const remSpan = document.createElement('span');
+        remSpan.className = 'used-credits-rem';
+        const remStrong = document.createElement('strong');
+        remStrong.textContent = String(remVal);
+        remSpan.append(document.createTextNode('Remaining credit: '), remStrong);
+        appendPart(remSpan);
     } else {
         delete footer.dataset.remainingCredits;
     }
 
-    if (options.model) {
-        appendPart(window.JEVEXA_SANITIZE_ENGINE_NAME(String(options.model)), null, 'used-credits-meta used-credits-model');
-    } else if (options.tier) {
-        appendPart(window.JEVEXA_SANITIZE_ENGINE_NAME(String(options.tier), String(options.tier).toUpperCase()), null, 'used-credits-tier');
-    }
     if (options.note) {
-        appendPart(String(options.note));
+        const noteSpan = document.createElement('span');
+        noteSpan.className = 'used-credits-meta';
+        noteSpan.textContent = String(options.note);
+        appendPart(noteSpan);
     }
 
     footer.hidden = false;

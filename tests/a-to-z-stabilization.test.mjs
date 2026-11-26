@@ -561,8 +561,7 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
     assert.equal(desktopOverflow, true, "Desktop 1366x768 must have zero horizontal overflow");
 
     const assertUsedBeforeRemaining = (text, usedVal, remVal, label) => {
-      assert.match(text, new RegExp(`Used credit:\\s*${usedVal}`), `${label}: expected Used credit: ${usedVal}`);
-      assert.match(text, new RegExp(`Remaining credit:\\s*${remVal}`), `${label}: expected Remaining credit: ${remVal}`);
+      assert.match(text, new RegExp(`(?:Core Engine|Pro Engine|Deep Reasoning|Ultra Reasoning)\\s+.*Used credit:\\s*${usedVal}\\s+Remaining credit:\\s*${remVal}`), `${label}: expected <Engine> Used credit: ${usedVal} Remaining credit: ${remVal} (got "${text}")`);
       assert.ok(
         text.indexOf("Used credit:") < text.indexOf("Remaining credit:"),
         `${label}: Used credit must appear before Remaining credit (got "${text}")`

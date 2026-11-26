@@ -4804,7 +4804,7 @@ test("Fix 2: Clean minimal telemetry status — remove legacy (1 cr / 500 tok) a
   // In credits.js, minimal status helper formats active engine + remaining credits cleanly
   assert.doesNotMatch(creditsJs, /setStatus\(`⚡[^\n`]*1 cr \/ 500 tok/);
   assert.match(creditsJs, /function formatMinimalStatus\(/);
-  assert.match(creditsJs, /credits remaining/);
+  assert.match(creditsJs, /Remaining credit:/);
 
   // Hidden receipt node remains intact for structured balance tracking
   assert.match(creditsJs, /⚡ Used credit:/);
@@ -5482,9 +5482,9 @@ test("Flagship upgrade: Single unified settings and bottom-end credit detail in 
   assert.match(html, /data-tab="personality"/);
   assert.match(html, /data-tab="display"/);
 
-  // Requirement 1: Clean single-line telemetry status bar (active engine + remaining credits)
+  // Requirement 1: Clean single-line telemetry status bar (active engine + used/remaining credits)
   assert.match(credits, /function formatMinimalStatus\(/);
-  assert.match(credits, /credits remaining/);
+  assert.match(credits, /Remaining credit:/);
 
   // Subtle bottom receipt inside message bubbles renders cleanly without obscuring text
   assert.match(styles, /\.chat-credit-receipt\s*\{[\s\S]*?display:\s*flex;/);

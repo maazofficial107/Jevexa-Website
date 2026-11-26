@@ -458,7 +458,7 @@
                 }
                 receipt.dataset.usedCredits = String(used);
                 receipt.dataset.remainingCredits = String(remaining);
-                receipt.innerHTML = `<span>⚡ Used credit: <strong>${used}</strong> &nbsp;·&nbsp; Remaining credit: <strong>${remaining}</strong></span>`;
+                receipt.innerHTML = `<span>Core Engine   ⚡ Used credit: <strong>${used}</strong>   Remaining credit: <strong>${remaining}</strong></span>`;
                 receipt.hidden = false;
                 receipt.removeAttribute('hidden');
             }
@@ -498,7 +498,7 @@
                     balanceMessage = ' Your displayed balance could not be refreshed.';
                 }
             }
-            setStatus(`Content generated. Used credit: ${used} · Remaining credit: ${remaining}.${balanceMessage}`, 'success');
+            setStatus(`Content generated. Core Engine   Used credit: ${used}   Remaining credit: ${remaining}.${balanceMessage}`, 'success');
         } catch (error) {
             clearContentProcessing();
             output.textContent = '';

@@ -4789,24 +4789,24 @@ test("Fix 1: Free plan allows image uploads without upgrade modal & accurately d
   }
 });
 
-test("Fix 2: Remove (1 cr / 500 tok) suffix — show only 'Token-weighted'", async () => {
+test("Fix 2: Clean minimal telemetry status — remove legacy (1 cr / 500 tok) and noisy multi-part suffixes", async () => {
   const indexHtml = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const creditsJs = await readFile(new URL("../credits.js", import.meta.url), "utf8");
 
-  // In index.html, #chatCreditStatus has "⚡ Core Engine • Token-weighted" without "(1 cr / 500 tok)"
-  assert.match(indexHtml, /id="chatCreditStatus"[^>]*>\s*⚡ Core Engine • Token-weighted\s*<\/span>/);
+  // In index.html, #chatCreditStatus has clean single-line "Core Engine • Ready"
+  assert.match(indexHtml, /id="chatCreditStatus"[^>]*>\s*Core Engine • Ready\s*<\/span>/);
   assert.doesNotMatch(indexHtml, /id="chatCreditStatus"[^>]*>[\s\S]*?\(1 cr \/ 500 tok\)/);
 
   // In index.html pricing features, Jevexa engines without legacy "(1 cr / 500 tok)"
   assert.match(indexHtml, /Fast \/ Core Engine/);
   assert.doesNotMatch(indexHtml, /\(1 cr \/ 500 tok\)/);
 
-  // In credits.js, status label setStatus uses "⚡ ... • Token-weighted" without "(1 cr / 500 tok)"
+  // In credits.js, minimal status helper formats active engine + remaining credits cleanly
   assert.doesNotMatch(creditsJs, /setStatus\(`⚡[^\n`]*1 cr \/ 500 tok/);
-  assert.match(creditsJs, /setStatus\([^)]*Token-weighted`\)/);
-  assert.match(creditsJs, /• Token-weighted`/);
+  assert.match(creditsJs, /function formatMinimalStatus\(/);
+  assert.match(creditsJs, /credits remaining/);
 
-  // Live receipt footer remains intact
+  // Hidden receipt node remains intact for structured balance tracking
   assert.match(creditsJs, /⚡ Credits used:/);
   assert.match(creditsJs, /Remaining:/);
 });
@@ -5336,11 +5336,11 @@ test("Chatbot upgrade: Stop-abort control, non-promotional system rules & bottom
   // Stop-abort button styling in styles.css
   assert.match(styles, /\.chat-send\.chat-stop-btn\s*\{/);
 
-  // Receipt appears at bottom end of messages in .chat-credit-receipt, status line stays clean
+  // Receipt appears at bottom end of messages in .chat-credit-receipt, status line stays minimal
   assert.match(credits, /receipt\.className = 'chat-credit-receipt'/);
   assert.match(credits, /⚡ Credits used:/);
   assert.match(credits, /Remaining:/);
-  assert.match(credits, /setStatus\(`⚡ \$\{tierDisplayName\}\$\{webLabel\} • Ready`\)/);
+  assert.match(credits, /setStatus\(formatMinimalStatus\(/);
 });
 
 test("Flagship upgrade: Mobile virtual keyboard viewport & visualViewport tracking", async () => {
@@ -5482,8 +5482,9 @@ test("Flagship upgrade: Single unified settings and bottom-end credit detail in 
   assert.match(html, /data-tab="personality"/);
   assert.match(html, /data-tab="display"/);
 
-  // Requirement 1: Bottom-end credit detail in status bar
-  assert.match(credits, /Credits used:\s*\$\{used\}\s*•\s*Remaining:\s*\$\{remaining\}\s*•\s*Token-weighted/);
+  // Requirement 1: Clean single-line telemetry status bar (active engine + remaining credits)
+  assert.match(credits, /function formatMinimalStatus\(/);
+  assert.match(credits, /credits remaining/);
 
   // Chat bubbles clean without clutter (.chat-credit-receipt hidden from message bubbles)
   assert.match(styles, /\.chat-credit-receipt\s*\{[\s\S]*?display:\s*none\s*!important;/);
@@ -5514,11 +5515,9 @@ test("Flagship upgrade: Session resumption continuity, highlighted bottom credit
   assert.match(script, /localStorage\.removeItem\('jevexa_last_workspace'\)/);
   assert.match(script, /window\.JEVEXA_RESUME_CHAT\?\.\(\)/);
 
-  // 2. Clear Bottom Credit Highlighting
-  assert.match(credits, /chat-credit-used-val/);
+  // 2. Clean Bottom Credit Highlighting
   assert.match(credits, /chat-credit-rem-val/);
-  assert.match(styles, /\.chat-credit-used-val\s*\{[\s\S]*?color:\s*#f472b6;/);
-  assert.match(styles, /\.chat-credit-rem-val\s*\{[\s\S]*?color:\s*#38bdf8;/);
+  assert.match(styles, /\.chat-credit-rem-val\s*\{[\s\S]*?tabular-nums;/);
   assert.match(styles, /\.chat-credit-val\s*\{[\s\S]*?tabular-nums;/);
 
   // 3. Clean Single-line Settings Button with Standard Icon (No Subtext)

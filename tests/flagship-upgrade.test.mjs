@@ -236,6 +236,8 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
   }
 
   let currentBalance = 100;
+  let currentPlan = "free";
+  let lastChatBody = null;
   let chatCalls = 0;
   const mockUser = {
     id: userId,
@@ -257,7 +259,15 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
 
     if (pathname === "/mock-balance") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ balance: currentBalance }));
+      res.end(JSON.stringify({ balance: currentBalance, plan: currentPlan }));
+      return;
+    }
+
+    if (pathname === "/mock-upgrade-pro") {
+      currentPlan = "pro";
+      currentBalance = 10000;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ balance: currentBalance, plan: currentPlan }));
       return;
     }
 
@@ -297,12 +307,12 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
                   limit() { return this; },
                   async maybeSingle() {
                     if (table === "user_credits") {
-                      const r = await fetch('/mock-balance').then(x => x.json()).catch(() => ({ balance: 100 }));
-                      return { data: { balance: r.balance, plan: "free" }, error: null };
+                      const r = await fetch('/mock-balance').then(x => x.json()).catch(() => ({ balance: 100, plan: "free" }));
+                      return { data: { balance: r.balance, plan: r.plan || "free" }, error: null };
                     }
                     if (table === "profiles") {
-                      const r = await fetch('/mock-balance').then(x => x.json()).catch(() => ({ balance: 100 }));
-                      return { data: { plan: "free", credits: r.balance }, error: null };
+                      const r = await fetch('/mock-balance').then(x => x.json()).catch(() => ({ balance: 100, plan: "free" }));
+                      return { data: { plan: r.plan || "free", credits: r.balance }, error: null };
                     }
                     return { data: null, error: null };
                   }
@@ -331,8 +341,10 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
       let bodyStr = "";
       for await (const chunk of req) bodyStr += chunk;
       const body = JSON.parse(bodyStr || "{}");
+      lastChatBody = body;
       chatCalls += 1;
-      currentBalance = Math.max(0, currentBalance - 1);
+      const webGrounded = body.webSearch === true;
+      currentBalance = Math.max(0, currentBalance - (webGrounded ? 6 : 1));
 
       const isPythonEdit = /python/i.test(body.message || "");
       const reply = isPythonEdit
@@ -343,18 +355,20 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache"
       });
-      res.write(`event: status\ndata: ${JSON.stringify({ phase: "thinking", tier: "lite", model: "Jevexa Lite" })}\n\n`);
+      res.write(`event: status\ndata: ${JSON.stringify({ phase: "thinking", tier: body.tier || "lite", model: "Jevexa Lite" })}\n\n`);
       const mid = Math.floor(reply.length / 2);
       res.write(`event: token\ndata: ${JSON.stringify({ text: reply.slice(0, mid) })}\n\n`);
       res.write(`event: token\ndata: ${JSON.stringify({ text: reply.slice(mid) })}\n\n`);
       res.write(`event: done\ndata: ${JSON.stringify({
         reply,
-        tier: "lite",
-        model: "Jevexa Lite",
-        modelName: "Jevexa Lite",
-        creditsCharged: 1,
+        tier: body.tier || "lite",
+        model: body.tier === "pro" ? "Jevexa Pro" : "Jevexa Lite",
+        modelName: body.tier === "pro" ? "Jevexa Pro" : "Jevexa Lite",
+        webSearch: webGrounded,
+        webSearchSurcharge: webGrounded ? 5 : 0,
+        creditsCharged: webGrounded ? 6 : 1,
         creditsRemaining: currentBalance,
-        credits_used: 1,
+        credits_used: webGrounded ? 6 : 1,
         remaining_credits: currentBalance,
         requestId: body.requestId
       })}\n\n`);
@@ -561,6 +575,14 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
       hasUserCopy: Boolean(document.querySelector('#chatMessages .message.user [data-chat-action="copy-user"]')),
       hasUserEdit: Boolean(document.querySelector('#chatMessages .message.user [data-chat-action="edit-user"]')),
       hasCodeBlock: Boolean(document.querySelector('#chatMessages .message.bot .chat-code-block')),
+      botActionsOutsideBubble: Boolean(
+        document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .msg-bot-col > .chat-bot-actions')
+        && !document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .msg-content .chat-bot-actions')
+      ),
+      webBtnLabel: document.querySelector('#chatWebSearchBtn .chat-web-search-label')?.textContent.trim(),
+      webBtnLocked: document.getElementById('chatWebSearchBtn')?.dataset.locked,
+      webBtnAriaDisabled: document.getElementById('chatWebSearchBtn')?.getAttribute('aria-disabled'),
+      statusText: document.getElementById('chatCreditStatus')?.textContent.trim(),
       botText: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body').textContent,
       credits: document.getElementById('creditsCount').textContent
     })`);
@@ -568,8 +590,28 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
     assert.equal(firstChatState.hasUserCopy, true);
     assert.equal(firstChatState.hasUserEdit, true);
     assert.equal(firstChatState.hasCodeBlock, true);
+    assert.equal(firstChatState.botActionsOutsideBubble, true);
+    assert.equal(firstChatState.webBtnLabel, "Web Search");
+    assert.equal(firstChatState.webBtnLocked, "true");
+    assert.equal(firstChatState.webBtnAriaDisabled, "false");
+    assert.match(firstChatState.statusText, /99 credits remaining/);
+    assert.doesNotMatch(firstChatState.statusText, /Token-weighted|Credits used:/);
     assert.match(firstChatState.botText, /const hello/);
     assert.equal(firstChatState.credits, "99");
+
+    // Verify locked Web Search click opens Pro Upgrade Modal smoothly
+    await cdp.eval(`document.getElementById('chatWebSearchBtn').click()`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 80))`);
+    const webUpgradeState = await cdp.eval(`({
+      modalHidden: document.getElementById('upgradeModal')?.hidden,
+      requiredPlan: document.getElementById('upgradeModal')?.dataset.requiredPlan,
+      title: document.getElementById('upgradeModalTitle')?.textContent.trim()
+    })`);
+    assert.equal(webUpgradeState.modalHidden, false);
+    assert.equal(webUpgradeState.requiredPlan, "pro");
+    assert.match(webUpgradeState.title, /Web Search/i);
+    await cdp.eval(`document.getElementById('upgradeModalClose').click()`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 250))`);
 
     // Test User Copy button feedback (patch clipboard if headless blocks focus)
     await cdp.eval(`
@@ -624,17 +666,54 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
     assert.equal(afterEditState.credits, "98");
     assert.equal(chatCalls, 2);
 
+    // 5b. Pro plan: Web Search unlocks, toggles active with Live pill, persists across New Chat, and sends webSearch: true
+    await cdp.eval(`fetch('/mock-upgrade-pro').then(() => { document.getElementById('chatbotToggle').click(); })`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 200))`);
+    await cdp.eval(`document.getElementById('chatWebSearchBtn').click()`);
+    const proWebState = await cdp.eval(`({
+      locked: document.getElementById('chatWebSearchBtn').dataset.locked,
+      pressed: document.getElementById('chatWebSearchBtn').getAttribute('aria-pressed'),
+      label: document.querySelector('#chatWebSearchBtn .chat-web-search-label').textContent.trim(),
+      pill: document.querySelector('#chatWebSearchBtn .chat-web-search-pill').textContent.trim()
+    })`);
+    assert.equal(proWebState.locked, "false");
+    assert.equal(proWebState.pressed, "true");
+    assert.equal(proWebState.label, "Web Search");
+    assert.equal(proWebState.pill, "Live");
+
+    // Persistence across New Chat
+    await cdp.eval(`document.getElementById('chatNewConversation').click()`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 60))`);
+    assert.equal(await cdp.eval(`document.getElementById('chatWebSearchBtn').getAttribute('aria-pressed')`), "true");
+
+    await cdp.eval(`(() => {
+      const inp = document.getElementById('chatInput');
+      inp.value = 'Latest AI news';
+      document.getElementById('chatSend').click();
+    })()`);
+    await cdp.eval(`new Promise(r => {
+      const check = () => {
+        const badge = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-web-grounded-badge');
+        if (badge) r();
+        else setTimeout(check, 50);
+      };
+      check();
+    })`);
+    assert.equal(lastChatBody?.webSearch, true);
+
     // 6. Mobile viewport (390x844) layout stability check
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
     await cdp.eval(`new Promise(r => setTimeout(r, 250))`);
     const mobileMetrics = await cdp.eval(`({
       docOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       chatOverflow: document.getElementById('chatMessages').scrollWidth > document.getElementById('chatMessages').clientWidth + 2,
-      userActionsOpacity: parseFloat(getComputedStyle(document.querySelector('.chat-user-actions')).opacity)
+      userActionsOpacity: parseFloat(getComputedStyle(document.querySelector('.chat-user-actions')).opacity),
+      botActionsOpacity: parseFloat(getComputedStyle(document.querySelector('.chat-bot-actions')).opacity)
     })`);
     assert.equal(mobileMetrics.docOverflow, false, "Mobile page must have zero horizontal overflow");
     assert.equal(mobileMetrics.chatOverflow, false, "Mobile chat thread must have zero horizontal overflow");
     assert.ok(mobileMetrics.userActionsOpacity >= 0.85, "User actions must be accessible on mobile");
+    assert.ok(mobileMetrics.botActionsOpacity >= 0.85, "Bot actions must be accessible on mobile");
     assert.deepEqual(pageErrors, []);
   } finally {
     if (cdp) cdp.close();

@@ -3595,6 +3595,7 @@
                 <button type="button" id="chatSignInButton">Sign in</button>
             </div>
 
+            <div class="chat-composer-dock">
             <div class="chat-tier-controls">
                 <input type="hidden" id="chatTier" value="lite">
                 <div class="chat-select" data-chat-select="tier">
@@ -3624,15 +3625,12 @@
                         <div class="chat-select-option" role="option" tabindex="-1" data-value="max" data-label="Max (High)" data-locked="true" aria-label="High/Max deep thinking, requires Max or Ultra plan." aria-selected="false"><span class="chat-option-main"><span class="chat-option-title">Max / High (Max+)</span><span class="chat-option-sub">Maximum depth</span></span><span class="chat-option-state" aria-hidden="true">🔒</span></div>
                     </div>
                 </div>
-                <button type="button" id="chatWebSearchBtn" class="chat-web-search-btn" aria-pressed="false" data-locked="true" title="Real-Time Web Search (+5 credits/request · Pro 15/day, Max 50/day, Ultra 150/day)">
+                <button type="button" id="chatWebSearchBtn" class="chat-web-search-btn" aria-pressed="false" aria-disabled="false" data-locked="true" title="Real-Time Web Search (+5 credits/request · Pro 15/day, Max 50/day, Ultra 150/day)">
                     <i class="fas fa-globe" aria-hidden="true"></i>
-                    <span class="chat-web-search-label">Web Search (+5 cr)</span>
-                    <span class="chat-web-search-pill" aria-hidden="true">PRO</span>
+                    <span class="chat-web-search-label">Web Search</span>
+                    <span class="chat-web-search-pill" aria-hidden="true"><i class="fas fa-lock"></i></span>
                 </button>
-                <span id="chatComposerWebBadge" class="chat-composer-web-badge" role="status" aria-live="polite" hidden>
-                    <i class="fas fa-bolt" aria-hidden="true"></i>
-                    <span>Live Web Active</span>
-                </span>
+                <span id="chatComposerWebBadge" class="chat-composer-web-badge visually-hidden" role="status" aria-live="polite" hidden>Live Web Search active (+5 credits/request)</span>
             </div>
 
             <div class="chat-attachment-list" id="chatAttachmentList" aria-live="polite" hidden></div>
@@ -3646,9 +3644,10 @@
                 <button type="button" id="chatSend" class="chat-send" aria-label="Send message"><i class="fas fa-paper-plane"></i></button>
 
             </div>
+            </div>
 
             <div class="chat-credit-notice">
-                <span id="chatCreditStatus" role="status" aria-live="polite">⚡ Core Engine • Token-weighted</span>
+                <span id="chatCreditStatus" role="status" aria-live="polite">Core Engine • Ready</span>
                 <a id="chatCreditUpgrade" href="#pricing" hidden>View plans</a>
             </div>
             </main>

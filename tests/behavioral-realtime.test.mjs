@@ -518,7 +518,7 @@ test('13. Chatbot Behavioral: Guest clean session restart and Welcome Chip messa
     // Verify chatNewConversation does not gate on login
     assert.ok(creditsCode.includes("bindSafe(document.getElementById('chatNewConversation'), 'click', () => {"));
     assert.ok(creditsCode.includes('createChatSession();'));
-    assert.ok(creditsCode.includes("setStatus('New chat started.');"));
+    assert.ok(creditsCode.includes('setStatus(formatMinimalStatus());'));
 
     // Verify chatWelcomeChips dispatching logic
     assert.ok(creditsCode.includes('chatWelcomeChips'));

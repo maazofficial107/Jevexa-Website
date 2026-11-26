@@ -63,6 +63,66 @@
     const tierOrder = ['lite', 'pro', 'max', 'ultra'];
     const thinkingOrder = ['off', 'low', 'standard', 'max'];
 
+    function webSearchKey(userId) {
+        return userId ? `jevexa_${userId}_web_search` : null;
+    }
+
+    function getStoredWebSearchPref(userId) {
+        const key = webSearchKey(userId);
+        if (!key) return false;
+        try {
+            return localStorage.getItem(key) === 'true';
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function saveWebSearchPref(userId, enabled) {
+        const key = webSearchKey(userId);
+        if (!key) return;
+        try {
+            localStorage.setItem(key, String(Boolean(enabled)));
+        } catch (_) {}
+    }
+
+    function getActiveEngineLabel(tier = currentTier) {
+        const labels = {
+            lite: 'Core Engine',
+            pro: 'Pro Engine',
+            max: 'Deep Reasoning',
+            ultra: 'Ultra Reasoning'
+        };
+        return labels[(tier || 'lite').toLowerCase()] || 'Core Engine';
+    }
+
+    function getCachedRemainingCredits() {
+        const countEl = document.getElementById('creditsCount');
+        const raw = countEl ? countEl.textContent.replace(/,/g, '').trim() : '';
+        if (raw && /^\d+$/.test(raw)) return parseInt(raw, 10);
+        try {
+            const persisted = localStorage.getItem('jevexa_persisted_credits');
+            if (persisted && /^\d+$/.test(persisted.trim())) return parseInt(persisted.trim(), 10);
+        } catch (_) {}
+        return null;
+    }
+
+    function formatMinimalStatus({ tier = currentTier, webSearch = webSearchEnabled, remaining = undefined } = {}) {
+        const engine = getActiveEngineLabel(tier);
+        const rem = Number.isInteger(remaining) ? remaining : getCachedRemainingCredits();
+        const parts = [engine];
+        if (webSearch && isWebSearchAllowed()) {
+            parts.push('Web Search (+5 cr)');
+        }
+        if (Number.isInteger(rem)) {
+            parts.push(`${rem.toLocaleString()} credits remaining`);
+        } else if (!activeAuthUserId) {
+            parts.push('Sign in for 100 free credits');
+        } else {
+            parts.push('Ready');
+        }
+        return parts.join(' • ');
+    }
+
     function isWebSearchAllowed() {
         return Boolean(activeAuthUserId)
             && !['free', 'lite', 'starter'].includes(currentUserPlan)
@@ -78,26 +138,45 @@
         }
         if (btn) {
             btn.dataset.locked = String(!allowed);
+            btn.setAttribute('aria-disabled', 'false');
             btn.classList.toggle('is-locked', !allowed);
             btn.setAttribute('aria-pressed', String(webSearchEnabled));
             btn.classList.toggle('active', webSearchEnabled);
             const labelEl = btn.querySelector('.chat-web-search-label') || btn.querySelector('span:not(.chat-web-search-pill)');
             if (labelEl) {
-                labelEl.textContent = webSearchEnabled ? 'Web Search ON (+5 cr)' : 'Web Search (+5 cr)';
+                labelEl.textContent = 'Web Search';
             }
             const pillEl = btn.querySelector('.chat-web-search-pill');
             if (pillEl) {
-                pillEl.textContent = !allowed ? 'PRO' : (webSearchEnabled ? 'ON' : 'OFF');
+                if (!allowed) {
+                    pillEl.innerHTML = '<i class="fas fa-lock" aria-hidden="true"></i>';
+                    pillEl.className = 'chat-web-search-pill is-lock';
+                    pillEl.hidden = false;
+                } else if (webSearchEnabled) {
+                    pillEl.textContent = 'Live';
+                    pillEl.className = 'chat-web-search-pill is-live';
+                    pillEl.hidden = false;
+                } else {
+                    pillEl.textContent = '';
+                    pillEl.className = 'chat-web-search-pill';
+                    pillEl.hidden = true;
+                }
             }
+            btn.title = !allowed
+                ? 'Web Search · Requires Pro (15/day), Max (50/day), or Ultra (150/day)'
+                : (webSearchEnabled
+                    ? 'Web Search ON (+5 credits/request) · Click to turn off'
+                    : 'Web Search (+5 credits/request) · Click to enable');
             btn.setAttribute(
                 'aria-label',
                 !allowed
-                    ? 'Live Web Search requires Pro, Max, or Ultra plan. Click to view upgrade options.'
-                    : `Live Web Search (+5 credits per request): ${webSearchEnabled ? 'On' : 'Off'}`
+                    ? 'Web Search, locked. Requires Pro, Max, or Ultra plan. Click to view upgrade options.'
+                    : `Web Search (+5 credits per request): ${webSearchEnabled ? 'Active' : 'Off'}`
             );
         }
         if (badge) {
             badge.hidden = !webSearchEnabled;
+            badge.textContent = webSearchEnabled ? 'Live Web Search active (+5 credits/request)' : '';
         }
     }
 
@@ -1065,10 +1144,10 @@
         updateChatWelcome();
         pendingAttachments.length = 0;
         renderAttachments();
-        webSearchEnabled = false;
+        webSearchEnabled = isWebSearchAllowed() ? getStoredWebSearchPref(historyUserId || activeAuthUserId) : false;
         syncWebSearchUI();
         renderChatHistory();
-        setStatus('New chat started.');
+        setStatus(formatMinimalStatus());
         document.getElementById('chatInput')?.focus();
     }
 
@@ -1084,8 +1163,11 @@
             }
         }
         activeChatId = sessionId;
-        webSearchEnabled = Boolean(session.webSearch) && isWebSearchAllowed();
+        webSearchEnabled = isWebSearchAllowed()
+            ? (typeof session.webSearch === 'boolean' ? session.webSearch : getStoredWebSearchPref(historyUserId || activeAuthUserId))
+            : false;
         syncWebSearchUI();
+        setStatus(formatMinimalStatus());
         if (historyUserId) {
             try {
                 localStorage.setItem(activeChatKey(historyUserId), sessionId);
@@ -1159,6 +1241,7 @@
                         updatedAt: Number(remote.updatedAt) || Date.now(),
                         pinned: Boolean(remote.pinned),
                         languageOverride: remote.languageOverride || null,
+                        ...(typeof local?.webSearch === 'boolean' ? { webSearch: local.webSearch } : {}),
                         messages: remote.messages.slice(-100).filter(m => m && ['user', 'assistant'].includes(m.role) && typeof m.text === 'string')
                     });
                     changed = true;
@@ -1175,12 +1258,13 @@
         try {
             if (!activeChatId) {
                 activeChatId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-                chatSessions.unshift({ id: activeChatId, title: 'New chat', updatedAt: Date.now(), pinned: false, messages: [] });
+                chatSessions.unshift({ id: activeChatId, title: 'New chat', updatedAt: Date.now(), pinned: false, webSearch: webSearchEnabled, messages: [] });
             }
             const session = chatSessions.find(item => item.id === activeChatId);
             if (!session) return false;
             session.messages = conversation.slice(-100);
             session.updatedAt = Date.now();
+            session.webSearch = webSearchEnabled;
             const firstUserText = session.messages.find(item => item.role === 'user')?.text;
             if (firstUserText && (!session.title || session.title === 'New chat')) {
                 session.title = firstUserText.slice(0, 48);
@@ -1221,6 +1305,8 @@
                     title: typeof item.title === 'string' ? item.title.slice(0, 48) : 'New chat',
                     updatedAt: item.updatedAt,
                     pinned: Boolean(item.pinned),
+                    languageOverride: item.languageOverride || null,
+                    ...(typeof item.webSearch === 'boolean' ? { webSearch: item.webSearch } : {}),
                     messages: item.messages.slice(-100).filter(message =>
                         message && ['user', 'assistant'].includes(message.role)
                         && typeof message.text === 'string' && message.text.length <= 4000
@@ -1326,7 +1412,16 @@
                 currentThinkingLevel = thinkingSelect.value;
                 updateSelectorDisplay('thinking');
             }
+            const activeSess = activeChatId ? chatSessions.find(item => item.id === activeChatId) : null;
+            if (isWebSearchAllowed()) {
+                webSearchEnabled = typeof activeSess?.webSearch === 'boolean'
+                    ? activeSess.webSearch
+                    : getStoredWebSearchPref(session.user.id);
+            } else {
+                webSearchEnabled = false;
+            }
             syncWebSearchUI();
+            setStatus(formatMinimalStatus());
         } catch (tierErr) {
             console.warn('Chat tier lookup notice, defaulting to lite:', tierErr?.message || tierErr);
             maximumChatTier = 'lite';
@@ -1334,6 +1429,7 @@
             if (tierSelect) tierSelect.value = 'lite';
             updateSelectorDisplay('tier');
             syncWebSearchUI();
+            setStatus(formatMinimalStatus());
         }
     }
 
@@ -2301,10 +2397,10 @@
 
     function setStatus(message, showUpgrade = false) {
         if (!status) return;
-        const creditMatch = typeof message === 'string' && message.match(/^(⚡\s*[^•]+)\s*•\s*Credits used:\s*(\d+)\s*•\s*Remaining:\s*(\d+)\s*•\s*(Token-weighted.*)$/i);
-        if (creditMatch) {
-            const [, tierPart, usedVal, remainingVal, methodPart] = creditMatch;
-            status.innerHTML = `<span class="chat-status-tier">${tierPart.trim()}</span> <span class="chat-status-sep">•</span> <span class="chat-status-stat">Credits used: <strong class="chat-credit-val chat-credit-used-val">${usedVal}</strong></span> <span class="chat-status-sep">•</span> <span class="chat-status-stat">Remaining: <strong class="chat-credit-val chat-credit-rem-val">${remainingVal}</strong></span> <span class="chat-status-sep">•</span> <span class="chat-status-method">${methodPart.trim()}</span>`;
+        const remMatch = typeof message === 'string' && message.match(/^(.+?)\s*•\s*([\d,]+)\s+credits remaining$/i);
+        if (remMatch) {
+            const [, prefixPart, remainingVal] = remMatch;
+            status.innerHTML = `<span class="chat-status-tier">${escapeMarkdownHtml(prefixPart.trim())}</span> <span class="chat-status-sep" aria-hidden="true">•</span> <span class="chat-status-stat"><strong class="chat-credit-rem-val">${escapeMarkdownHtml(remainingVal)}</strong> credits remaining</span>`;
         } else {
             status.textContent = message;
         }
@@ -2674,17 +2770,16 @@
         const remaining = Number.isInteger(meta.remainingCredits) ? meta.remainingCredits : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits : (Number.isInteger(meta.creditsRemaining) ? meta.creditsRemaining : null));
         const tierNameMap = { lite: 'Jevexa Core', pro: 'Jevexa Pro', max: 'Jevexa Deep Reasoning', ultra: 'Jevexa Ultra Reasoning' };
         const activeModel = meta.modelName || meta.model || (meta.tier && tierNameMap[meta.tier.toLowerCase()]) || 'Jevexa Core';
-        const fullModelName = activeModel.startsWith('Jevexa ') ? activeModel : `Jevexa ${activeModel}`;
         const webGrounded = Boolean(meta.webSearch);
         const webSurcharge = Number(meta.webSearchSurcharge) || 5;
         if (used !== null && remaining !== null) {
-            const webLabel = webGrounded ? ' • 🌐 Web Search ON' : '';
-            setStatus(`⚡ ${fullModelName}${webLabel} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
+            setStatus(formatMinimalStatus({ tier: meta.tier || currentTier, webSearch: webGrounded, remaining }));
         }
         if (webGrounded) {
             const webBadge = document.createElement('div');
             webBadge.className = 'chat-web-grounded-badge';
-            webBadge.innerHTML = `<i class="fas fa-globe" aria-hidden="true"></i><span>Web Search Grounded (+${webSurcharge} cr)</span>`;
+            webBadge.title = `Real-time web grounding applied (+${webSurcharge} credits)`;
+            webBadge.innerHTML = `<i class="fas fa-globe" aria-hidden="true"></i><span>Web Grounded</span>`;
             content.appendChild(webBadge);
         }
         const receipt = document.createElement('div');
@@ -2705,12 +2800,15 @@
         const icon = document.createElement('i');
         icon.className = 'fas fa-wand-magic-sparkles';
         avatar.appendChild(icon);
+        const col = document.createElement('div');
+        col.className = 'msg-bot-col';
         const content = document.createElement('div');
         content.className = 'msg-content';
         const body = document.createElement('div');
         body.className = 'msg-body';
         content.appendChild(body);
-        row.append(avatar, content);
+        col.appendChild(content);
+        row.append(avatar, col);
         messages.appendChild(row);
         const renderedMessages = messages.querySelectorAll('.message:not([data-chat-welcome])');
         for (let i = 0; i < renderedMessages.length - maxRenderedMessages; i += 1) {
@@ -2720,7 +2818,7 @@
         if (welcome) welcome.hidden = true;
         const emptyState = document.getElementById('chatEmptyState');
         if (emptyState) emptyState.hidden = true;
-        return { row, content, body };
+        return { row, col, content, body };
     }
 
     function appendMessage(text, user = false, index = conversation.length, meta = null) {
@@ -2745,9 +2843,11 @@
             col.append(content, buildUserActionButtons());
             row.append(avatar, col);
         } else {
+            const col = document.createElement('div');
+            col.className = 'msg-bot-col';
             applyBotMetaStatus(content, meta);
-            content.appendChild(buildBotActionButtons());
-            row.append(avatar, content);
+            col.append(content, buildBotActionButtons());
+            row.append(avatar, col);
         }
         messages.appendChild(row);
         const renderedMessages = messages.querySelectorAll('.message:not([data-chat-welcome])');
@@ -3449,7 +3549,7 @@
                 return;
             }
 
-            setStatus(webSearchEnabled ? `⚡ ${selectedTier.toUpperCase()} • Web Search ON • Token-weighted` : `⚡ ${selectedTier.toUpperCase()} • Token-weighted`);
+            setStatus(formatMinimalStatus({ tier: selectedTier, webSearch: webSearchEnabled }));
 
             let streamedText = '';
             let streamBubble = null;
@@ -3486,7 +3586,7 @@
                         conversation.push({ role: 'assistant', text: partial });
                         trimConversationToMax(100);
                         streamBubble.row.dataset.messageIndex = String(conversation.length - 1);
-                        streamBubble.content.appendChild(buildBotActionButtons());
+                        (streamBubble.col || streamBubble.content).appendChild(buildBotActionButtons());
                         persistConversation(session.user.id);
                     } else {
                         streamBubble.row.remove();
@@ -3545,7 +3645,7 @@
                     streamBubble.row.dataset.messageIndex = String(assistantMsgIndex);
                     streamBubble.body.innerHTML = renderMarkdown(replyText, { streaming: false });
                     applyBotMetaStatus(streamBubble.content, result);
-                    streamBubble.content.appendChild(buildBotActionButtons());
+                    (streamBubble.col || streamBubble.content).appendChild(buildBotActionButtons());
                     if (!userScrolledUpDuringStream) scrollChatToBottom(false);
                 } else {
                     appendMessage(replyText, false, assistantMsgIndex, result);
@@ -3555,9 +3655,6 @@
                 const remaining = Number.isInteger(result.remaining_credits)
                     ? result.remaining_credits
                     : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null);
-                const used = Number.isInteger(result.credits_used)
-                    ? result.credits_used
-                    : (Number.isInteger(result.creditsCharged) ? result.creditsCharged : (Number.isInteger(result.creditsUsed) ? result.creditsUsed : 1));
                 if (remaining !== null) {
                     const countEl = document.getElementById('creditsCount');
                     if (countEl) countEl.textContent = String(remaining);
@@ -3569,14 +3666,11 @@
                     window.JEVEXA_SYNC_WORKSPACE_CREDITS?.();
                     window.JEVEXA_UPDATE_CREDIT_BALANCE?.(remaining);
                 }
-                const tierDisplayName = result?.modelName || result?.model || (selectedTier ? (selectedTier[0].toUpperCase() + selectedTier.slice(1)) : 'Lite');
-                const fullTierName = tierDisplayName.startsWith('Jevexa ') ? tierDisplayName : `Jevexa ${tierDisplayName}`;
-                const webLabel = result?.webSearch ? ' • 🌐 Web Search ON' : '';
-                if (used !== null && remaining !== null) {
-                    setStatus(`⚡ ${fullTierName}${webLabel} • Credits used: ${used} • Remaining: ${remaining} • Token-weighted`);
-                } else {
-                    setStatus(`⚡ ${tierDisplayName}${webLabel} • Ready`);
-                }
+                setStatus(formatMinimalStatus({
+                    tier: selectedTier,
+                    webSearch: Boolean(result?.webSearch),
+                    remaining: remaining !== null ? remaining : undefined
+                }));
                 await refreshDisplayedCredits();
             } catch (error) {
                 if (rafId !== null) {
@@ -4100,7 +4194,6 @@
 
     bindSafe(document.getElementById('chatNewConversation'), 'click', () => {
         createChatSession();
-        setStatus('New chat started.');
     });
 
     document.getElementById('chatHistorySearch')?.addEventListener('input', renderChatHistory);
@@ -4147,7 +4240,7 @@
             ultra: 'Ultra Reasoning'
         };
         const activeModelName = tierStatusLabels[tier] || 'Core Engine (1.0x)';
-        setStatus(`⚡ ${activeModelName}${webSearchEnabled ? ' • 🌐 Web Search ON' : ''} • Token-weighted`);
+        setStatus(formatMinimalStatus({ tier, webSearch: webSearchEnabled }));
         const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
         if (statusText && activeAuthUserId) statusText.textContent = `${activeModelName} • Online`;
     });
@@ -4185,6 +4278,8 @@
             return;
         }
         webSearchEnabled = !webSearchEnabled;
+        const uid = historyUserId || activeAuthUserId;
+        saveWebSearchPref(uid, webSearchEnabled);
         if (activeChatId) {
             const activeSess = chatSessions.find(item => item.id === activeChatId);
             if (activeSess) {
@@ -4193,7 +4288,7 @@
             }
         }
         syncWebSearchUI();
-        setStatus(webSearchEnabled ? '🌐 Web Search ON (+5 cr/request)' : '⚡ Core Engine • Token-weighted');
+        setStatus(formatMinimalStatus({ tier: currentTier, webSearch: webSearchEnabled }));
     }, {
         getKey: () => document.getElementById('chatWebSearchBtn'),
         preventDefaultOnDebounce: false,

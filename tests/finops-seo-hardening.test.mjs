@@ -281,18 +281,25 @@ test("Jevexa AI Branding & Web Search UX: zero raw model names, aligned 5-tier p
   assert.match(indexHtml, /data-value="max"[^>]*data-label="Deep Reasoning \(18\.0x\)"/);
   assert.match(indexHtml, /data-value="ultra"[^>]*data-label="Ultra Reasoning"/);
 
-  // Interactive Web Search toggle wiring, composer badge, response badge, and upgrade modal gating
-  assert.match(indexHtml, /id="chatWebSearchBtn"[^>]*aria-pressed="false"/);
+  // Interactive Web Search toggle wiring, clean label, lock/active pill, composer dock, and upgrade modal gating
+  assert.match(indexHtml, /id="chatWebSearchBtn"[^>]*aria-pressed="false"[^>]*aria-disabled="false"[^>]*data-locked="true"/);
+  assert.match(indexHtml, /class="chat-web-search-label">Web Search<\/span>/);
+  assert.doesNotMatch(indexHtml, /class="chat-web-search-label">Web Search \(\+5 cr\)<\/span>/);
+  assert.match(indexHtml, /class="chat-composer-dock"/);
   assert.match(indexHtml, /id="chatComposerWebBadge"/);
   assert.match(creditsJs, /function isWebSearchAllowed\(\)/);
   assert.match(creditsJs, /function syncWebSearchUI\(\)/);
-  assert.match(creditsJs, /Web Search ON \(\+5 cr\)/);
+  assert.match(creditsJs, /labelEl\.textContent = 'Web Search';/);
+  assert.match(creditsJs, /pillEl\.textContent = 'Live';/);
+  assert.match(creditsJs, /saveWebSearchPref/);
   assert.match(creditsJs, /chat-web-grounded-badge/);
+  assert.match(creditsJs, /msg-bot-col/);
   assert.match(creditsJs, /window\.JEVEXA_SHOW_UPGRADE_MODAL\('Pro', 'Live Web Search', btn\)/);
   assert.match(scriptJs, /\/web\\s\*search\/i\.test\(feature/);
 
-  // CSS specificity fix & dropdown layering
+  // CSS specificity fix, unified composer dock, ghost actions, & dropdown layering
   assert.doesNotMatch(stylesCss, /\.chat-tier-controls button\s*\{/);
+  assert.match(stylesCss, /\.chat-composer-dock\s*\{/);
   assert.match(stylesCss, /\.chat-tier-controls \.chat-web-search-btn/);
   assert.match(stylesCss, /\.chat-tier-controls \.chat-web-search-btn\[aria-pressed="true"\]/);
   assert.match(stylesCss, /\.chat-select-menu\s*\{[^}]*z-index:\s*100005;/);

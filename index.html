@@ -826,6 +826,10 @@
                 </div>
             </div>
             <div class="workspace-header-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="contentWorkspaceCredits" role="status" aria-label="Credit balance">
                     <span class="credits-lightning">ϟ</span>
                     <strong class="workspace-credits-val">—</strong>
@@ -950,6 +954,10 @@
                 </div>
             </div>
             <div class="workspace-header-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="crmWorkspaceCredits" role="status" aria-label="Credit balance">
                     <span class="credits-lightning">ϟ</span>
                     <strong class="workspace-credits-val">—</strong>
@@ -1242,6 +1250,10 @@
                 </div>
             </div>
             <div class="workspace-header-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="outreachWorkspaceCredits" role="status" aria-label="Credit balance">
                     <span class="credits-lightning">ϟ</span>
                     <strong class="workspace-credits-val">—</strong>
@@ -1446,6 +1458,10 @@
                 </div>
             </div>
             <div class="workspace-top-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="ocrWorkspaceCredits" role="status" aria-label="Credit balance">
                     <i class="fas fa-coins"></i>
                     <span class="credits-count workspace-credits-val">—</span>
@@ -1611,6 +1627,10 @@
                 </div>
             </div>
             <div class="workspace-top-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="socialWorkspaceCredits" role="status" aria-label="Credit balance">
                     <i class="fas fa-coins"></i>
                     <span class="credits-count workspace-credits-val">—</span>
@@ -1760,6 +1780,10 @@
                 </div>
             </div>
             <div class="workspace-top-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="analyticsWorkspaceCredits" role="status" aria-label="Credit balance">
                     <i class="fas fa-coins"></i>
                     <span class="credits-count workspace-credits-val">—</span>
@@ -2235,6 +2259,10 @@
                 </div>
             </div>
             <div class="workspace-top-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <button type="button" class="btn btn-primary btn-sm" id="teamInviteModalBtn"><i class="fas fa-user-plus"></i> Invite Member</button>
                 <button type="button" class="workspace-close-btn" id="teamAdminWorkspaceClose" aria-label="Close workspace">
                     <i class="fas fa-xmark"></i>
@@ -2395,6 +2423,10 @@
                 </div>
             </div>
             <div class="workspace-top-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="workflowsWorkspaceCredits" role="status" aria-label="Credit balance">
                     <i class="fas fa-coins"></i>
                     <span class="credits-count workspace-credits-val">—</span>
@@ -2500,6 +2532,10 @@
                 </div>
             </div>
             <div class="workspace-top-right">
+                <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                    <span class="conn-dot" aria-hidden="true"></span>
+                    <span class="conn-label"></span>
+                </span>
                 <div class="workspace-credits-badge" id="dataWorkspaceCredits" role="status" aria-label="Credit balance">
                     <i class="fas fa-coins"></i>
                     <span class="credits-count workspace-credits-val">—</span>
@@ -3469,6 +3505,10 @@
         </div>
     </div>
 
+    <div class="offline-indicator" id="globalOfflineIndicator" role="status" aria-live="assertive">
+        <i class="fas fa-wifi" aria-hidden="true"></i>
+        <span>Offline — Waiting for internet connection…</span>
+    </div>
     <div id="toast" class="toast"></div>
 
 
@@ -3539,11 +3579,33 @@
                 </div>
                 <div class="chatbot-header-center">
                     <div class="chatbot-info">
-                        <h4 id="chatbotTitle">New Chat</h4>
+                        <div class="chat-header-brand-badge" id="chatHeaderEmblemBadge">
+                            <span class="chat-ai-emblem" id="chatHeaderEmblem" aria-hidden="true">
+                                <svg viewBox="0 0 36 36" fill="none">
+                                    <defs>
+                                        <linearGradient id="jevEmblemGrad" x1="4" y1="4" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#a78bfa"/>
+                                            <stop offset="50%" stop-color="#38bdf8"/>
+                                            <stop offset="100%" stop-color="#22d3ee"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="emblem-orbit-outer" cx="18" cy="18" r="14.5" stroke="url(#jevEmblemGrad)" stroke-width="1.4" stroke-dasharray="18 8 6 8" stroke-linecap="round"/>
+                                    <circle class="emblem-orbit-inner" cx="18" cy="18" r="9.5" stroke="url(#jevEmblemGrad)" stroke-width="1.2" stroke-dasharray="10 6" stroke-linecap="round"/>
+                                    <circle class="emblem-core-glow" cx="18" cy="18" r="5.5" fill="url(#jevEmblemGrad)"/>
+                                    <path class="emblem-spark" d="M18 11.5L19.45 16.55L24.5 18L19.45 19.45L18 24.5L16.55 19.45L11.5 18L16.55 16.55L18 11.5Z" fill="#ffffff"/>
+                                    <circle class="emblem-sat" cx="18" cy="3.5" r="2" fill="#38bdf8"/>
+                                </svg>
+                            </span>
+                            <h4 id="chatbotTitle" class="chat-header-title-text">Jevexa AI</h4>
+                        </div>
                         <span class="status" id="chatbotStatusText">Sign in to start</span>
                     </div>
                 </div>
                 <div class="chatbot-header-right">
+                    <span class="jevexa-conn-badge is-online" data-jevexa-conn-badge role="status" aria-live="polite" aria-label="Connection status: Online">
+                        <span class="conn-dot" aria-hidden="true"></span>
+                        <span class="conn-label"></span>
+                    </span>
                     <div class="workspace-credits-badge" id="chatWorkspaceCredits" role="status" aria-label="Credit balance">
                         <span class="credits-lightning">ϟ</span>
                         <strong class="workspace-credits-val">—</strong>
@@ -3556,6 +3618,17 @@
                 </div>
             </div>
             <div class="chat-empty-state" id="chatEmptyState">
+                <div class="chat-empty-emblem" aria-hidden="true">
+                    <span class="chat-ai-emblem chat-ai-emblem-lg">
+                        <svg viewBox="0 0 36 36" fill="none">
+                            <circle class="emblem-orbit-outer" cx="18" cy="18" r="14.5" stroke="url(#jevEmblemGrad)" stroke-width="1.35" stroke-dasharray="18 8 6 8" stroke-linecap="round"/>
+                            <circle class="emblem-orbit-inner" cx="18" cy="18" r="9.5" stroke="url(#jevEmblemGrad)" stroke-width="1.2" stroke-dasharray="10 6" stroke-linecap="round"/>
+                            <circle class="emblem-core-glow" cx="18" cy="18" r="5.5" fill="url(#jevEmblemGrad)"/>
+                            <path class="emblem-spark" d="M18 11.5L19.45 16.55L24.5 18L19.45 19.45L18 24.5L16.55 19.45L11.5 18L16.55 16.55L18 11.5Z" fill="#ffffff"/>
+                            <circle class="emblem-sat" cx="18" cy="3.5" r="2" fill="#38bdf8"/>
+                        </svg>
+                    </span>
+                </div>
                 <h2 id="chatWelcomeTitle">👋 Welcome! Ready to automate?</h2>
                 <p>Ask anything, upload files, or start with a prompt below.</p>
                 <div class="chat-welcome-chips" id="chatWelcomeChips" aria-label="Quick-start prompts">

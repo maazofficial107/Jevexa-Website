@@ -4232,6 +4232,7 @@ async function handleChat(request, env, ctx) {
         webSearchSurcharge,
         modelMultiplier: usage.modelMultiplier,
         creditsCharged: chargedCredits,
+        charged_credits: chargedCredits,
         creditsRemaining: remainingCredits,
         credits_used: chargedCredits,
         remaining_credits: remainingCredits,
@@ -8186,6 +8187,24 @@ function allowSupportAiRequest(request) {
   return true;
 }
 
+function sanitizeSupportReply(raw) {
+  if (typeof raw !== "string" || !raw) return "";
+  let text = raw.replace(/\r\n?/g, "\n");
+  // Convert ***heading/emphasis*** cleanly to **bold**
+  text = text.replace(/\*{3}([^*\n]+?)\*{3}/g, "**$1**");
+  // Remove standalone markdown divider lines (***, ---, ___) that render awkwardly in support replies
+  text = text.replace(/^[ \t]*(?:\*{3,}|-{3,}|_{3,})[ \t]*$/gm, "");
+  // Strip any stray unclosed *** artifacts
+  text = text.replace(/(^|\s)\*{3,}(?=\s|$)/gm, "$1");
+  text = text.replace(/\*{3,}/g, "");
+  // Convert leading markdown heading hashes into crisp bold titles
+  text = text.replace(/^[ \t]*#{1,4}[ \t]+(.+)$/gm, "**$1**");
+  // Normalize leading * / - bullets into clean bullet points
+  text = text.replace(/^[ \t]*[-*][ \t]+/gm, "• ");
+  text = text.replace(/\n{3,}/g, "\n\n");
+  return text.trim();
+}
+
 function generateContextualSupportResponse(message, history = []) {
   const raw = String(message || "").trim();
   const q = raw.toLowerCase();
@@ -8193,43 +8212,59 @@ function generateContextualSupportResponse(message, history = []) {
 
   if (detectedLang.code === "roman_urdu") {
     if (/price|pricing|\bplans?\b|ultra|pro|lite|max|cost|kitna|annual|discount/i.test(q)) {
-      return "JEVEXA ke 5 transparent plans hain (20% annual discount aur one-time credit packages ke saath):\n• Free ($0): 100 welcome credits, Core Engine (1.0x), Thinking OFF\n• Lite ($5/mo, $48/yr): 2,500 credits/month, Pro Engine (3.0x), PDF/ZIP uploads\n• Pro ($15/mo, $144/yr): 10,000 credits/month, Low/Medium thinking, Live Web Search (15/day)\n• Max ($29/mo, $278.40/yr): 22,000 credits/month, Deep Reasoning (18.0x), High thinking, Web Search (50/day)\n• Ultra ($49/mo, $470.40/yr): 40,000 credits/month, Ultra Reasoning priority, Web Search (150/day)\nMazeed maloomat ke liye /pricing dekhein ya 'Talk to Human Agent' click karein.";
+      return "JEVEXA ke 5 transparent plans hain (20% annual discount ke saath):\n• **Free ($0):** 100 welcome credits, Core Engine (1.0x)\n• **Lite ($5/mo, $48/yr):** 2,500 credits/mo, Pro Engine (3.0x), PDF/ZIP uploads\n• **Pro ($15/mo, $144/yr):** 10,000 credits/mo, Low/Medium thinking, Web Search (15/day)\n• **Max ($29/mo, $278.40/yr):** 22,000 credits/mo, Deep Reasoning (18.0x), High thinking, Web Search (50/day)\n• **Ultra ($49/mo, $470.40/yr):** 40,000 credits/mo, Ultra Reasoning, Web Search (150/day)\nMukammal details ke liye /pricing dekhein ya 'Talk to Human Agent' par click karein.";
     }
     if (/credit|token|balance|cost|refund/i.test(q)) {
-      return "Naye accounts ko 100 free welcome credits milte hain. AI Chat token-weighted billing use karta hai (Core 1.0x, Pro 3.0x, Deep Reasoning 18.0x; Web Search +5 cr; Image +2 / PDF +4 / ZIP +5). 7-day refund policy (/refund-policy) <10% usage par laagu hoti hai.";
+      return "Naye accounts ko **100 free welcome credits** milte hain. AI Chat token-weighted billing use karta hai (Core 1.0x, Pro 3.0x, Deep Reasoning 18.0x; Web Search +5 cr; Image +2 / PDF +4 / ZIP +5). **7-day refund policy** (/refund-policy) <10% usage par laagu hoti hai.";
     }
-    return "Assalam-o-Alaikum! Main JEVEXA Support Assistant hoon. Aap mujhse 10 AI tools, credits, pricing (/pricing), ya 7-day refund policy (/refund-policy) ke baare mein pooch sakte hain. Account help ke liye 'Talk to Human Agent' par click karein ya hello@jevexa.net par email karein.";
+    return "Assalam-o-Alaikum! Main JEVEXA Support Assistant hoon. Aap mujhse pricing (/pricing), 100 free credits, 10 AI tools, Web Search ya account madad ke baare mein pooch sakte hain. Agar account issue ho toh 'Talk to Human Agent' par click karein ya hello@jevexa.net par email karein.";
+  }
+
+  if (/^(?:hi|hello|hey|aoa|salam|good\s+(?:morning|afternoon|evening))\b[!.?]*$/i.test(raw)) {
+    return "Hello! Welcome to JEVEXA Support. How can I help you today? Feel free to ask about our plans (/pricing), credits, any of our 10 AI tools, or account troubleshooting.";
+  }
+
+  if (/offline|connect|network|internet|connection/i.test(q)) {
+    return "Every JEVEXA workspace monitors your live connection status (`Online` / `Offline`).\n• If your connection drops, workspaces immediately switch to **Offline** and pause cloud requests so no credits are wasted.\n• Once your internet reconnects, status switches back to **Online** automatically and pending credits sync safely.";
   }
 
   if (/reconcil|stuck|hold|held|awaiting safe|locked|unlock/i.test(q)) {
-    return "If an AI message or credit reservation ever displays 'awaiting reconciliation', our system automatically releases any stale pending hold older than 15–30 seconds and restores the held credits to your wallet. You can also click 'Clear & Unlock Chat' in the chat header to reset your session immediately. If you need any manual account adjustment, click 'Talk to Human Agent' below!";
+    return "If a credit reservation is ever held after an interrupted request:\n• Stale pending holds older than **15–30 seconds** release automatically and return credits to your wallet.\n• You can also click **Talk to Human Agent** below if you would like us to verify your account balance manually.";
   }
 
-  if (/\b(tools?|features?|capabilities|ocr|crm|content|social|analytics|workflow)\b/i.test(q)) {
-    return "JEVEXA AI Studio includes all 10 live business tools unlocked in your workspace: AI Chat, Content Generation, Email & Outreach AI, Mini CRM, Document AI & OCR, Social Media Assistant, Business Analytics, Team Admin, Workflow Automation, and Data Management. You can test the studio right away with your 100 free credits!";
+  if (/refund|cancel|money\s*back/i.test(q)) {
+    return "All JEVEXA credit packages are **one-time purchases** (no auto-renewal or surprise charges).\n• Packages are eligible for a full refund within **7 days** if less than **10%** of credits have been used.\n• Review full terms at /refund-policy or click **Talk to Human Agent** with your order email.";
   }
 
-  if (/price|pricing|\bplans?\b|ultra|pro|lite|max|annual|discount|subscription|buy|checkout|safepay/i.test(q)) {
-    return "JEVEXA offers 5 transparent tiers with an automatic 20% annual package discount:\n• Free: $0 — 100 one-time welcome credits, Fast / Core Engine (1.0x), thinking OFF\n• Lite: $5/mo ($4/mo annual, $48/yr) — 2,500 credits/month, Pro Engine (3.0x), thinking OFF, Images + PDF + ZIP\n• Pro: $15/mo ($12/mo annual, $144/yr) — 10,000 credits/month, Pro Engine (3.0x), Low/Medium thinking, Web Search (15/day, +5 cr/search)\n• Max: $29/mo ($23.20/mo annual, $278.40/yr) — 22,000 credits/month, Deep Reasoning Engine (18.0x), High thinking & priority queues, Web Search (50/day)\n• Ultra: $49/mo ($39.20/mo annual, $470.40/yr) — 40,000 credits/month, Maximum Deep Reasoning & priority compute, Max thinking depth, Web Search (150/day)\nAll paid packages are one-time purchases backed by our 7-day refund policy (/refund-policy). Visit /pricing or click Upgrade!";
+  if (/\bpro\b/i.test(q) && !/\b(?:lite|max|ultra|free|all|compare|per message|credit)\b/i.test(q) && /cost|price|pricing|much|include|plan/i.test(q)) {
+    return "The **Pro Plan** is **$15/mo** (or **$12/mo** billed annually at **$144/yr**, saving 20%):\n• **10,000 credits/month** across all 10 AI Studio tools\n• **Core Engine (1.0x)** & **Pro Engine (3.0x)** unlocked\n• **Low & Medium Thinking** modes + **Images, PDF & ZIP** uploads\n• **Live Web Search** (15 requests/day, +5 credits/request)\nCompare all plans at /pricing.";
   }
 
-  if (/credit|token|balance|cost|quota|rate limit|welcome|refund/i.test(q)) {
-    return "JEVEXA includes 100 free welcome credits (no credit card required). Usage uses token-weighted billing:\n• Fast / Core Engine (1.0x): Free, Lite, Pro, Max, Ultra\n• Pro Engine (3.0x): Lite, Pro, Max, Ultra\n• Deep Reasoning Engine (18.0x): Max & Ultra\n• Attachments: Image (+2 cr), PDF (+4 cr), ZIP (+5 cr)\n• Real-Time Web Search Grounding: +5 credits/request (Pro 15/day, Max 50/day, Ultra 150/day)\nPackages are eligible for a full refund within 7 days if less than 10% of credits are consumed (/refund-policy).";
+  if (/credit|token|balance|quota|rate limit|welcome|per message/i.test(q)) {
+    return "New JEVEXA accounts start with **100 free welcome credits** (no card required), and every response displays **Used credit** and **Remaining credit** right below the output.\n• **Engines & Multipliers:** Core Engine (1.0x on Free+), Pro Engine (3.0x on Lite/Pro/Max/Ultra), Deep Reasoning (18.0x on Max/Ultra) per 500 tokens\n• **Add-ons:** Web Search (+5 cr/req), Image (+2 cr), PDF (+4 cr), ZIP (+5 cr)\n• **Free Daily Cap:** 15 credits/day on Free plan; paid plans lift daily caps. See /pricing for details.";
+  }
+
+  if (/\b(?:lite|max|ultra|free)\b.*(?:cost|price|pricing|much|include)/i.test(q) || /price|pricing|\bplans?\b|annual|discount|subscription|buy|checkout|safepay/i.test(q)) {
+    return "JEVEXA offers 5 transparent plans with an automatic **20% annual discount** (one-time purchases, no auto-renewal):\n• **Free ($0):** 100 welcome credits, Core Engine (1.0x), Thinking OFF\n• **Lite ($5/mo · $48/yr):** 2,500 credits/month, Pro Engine (3.0x), PDF & ZIP uploads\n• **Pro ($15/mo · $144/yr):** 10,000 credits/month, Low/Medium Thinking, Live Web Search (15/day)\n• **Max ($29/mo · $278.40/yr):** 22,000 credits/month, Deep Reasoning (18.0x), High Thinking, Web Search (50/day)\n• **Ultra ($49/mo · $470.40/yr):** 40,000 credits/month, Ultra Reasoning priority, Max Thinking, Web Search (150/day)\nExplore full details at /pricing or ask about a specific plan.";
+  }
+
+  if (/\b(tools?|features?|capabilities|ocr|crm|content|social|analytics|workflow|data)\b/i.test(q)) {
+    return "JEVEXA AI Studio includes **10 live business tools** accessible from the main studio:\n• **AI Chat** (multi-engine, memory, file uploads & Web Search)\n• **Content Generation** & **Email Outreach AI**\n• **Document AI & OCR**, **Business Analytics** & **Data Management**\n• **Mini CRM**, **Social Media Assistant**, **Workflow Automation** & **Team Admin**\nSign in to test all 10 tools with your 100 free credits!";
   }
 
   if (/think|reasoning|model|search|upload|attachment|pdf|zip|file/i.test(q)) {
-    return "JEVEXA AI engine & capability limits:\n• Fast / Core Engine (1.0x): All plans — fast everyday responses, drafting & workflows\n• Pro Engine (3.0x): Lite, Pro, Max, Ultra — deeper analysis & document work\n• Deep Reasoning Engine (18.0x): Max & Ultra (Ultra adds maximum thinking depth, priority compute & highest daily search/file limits)\n• Thinking Mode: OFF on Free & Lite; Low/Medium on Pro; High/Max on Max & Ultra\n• Real-Time Web Search: Disabled on Free & Lite; 15/day on Pro, 50/day on Max, 150/day on Ultra (+5 credits/search)\n• Uploads: Free allows up to 5 images (5 MB); Lite/Pro/Max/Ultra unlock PDF + ZIP + Images.";
+    return "Here is how JEVEXA engines, thinking, search, and uploads work:\n• **Engines:** Core (1.0x, Free+), Pro (3.0x, Lite+), Deep/Ultra Reasoning (18.0x, Max/Ultra)\n• **Thinking Mode:** Off on Free/Lite · Low/Medium on Pro · High/Max on Max & Ultra\n• **Live Web Search:** 15/day on Pro, 50/day on Max, 150/day on Ultra (+5 credits/request)\n• **Uploads:** Free supports up to 5 images (5 MB each); Lite+ unlocks PDF & ZIP archives.";
   }
 
   if (/human|agent|support|maaz|contact|ticket|email|phone|call/i.test(q)) {
-    return "Email Support: Response within 24 hours (Mon–Sat). Click 'Talk to Human Agent' below to submit a ticket directly to our team, or email hello@jevexa.net.";
+    return "Our team is happy to help! **Email Support:** Response within 24 hours (Mon–Sat).\n• Click **Talk to Human Agent** below to send a direct ticket to Maaz.\n• Or email us anytime at hello@jevexa.net.";
   }
 
   if (/login|signin|sign in|signup|sign up|register|account|password|forgot/i.test(q)) {
-    return "You can sign up or sign in using 'Get Started' or 'Sign In' at the top right. New accounts receive 100 free welcome credits across all 10 tools. Use 'Forgot password?' inside the login dialog if needed.";
+    return "To sign in or create your account:\n• Click **Get Started** or **Login** in the top navigation bar.\n• New accounts receive **100 free welcome credits** immediately.\n• If you forgot your password, click **Forgot password?** inside the sign-in dialog to reset it.";
   }
 
-  return "Hello! I am the JEVEXA Support Assistant. I can help with all 10 AI tools, token-weighted credits (Core 1.0x / Pro 3.0x / Deep Reasoning 18.0x), Web Search & Thinking caps, plans (/pricing), or our 7-day refund policy (/refund-policy). Email Support: Response within 24 hours (Mon–Sat).";
+  return "Happy to help! Tell me what you'd like to know about JEVEXA—such as plan pricing (/pricing), credit usage, Web Search, file uploads, or any of our 10 AI tools—and I'll give you a direct answer. You can also click **Talk to Human Agent** anytime.";
 }
 
 async function handleSupportAi(request, env) {
@@ -8262,7 +8297,12 @@ async function handleSupportAi(request, env) {
   }
 
   const detectedLang = detectScriptAndLanguage(message);
-  const supportPrompt = `You are Jevexa Support AI for jevexa.net. Answer the user's EXACT question directly, accurately, cleanly, and concisely with short bullets when helpful. Avoid generic fluff, repetition, or robotic filler.
+  const supportPrompt = `You are Jevexa Support AI for jevexa.net — a warm, polite, expert Product Support Assistant.
+RESPONSE STYLE:
+- Answer the user's EXACT question directly and helpfully in a friendly, clear, concise tone.
+- Structure multi-point answers with clean "• " bullets and **bold** only for key labels or numbers.
+- NEVER output raw "***", "---", "___", or markdown "#" headings.
+- Do NOT paste unrelated plan tables when the user only asked a specific question (e.g. only explain Pro if they asked about Pro).
 
 LANGUAGE RULE: Always respond in ${detectedLang.label || "the exact language and script of the user's message"} (English, Roman Urdu, Urdu script, Arabic, Hindi, etc.).
 
@@ -8274,8 +8314,9 @@ ACCURATE PLATFORM FACTS:
   * Pro ($15/mo, $144/yr): 10,000 credits/mo, Core & Pro Engines, Low/Medium Thinking, Live Web Search (15/day, +5 cr/request).
   * Max ($29/mo, $278.40/yr): 22,000 credits/mo, Deep Reasoning Engine (18.0x), High/Max Thinking, Web Search (50/day).
   * Ultra ($49/mo, $470.40/yr): 40,000 credits/mo, Ultra Reasoning & priority compute, Max Thinking, Web Search (150/day).
-- Credit billing: Token-weighted (1.0x / 3.0x / 18.0x) + Web Search (+5 cr/req) + attachments (+2 Image, +4 PDF, +5 ZIP). Stuck reservations auto-release after 15–30s or via header reset.
-- Human support: Click 'Talk to Human' or email hello@jevexa.net (Response within 24 hours, Mon–Sat). Never claim to be human or invent policies.`;
+- Credit billing: Token-weighted (1.0x / 3.0x / 18.0x) + Web Search (+5 cr/req) + attachments (+2 Image, +4 PDF, +5 ZIP). Used and remaining credits display after each response. Stuck reservations auto-release after 15–30s.
+- Connectivity: All workspaces show live Online/Offline status and protect credits when offline.
+- Human support: Click 'Talk to Human Agent' or email hello@jevexa.net (Response within 24 hours, Mon–Sat). Never claim to be human or invent policies.`;
 
   const executeSupportGroq = async () => {
     if (!groqApiKey) return false;
@@ -8292,7 +8333,7 @@ ACCURATE PLATFORM FACTS:
       models: groqModels
     });
     if (groqResult.ok && groqResult.reply) {
-      return groqResult.reply;
+      return sanitizeSupportReply(groqResult.reply);
     }
     console.warn("Groq Support AI failed, checking failover provider:", groqResult.message);
     return false;
@@ -8313,7 +8354,7 @@ ACCURATE PLATFORM FACTS:
       models: geminiModels
     });
     if (geminiResult.ok && geminiResult.reply) {
-      return geminiResult.reply;
+      return sanitizeSupportReply(geminiResult.reply);
     }
     console.warn("Gemini Support AI failed, checking failover provider:", geminiResult.message);
     return false;
@@ -8345,7 +8386,7 @@ ACCURATE PLATFORM FACTS:
       fallbackModel: DEFAULT_OPENROUTER_MODELS.pro
     });
     if (orResult.ok && orResult.reply) {
-      return json({ reply: orResult.reply });
+      return json({ reply: sanitizeSupportReply(orResult.reply) });
     }
   }
   return json({ reply: generateContextualSupportResponse(message, history) });
@@ -9083,8 +9124,12 @@ function sanitizeSessionMessages(rawMessages) {
       const entry = { role: m.role, text: m.text.slice(0, 16000) };
       if (m.role === "assistant" && m.meta && typeof m.meta === "object") {
         const cleanMeta = {};
-        if (Number.isInteger(m.meta.creditsUsed) && m.meta.creditsUsed >= 0) cleanMeta.creditsUsed = m.meta.creditsUsed;
-        if (Number.isInteger(m.meta.remainingCredits) && m.meta.remainingCredits >= 0) cleanMeta.remainingCredits = m.meta.remainingCredits;
+        if (typeof m.meta.creditsUsed === "number" && Number.isFinite(m.meta.creditsUsed) && m.meta.creditsUsed >= 0) {
+          cleanMeta.creditsUsed = Math.round(m.meta.creditsUsed);
+        }
+        if (typeof m.meta.remainingCredits === "number" && Number.isFinite(m.meta.remainingCredits) && m.meta.remainingCredits >= 0) {
+          cleanMeta.remainingCredits = Math.round(m.meta.remainingCredits);
+        }
         if (typeof m.meta.tier === "string") cleanMeta.tier = m.meta.tier.slice(0, 24);
         if (typeof m.meta.modelName === "string") cleanMeta.modelName = m.meta.modelName.slice(0, 64);
         if (m.meta.webSearch === true) cleanMeta.webSearch = true;

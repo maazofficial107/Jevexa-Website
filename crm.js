@@ -906,6 +906,11 @@
             return;
         }
 
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            window.showToast?.('⚠️ You are currently offline. Please reconnect to import leads.');
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
@@ -1190,6 +1195,11 @@
             return;
         }
 
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            window.showToast?.('⚠️ You are currently offline. Please reconnect to save lead notes.');
+            return;
+        }
+
         if (drawerAddNoteBtn) drawerAddNoteBtn.disabled = true;
         try {
             const { error } = await window.supabaseClient
@@ -1265,6 +1275,20 @@
             return;
         }
 
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            const offlineFallback = deterministicClientCrmScore(lead);
+            lead.lead_score = offlineFallback.lead_score;
+            lead.ai_summary = offlineFallback.summary;
+            lead.suggested_outreach_angle = offlineFallback.suggested_outreach_angle;
+            lead.ai_score_credits = 0;
+            lead.ai_score_remaining = window.JEVEXA_GET_CREDITS_BALANCE?.() ?? undefined;
+            lead.ai_score_note = 'Offline local engine (no charge)';
+            renderAiStrategyBox(lead);
+            renderAll();
+            window.showToast?.('⚠️ You are currently offline — scored locally (0 credits charged). Reconnect for Cloud CRM AI.');
+            return;
+        }
+
         state.isAiScoring = true;
         if (drawerAiScoreBtn) {
             drawerAiScoreBtn.disabled = true;
@@ -1311,10 +1335,11 @@
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(data);
             lead.lead_score = data.lead_score;
             lead.ai_summary = data.summary;
-            lead.ai_score_credits = usage?.used ?? (Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null));
+            lead.ai_score_credits = usage?.used ?? (Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : 1));
             lead.ai_score_remaining = usage?.remaining ?? (Number.isInteger(data.remaining_credits) ? data.remaining_credits : undefined);
             lead.ai_score_note = null;
             if (data.suggested_outreach_angle) {

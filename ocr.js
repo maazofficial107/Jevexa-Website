@@ -527,10 +527,16 @@ Terms: Net 30`
                 window.showToast?.('Sign in for image/PDF Vision OCR, or paste text to parse locally.');
                 return;
             }
-            // Instant local extraction for guest / offline mode
+            // Instant local extraction for guest mode
             setTimeout(() => {
                 const localData = deterministicClientOcr(text, docType, curr);
                 renderExtraction(localData, text);
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(resultCard, 0, {
+                    id: 'ocrCreditReceipt',
+                    allowZero: true,
+                    note: 'Local engine (no charge)',
+                    insertBefore: '.ocr-actions-bar'
+                });
                 state.isProcessing = false;
                 if (extractBtn) {
                     extractBtn.disabled = false;
@@ -542,6 +548,28 @@ Terms: Net 30`
                 }
                 window.showToast?.('Document data extracted locally!');
             }, 300);
+            return;
+        }
+
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            const offlineData = deterministicClientOcr(text, docType, curr);
+            renderExtraction(offlineData, text);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(resultCard, 0, {
+                id: 'ocrCreditReceipt',
+                allowZero: true,
+                note: 'Offline local engine (no charge)',
+                insertBefore: '.ocr-actions-bar'
+            });
+            state.isProcessing = false;
+            if (extractBtn) {
+                extractBtn.disabled = false;
+                extractBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Extract Structured Data';
+            }
+            if (statusEl) {
+                statusEl.textContent = 'You are currently offline — extracted locally via client engine (0 credits charged). Reconnect for Cloud AI.';
+                statusEl.className = 'ocr-status-msg info';
+            }
+            window.showToast?.('⚠️ You are currently offline. Reconnect to use Cloud OCR.');
             return;
         }
 
@@ -580,13 +608,15 @@ Terms: Net 30`
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             renderExtraction(result.data, text);
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
-            const ocrCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const ocrCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : 1));
             const ocrRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(resultCard, ocrCharged, {
                 id: 'ocrCreditReceipt',
                 remaining: ocrRemaining,
+                allowZero: true,
                 tier: usage?.tier || result.tier,
                 insertBefore: '.ocr-actions-bar'
             });

@@ -131,16 +131,26 @@
     function updateChatHeaderTitle(overrideTitle = null) {
         const titleEl = document.getElementById('chatbotTitle');
         if (!titleEl) return;
+        const badgeEl = document.getElementById('chatHeaderEmblemBadge');
         if (typeof overrideTitle === 'string' && overrideTitle.trim()) {
-            titleEl.textContent = overrideTitle.trim();
+            const cleanOverride = overrideTitle.trim();
+            titleEl.textContent = /^new\s+chat$/i.test(cleanOverride) ? 'Jevexa AI' : cleanOverride;
+            badgeEl?.classList.toggle('is-active-thread', !/^new\s+chat$/i.test(cleanOverride));
             return;
         }
         const activeSess = activeChatId ? chatSessions.find(item => item.id === activeChatId) : null;
-        if (activeSess?.title && activeSess.title.trim()) {
+        if (activeSess?.title && activeSess.title.trim() && !/^new\s+chat$/i.test(activeSess.title.trim())) {
             titleEl.textContent = activeSess.title.trim();
+            badgeEl?.classList.add('is-active-thread');
         } else {
             const firstUserMsg = conversation.find(m => m?.role === 'user' && typeof m.text === 'string' && m.text.trim());
-            titleEl.textContent = firstUserMsg ? firstUserMsg.text.trim().slice(0, 42) : 'New Chat';
+            if (firstUserMsg) {
+                titleEl.textContent = firstUserMsg.text.trim().slice(0, 42);
+                badgeEl?.classList.add('is-active-thread');
+            } else {
+                titleEl.textContent = 'Jevexa AI';
+                badgeEl?.classList.remove('is-active-thread');
+            }
         }
     }
 
@@ -571,7 +581,7 @@
         renderMemoriesUI();
         renderChatHistory();
         updateChatWelcome(null);
-        updateChatHeaderTitle('New Chat');
+        updateChatHeaderTitle('Jevexa AI');
         setStatus('Please sign in to use the AI chatbot.');
     }
 
@@ -1179,7 +1189,7 @@
         webSearchEnabled = isWebSearchAllowed() ? getStoredWebSearchPref(historyUserId || activeAuthUserId) : false;
         syncWebSearchUI();
         renderChatHistory();
-        updateChatHeaderTitle('New Chat');
+        updateChatHeaderTitle('Jevexa AI');
         setStatus(formatMinimalStatus());
         document.getElementById('chatInput')?.focus();
     }
@@ -1200,7 +1210,7 @@
             ? (typeof session.webSearch === 'boolean' ? session.webSearch : getStoredWebSearchPref(historyUserId || activeAuthUserId))
             : false;
         syncWebSearchUI();
-        updateChatHeaderTitle(session.title || 'New Chat');
+        updateChatHeaderTitle(session.title || 'Jevexa AI');
         setStatus(formatMinimalStatus());
         if (historyUserId) {
             try {
@@ -2230,17 +2240,31 @@
         });
     }
 
+    function getChatbotOnlineState() {
+        if (window.JEVEXA_CONNECTIVITY && typeof window.JEVEXA_CONNECTIVITY.isOnline === 'function') {
+            return window.JEVEXA_CONNECTIVITY.isOnline();
+        }
+        return typeof navigator === 'undefined' || navigator.onLine !== false;
+    }
+
+    function setChatHeaderConnLabel(statusText, onlineLabel) {
+        if (!statusText) return;
+        const onlineNow = getChatbotOnlineState();
+        statusText.dataset.connState = onlineNow ? 'online' : 'offline';
+        statusText.textContent = onlineNow ? onlineLabel : 'Offline';
+    }
+
     async function initializeChatSession() {
         try {
             const session = await getSession();
             const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
             if (!session) {
-                if (statusText) statusText.textContent = 'AI chat • Sign-in required';
+                setChatHeaderConnLabel(statusText, 'AI chat • Sign-in required');
                 lockChatTiers();
                 updateChatWelcome(null);
                 return;
             }
-            if (statusText) statusText.textContent = 'AI chat • Online';
+            setChatHeaderConnLabel(statusText, 'AI chat • Online');
             loadConversation(session.user.id);
             updateChatWelcome(session.user);
             await refreshTierAccess(session);
@@ -2511,8 +2535,10 @@
         });
         out = out
             .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
+            .replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>')
             .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
             .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+            .replace(/(^|\s)\*{3,}(?=\s|$)/g, '$1')
             .replace(/\[([^\]]+)\]\((#[a-zA-Z0-9_-]+)\)/g, '<a href="$2">$1</a>')
             .replace(/\[([^\]]+)\]\((https?:\/\/[^\s<>"')]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
         return out.replace(/@@JEVEXA_INLINE_CODE_(\d+)@@/g, (_m, idx) => inlineCodes[Number(idx)] || '');
@@ -3395,9 +3421,15 @@
                 try {
                     while (true) {
                         const { value, done } = await reader.read();
-                        if (done) break;
-                        resetIdle();
-                        buffer += decoder.decode(value, { stream: true });
+                        if (done) {
+                            buffer += decoder.decode();
+                            if (buffer.trim()) {
+                                buffer += '\n';
+                            }
+                        } else {
+                            resetIdle();
+                            buffer += decoder.decode(value, { stream: true });
+                        }
                         let nlIdx;
                         while ((nlIdx = buffer.indexOf('\n')) !== -1) {
                             const line = buffer.slice(0, nlIdx).replace(/\r$/, '');
@@ -3410,6 +3442,7 @@
                                 dispatchEvent(currentEvent, line.slice(5).trim());
                             }
                         }
+                        if (done) break;
                     }
                 } finally {
                     reader.releaseLock();
@@ -3445,11 +3478,12 @@
         const text = input?.value.trim();
         if (!text && pendingAttachments.length === 0) return;
 
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (!getChatbotOnlineState() || (typeof navigator !== 'undefined' && !navigator.onLine)) {
             setStatus('You are currently offline. Please check your internet connection before sending.', true);
             if (typeof window.showToast === 'function') {
-                window.showToast('You are currently offline. Please reconnect to send messages.');
+                window.showToast('⚠️ You are currently offline. Please reconnect to send messages.');
             }
+            window.JEVEXA_CONNECTIVITY?.checkNow?.({ notifyToast: false });
             return;
         }
 
@@ -3724,6 +3758,7 @@
                 }
 
                 removeTyping();
+                window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
                 const replyText = String(result.reply || streamedText || '').trim();
                 const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result, { fallbackToLiveBalance: false });
                 const remaining = creditUsage?.remaining ?? (
@@ -3736,12 +3771,20 @@
                 let usedCreditsMeta = creditUsage?.used ?? (
                     Number.isInteger(result?.creditsUsed)
                         ? result.creditsUsed
-                        : (Number.isInteger(result?.credits_used) ? result.credits_used : (Number.isInteger(result?.creditsCharged) ? result.creditsCharged : null))
+                        : (Number.isInteger(result?.credits_used)
+                            ? result.credits_used
+                            : (Number.isInteger(result?.creditsCharged)
+                                ? result.creditsCharged
+                                : (Number.isInteger(result?.charged_credits) ? result.charged_credits : null)))
                 );
                 if (usedCreditsMeta === null) {
-                    usedCreditsMeta = (Number.isInteger(prevCreditsBeforeSend) && Number.isInteger(remaining))
-                        ? Math.max(0, prevCreditsBeforeSend - remaining)
-                        : 0;
+                    if (Number.isInteger(prevCreditsBeforeSend) && Number.isInteger(remaining) && prevCreditsBeforeSend > remaining) {
+                        usedCreditsMeta = prevCreditsBeforeSend - remaining;
+                    } else if (Number.isFinite(calculatedEstCredits) && calculatedEstCredits > 0) {
+                        usedCreditsMeta = calculatedEstCredits;
+                    } else {
+                        usedCreditsMeta = 1;
+                    }
                 }
                 const resolvedMeta = {
                     ...result,
@@ -3840,6 +3883,7 @@
                     return;
                 }
                 if (!Number.isInteger(error.status)) {
+                    window.JEVEXA_CONNECTIVITY?.reportNetworkFailure?.();
                     rememberPendingRequest(session, requestId);
                     setStatus('Connection interrupted — checking request status…');
                     appendMessage('Connection interrupted. Verifying your request…');
@@ -3970,6 +4014,7 @@
         getKey: event => event.target instanceof Element
             ? event.target.closest('#chatSend, #chatWelcomeChips .chat-welcome-chip') || document
             : document,
+        debounceMs: 100,
         listenerOptions: true
     });
 
@@ -4229,8 +4274,8 @@
             loadConversation(uid, force);
             renderChatHistory();
             const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-            if (statusText && statusText.textContent.includes('Sign-in')) {
-                statusText.textContent = 'AI chat • Online';
+            if (statusText && (statusText.textContent.includes('Sign-in') || statusText.textContent === 'Offline')) {
+                setChatHeaderConnLabel(statusText, 'AI chat • Online');
             }
             const signInPrompt = document.getElementById('chatSignInPrompt');
             if (signInPrompt) signInPrompt.hidden = true;
@@ -4246,7 +4291,7 @@
             activeAuthUserId = earlyPersistedUid;
             loadConversation(earlyPersistedUid, false);
             const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-            if (statusText) statusText.textContent = 'AI chat • Online';
+            setChatHeaderConnLabel(statusText, 'AI chat • Online');
             const signInPrompt = document.getElementById('chatSignInPrompt');
             if (signInPrompt) signInPrompt.hidden = true;
         } catch (e) {
@@ -4283,7 +4328,7 @@
             if (activeAuthUserId && activeAuthUserId !== userId) clearAccountChatState();
             activeAuthUserId = userId;
             const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-            if (statusText) statusText.textContent = userId ? 'AI chat • Online' : 'AI chat • Sign-in required';
+            setChatHeaderConnLabel(statusText, userId ? 'AI chat • Online' : 'AI chat • Sign-in required');
             updateChatWelcome(session?.user || null);
             if (userId) {
                 void initializeChatSession();
@@ -4388,7 +4433,7 @@
         const activeModelName = tierStatusLabels[tier] || 'Core Engine (1.0x)';
         setStatus(formatMinimalStatus({ tier, webSearch: webSearchEnabled }));
         const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-        if (statusText && activeAuthUserId) statusText.textContent = `${activeModelName} • Online`;
+        if (statusText && activeAuthUserId) setChatHeaderConnLabel(statusText, `${activeModelName} • Online`);
     });
     document.getElementById('chatThinking')?.addEventListener('change', () => {
         const selected = thinkingSelect.value;

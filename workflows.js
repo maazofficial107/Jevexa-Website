@@ -489,9 +489,42 @@
 
         if (!session) {
             // Local simulation for guest / demo
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowExecModal .workflow-exec-body'), 'workflowExecCreditReceipt');
-            window.JEVEXA_CLEAR_USED_CREDITS_FOOTER?.(document.querySelector('#workflowsWorkspace .workflows-builder-card'), 'workflowCreditReceipt');
             await executeSimulatedSteps();
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowExecModal .workflow-exec-body'),
+                0,
+                { id: 'workflowExecCreditReceipt', allowZero: true, note: 'Local engine (no charge)' }
+            );
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowsWorkspace .workflows-builder-card'),
+                0,
+                { id: 'workflowCreditReceipt', allowZero: true, note: 'Local engine (no charge)' }
+            );
+            state.isRunning = false;
+            if (runWorkflowBtn) {
+                runWorkflowBtn.disabled = false;
+                runWorkflowBtn.innerHTML = '<i class="fas fa-play"></i> Run Workflow';
+            }
+            return;
+        }
+
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            await executeSimulatedSteps();
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowExecModal .workflow-exec-body'),
+                0,
+                { id: 'workflowExecCreditReceipt', allowZero: true, note: 'Offline local engine (no charge)' }
+            );
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(
+                document.querySelector('#workflowsWorkspace .workflows-builder-card'),
+                0,
+                { id: 'workflowCreditReceipt', allowZero: true, note: 'Offline local engine (no charge)' }
+            );
+            if (statusEl) {
+                statusEl.textContent = 'You are currently offline — executed locally (0 credits charged). Reconnect for Cloud Runner.';
+                statusEl.className = 'workflow-status-msg info';
+            }
+            window.showToast?.('⚠️ You are currently offline. Reconnect to use Cloud Workflow Runner.');
             state.isRunning = false;
             if (runWorkflowBtn) {
                 runWorkflowBtn.disabled = false;
@@ -524,9 +557,10 @@
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             if (execProgressFill) execProgressFill.style.width = '100%';
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
-            const wfCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const wfCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : 1));
             const wfRemaining = usage?.remaining ?? result.remaining_credits;
             const engineLabel = window.JEVEXA_SANITIZE_ENGINE_NAME?.(usage?.tier || result.tier || 'Core Engine') || 'Core Engine';
             const chargedNote = wfCharged !== null && wfRemaining !== undefined

@@ -339,10 +339,15 @@
 
         const session = await getSession();
         if (!session) {
-            // Instant local generator for guests & offline demo
+            // Instant local generator for guests
             setTimeout(() => {
                 const localPost = deterministicClientSocial(topic, platform, tone, goal, cta);
                 renderPostPreview(localPost);
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(previewContainer, 0, {
+                    id: 'socialCreditReceipt',
+                    allowZero: true,
+                    note: 'Local engine (no charge)'
+                });
                 state.isGenerating = false;
                 if (generateBtn) {
                     generateBtn.disabled = false;
@@ -354,6 +359,27 @@
                 }
                 window.showToast?.('Social post generated!');
             }, 300);
+            return;
+        }
+
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            const offlinePost = deterministicClientSocial(topic, platform, tone, goal, cta);
+            renderPostPreview(offlinePost);
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(previewContainer, 0, {
+                id: 'socialCreditReceipt',
+                allowZero: true,
+                note: 'Offline local engine (no charge)'
+            });
+            state.isGenerating = false;
+            if (generateBtn) {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generate Viral Draft & Hooks';
+            }
+            if (statusEl) {
+                statusEl.textContent = 'You are currently offline — generated locally (0 credits charged). Reconnect for Cloud AI.';
+                statusEl.className = 'social-status-msg info';
+            }
+            window.showToast?.('⚠️ You are currently offline. Reconnect to use Cloud Social AI.');
             return;
         }
 
@@ -391,13 +417,15 @@
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             renderPostPreview(result.data);
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
-            const socialCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const socialCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : 1));
             const socialRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(previewContainer, socialCharged, {
                 id: 'socialCreditReceipt',
                 remaining: socialRemaining,
+                allowZero: true,
                 tier: usage?.tier || result.tier
             });
             if (typeof socialRemaining === 'number') {

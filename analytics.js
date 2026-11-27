@@ -1679,6 +1679,12 @@
             // Local calculation for guest demo
             setTimeout(() => {
                 updateAllViews();
+                const reportCard = document.getElementById('analyticsReportCard');
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(reportCard, 0, {
+                    id: 'analyticsCreditReceipt',
+                    allowZero: true,
+                    note: 'Local engine (no charge)'
+                });
                 state.isAnalyzing = false;
                 if (el.generateBtn) {
                     el.generateBtn.disabled = false;
@@ -1690,6 +1696,27 @@
                 }
                 window.showToast?.('Business Analytics report updated!');
             }, 300);
+            return;
+        }
+
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            updateAllViews();
+            const reportCard = document.getElementById('analyticsReportCard');
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(reportCard, 0, {
+                id: 'analyticsCreditReceipt',
+                allowZero: true,
+                note: 'Offline local engine (no charge)'
+            });
+            state.isAnalyzing = false;
+            if (el.generateBtn) {
+                el.generateBtn.disabled = false;
+                el.generateBtn.innerHTML = '<i class="fas fa-chart-line"></i> Generate Executive Forecast';
+            }
+            if (el.status) {
+                el.status.textContent = 'You are currently offline — KPIs updated locally (0 credits charged). Reconnect for Cloud AI.';
+                el.status.className = 'analytics-status-msg info';
+            }
+            window.showToast?.('⚠️ You are currently offline. Reconnect to use Cloud Analytics AI.');
             return;
         }
 
@@ -1729,6 +1756,7 @@
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             const activeKpis = state.cleanedRecords.length ? (state.kpis || result.kpis) : (result.kpis || state.kpis);
             renderKpiCards(activeKpis);
             renderSvgCharts(activeKpis);
@@ -1736,11 +1764,12 @@
             renderDataTable();
             const reportCard = document.getElementById('analyticsReportCard');
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
-            const analyticsCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const analyticsCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : 1));
             const analyticsRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(reportCard, analyticsCharged, {
                 id: 'analyticsCreditReceipt',
                 remaining: analyticsRemaining,
+                allowZero: true,
                 tier: usage?.tier || result.tier
             });
 

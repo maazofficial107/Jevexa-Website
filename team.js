@@ -534,6 +534,12 @@
 
         if (submitBtn) submitBtn.disabled = true;
 
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            setAdminStatus('You are currently offline. Please reconnect to sync team members.', 'error');
+            window.showToast?.('⚠️ You are currently offline. Reconnect to manage workspace team.');
+            return;
+        }
+
         try {
             const session = await getSession();
             if (!session) {

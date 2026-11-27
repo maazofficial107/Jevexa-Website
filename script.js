@@ -699,6 +699,26 @@ window.JEVEXA_EXTRACT_CREDIT_USAGE = function extractCreditUsage(payload, option
 };
 
 /**
+ * Strip stray raw markdown artifacts like standalone or unclosed `***` without harming valid emphasis.
+ */
+window.JEVEXA_SANITIZE_MARKDOWN_TEXT = function sanitizeMarkdownText(raw, { keepHr = false } = {}) {
+    if (typeof raw !== 'string' || !raw) return '';
+    let text = raw.replace(/\r\n?/g, '\n');
+    // Normalize ***bold italic*** or ***heading*** -> **text** when used as emphasis/callouts
+    text = text.replace(/\*{3}([^*\n]+?)\*{3}/g, '**$1**');
+    if (!keepHr) {
+        // Remove standalone horizontal-rule lines (***, ---, ___) that often look raw in compact AI replies
+        text = text.replace(/^[ \t]*(?:\*{3,}|-{3,}|_{3,})[ \t]*$/gm, '');
+    }
+    // Remove stray inline triple-asterisks left unclosed (e.g. "Note: *** check" or trailing "***")
+    text = text.replace(/(^|\s)\*{3,}(?=\s|$)/gm, '$1');
+    text = text.replace(/\*{3,}/g, '');
+    // Collapse excessive blank lines created by stripped divider lines
+    text = text.replace(/\n{3,}/g, '\n\n');
+    return text.trim();
+};
+
+/**
  * Render or hide a subtle "Used credit" -> "Remaining credit" footer on any metered service output container.
  */
 window.JEVEXA_CLEAR_USED_CREDITS_FOOTER = function clearUsedCreditsFooter(container, elementId = '') {
@@ -713,10 +733,11 @@ window.JEVEXA_CLEAR_USED_CREDITS_FOOTER = function clearUsedCreditsFooter(contai
 
 window.JEVEXA_RENDER_USED_CREDITS_FOOTER = function renderUsedCreditsFooter(container, creditsUsed, options = {}) {
     const elId = options.id || '';
+    const allowZero = options.allowZero !== false;
     const numericUsed = (creditsUsed === null || creditsUsed === undefined || creditsUsed === '')
         ? NaN
         : Number(creditsUsed);
-    if (!container || !Number.isFinite(numericUsed) || (!options.allowZero && numericUsed < 1) || numericUsed < 0) {
+    if (!container || !Number.isFinite(numericUsed) || (!allowZero && numericUsed < 1) || numericUsed < 0) {
         window.JEVEXA_CLEAR_USED_CREDITS_FOOTER(container, elId);
         return null;
     }
@@ -2425,7 +2446,13 @@ function syncAuthNavigation(user) {
     const chatSignInPrompt = document.getElementById('chatSignInPrompt');
     if (chatSignInPrompt) chatSignInPrompt.hidden = signedIn;
     const chatStatusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-    if (chatStatusText) chatStatusText.textContent = signedIn ? 'AI chat • Online' : 'AI chat • Sign-in required';
+    if (chatStatusText) {
+        const isOnlineNow = window.JEVEXA_CONNECTIVITY ? window.JEVEXA_CONNECTIVITY.isOnline() : (typeof navigator === 'undefined' || navigator.onLine !== false);
+        chatStatusText.textContent = !isOnlineNow
+            ? 'Offline'
+            : (signedIn ? 'AI chat • Online' : 'AI chat • Sign-in required');
+        chatStatusText.dataset.connState = isOnlineNow ? 'online' : 'offline';
+    }
     closeMobileMenu();
 }
 
@@ -6231,35 +6258,191 @@ const JEVEXA_PLANS = {
 })();
 
 // ==========================================================================
-// CONNECTION RESILIENCE & ONLINE / OFFLINE EVENT RECOVERY
+// UNIVERSAL LIVE ONLINE / OFFLINE CONNECTIVITY & RECOVERY ACROSS ALL SERVICES
 // ==========================================================================
 (function initConnectionResilience() {
-    function handleOffline() {
-        document.body.classList.add('is-offline');
-        if (typeof showToast === 'function') {
-            showToast('⚠️ You are currently offline. Actions will resume when connection is restored.');
+    let onlineState = typeof navigator === 'undefined' || navigator.onLine !== false;
+    let checkInFlight = null;
+    let recoveryTimer = null;
+    const subscribers = new Set();
+
+    function syncConnectivityDom(isOnline) {
+        if (typeof document === 'undefined') return;
+        document.body?.classList?.toggle('is-offline', !isOnline);
+        document.documentElement.dataset.jevexaOnline = isOnline ? 'true' : 'false';
+
+        document.querySelectorAll('[data-jevexa-conn-badge]').forEach(badge => {
+            badge.classList.toggle('is-online', isOnline);
+            badge.classList.toggle('is-offline', !isOnline);
+            badge.dataset.connState = isOnline ? 'online' : 'offline';
+            badge.setAttribute('aria-label', `Connection status: ${isOnline ? 'Online' : 'Offline'}`);
+            const label = badge.querySelector('.conn-label');
+            if (label) label.textContent = isOnline ? 'Online' : 'Offline';
+        });
+
+        const chatStatusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+        if (chatStatusText) {
+            chatStatusText.dataset.connState = isOnline ? 'online' : 'offline';
+            if (!isOnline) {
+                chatStatusText.textContent = 'Offline';
+            } else if (/offline/i.test(chatStatusText.textContent || '')) {
+                const isAuthed = Boolean(typeof currentUser !== 'undefined' && currentUser);
+                chatStatusText.textContent = isAuthed ? 'AI chat • Online' : 'AI chat • Sign-in required';
+            }
         }
+    }
+
+    function setOnlineState(nextOnline, { notifyToast = true } = {}) {
+        const normalized = Boolean(nextOnline);
+        const changed = onlineState !== normalized;
+        onlineState = normalized;
+        syncConnectivityDom(onlineState);
+
+        if (changed) {
+            subscribers.forEach(fn => {
+                try { fn(onlineState); } catch (_) {}
+            });
+            if (notifyToast && typeof showToast === 'function') {
+                if (!onlineState) {
+                    showToast('⚠️ Connection lost — You are currently offline.');
+                } else {
+                    showToast('✅ Connection restored — Back online.');
+                }
+            }
+            if (onlineState) {
+                if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {
+                    window.JEVEXA_SETTINGS.refreshCredits().catch(() => {});
+                }
+                if (typeof window.JEVEXA_SYNC_WORKSPACE_CREDITS === 'function') {
+                    window.JEVEXA_SYNC_WORKSPACE_CREDITS();
+                }
+                if (typeof window.JEVEXA_RECONCILE_PENDING === 'function') {
+                    window.JEVEXA_RECONCILE_PENDING().catch(() => {});
+                }
+                if (typeof window.JEVEXA_RECONCILE_CONTENT === 'function') {
+                    window.JEVEXA_RECONCILE_CONTENT().catch(() => {});
+                }
+            }
+        }
+        scheduleNextProbe();
+        return onlineState;
+    }
+
+    async function probeConnectivity({ notifyToast = true } = {}) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            return setOnlineState(false, { notifyToast });
+        }
+        if (checkInFlight) return checkInFlight;
+        checkInFlight = (async () => {
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timeoutId = controller ? window.setTimeout(() => controller.abort(), 4000) : null;
+            try {
+                const res = await fetch('/api/health', {
+                    method: 'HEAD',
+                    cache: 'no-store',
+                    signal: controller?.signal
+                });
+                // Any HTTP response from origin (< 500 or 500 app error) confirms active network reachability
+                const reachable = res && typeof res.status === 'number' && res.status < 502;
+                return setOnlineState(reachable, { notifyToast });
+            } catch (err) {
+                // Only treat explicit browser offline or real network transport errors as offline (ignore manual aborts when navigator.onLine is true)
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                    return setOnlineState(false, { notifyToast });
+                }
+                if (err?.name !== 'AbortError') {
+                    return setOnlineState(false, { notifyToast });
+                }
+                return onlineState;
+            } finally {
+                if (timeoutId !== null) window.clearTimeout(timeoutId);
+                checkInFlight = null;
+            }
+        })();
+        return checkInFlight;
+    }
+
+    function scheduleNextProbe() {
+        if (recoveryTimer !== null) {
+            window.clearTimeout(recoveryTimer);
+            recoveryTimer = null;
+        }
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+        const intervalMs = onlineState ? 45000 : 5000;
+        recoveryTimer = window.setTimeout(() => {
+            void probeConnectivity({ notifyToast: true });
+        }, intervalMs);
+    }
+
+    function handleOffline() {
+        setOnlineState(false, { notifyToast: true });
     }
 
     function handleOnline() {
-        document.body.classList.remove('is-offline');
-        if (typeof showToast === 'function') {
-            showToast('✅ Connection restored. You are back online!');
-        }
-        if (typeof window.JEVEXA_SETTINGS?.refreshCredits === 'function') {
-            window.JEVEXA_SETTINGS.refreshCredits().catch(() => {});
-        }
-        if (typeof window.JEVEXA_SYNC_WORKSPACE_CREDITS === 'function') {
-            window.JEVEXA_SYNC_WORKSPACE_CREDITS();
-        }
-        if (typeof window.JEVEXA_RECONCILE_PENDING === 'function') {
-            window.JEVEXA_RECONCILE_PENDING().catch(() => {});
-        }
-        if (typeof window.JEVEXA_RECONCILE_CONTENT === 'function') {
-            window.JEVEXA_RECONCILE_CONTENT().catch(() => {});
-        }
+        setOnlineState(true, { notifyToast: true });
+        void probeConnectivity({ notifyToast: false });
     }
+
+    window.JEVEXA_CONNECTIVITY = {
+        isOnline() {
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+            return onlineState;
+        },
+        checkNow(opts = {}) {
+            return probeConnectivity({ notifyToast: Boolean(opts.notifyToast) });
+        },
+        reportNetworkFailure() {
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                return setOnlineState(false, { notifyToast: true });
+            }
+            void probeConnectivity({ notifyToast: true });
+            return onlineState;
+        },
+        reportSuccess() {
+            if (!onlineState && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
+                setOnlineState(true, { notifyToast: true });
+            }
+        },
+        subscribe(fn) {
+            if (typeof fn !== 'function') return () => {};
+            subscribers.add(fn);
+            return () => subscribers.delete(fn);
+        },
+        syncDom() {
+            syncConnectivityDom(this.isOnline());
+        },
+        requireOnline(actionLabel = 'continue', onOfflineUi = null) {
+            if (this.isOnline()) return true;
+            const msg = `You are currently offline. Please check your internet connection to ${actionLabel}.`;
+            if (typeof onOfflineUi === 'function') {
+                try { onOfflineUi(msg); } catch (_) {}
+            }
+            if (typeof showToast === 'function') {
+                showToast(`⚠️ ${msg}`);
+            }
+            void probeConnectivity({ notifyToast: false });
+            return false;
+        }
+    };
 
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            void probeConnectivity({ notifyToast: true });
+        } else if (recoveryTimer !== null) {
+            window.clearTimeout(recoveryTimer);
+            recoveryTimer = null;
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            syncConnectivityDom(window.JEVEXA_CONNECTIVITY.isOnline());
+            scheduleNextProbe();
+        }, { once: true });
+    } else {
+        syncConnectivityDom(window.JEVEXA_CONNECTIVITY.isOnline());
+        scheduleNextProbe();
+    }
 })();

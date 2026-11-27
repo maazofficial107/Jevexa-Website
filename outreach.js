@@ -572,6 +572,12 @@
 
                 updateSequenceStatusPill('Draft');
                 switchStep(1);
+                const outreachPreviewEl = document.querySelector('#outreachWorkspace .outreach-pane-preview');
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(outreachPreviewEl, 0, {
+                    id: 'outreachCreditReceipt',
+                    allowZero: true,
+                    note: 'Local engine (no charge)'
+                });
                 setStatus('3-step outreach sequence generated successfully! (Sign in to sync with cloud CRM)', 'success');
                 renderSavedSequencesList();
                 state.requestInFlight = false;
@@ -581,6 +587,36 @@
                 }
                 window.showToast?.('Outreach sequence generated! Ready to review and send.');
             }, 300);
+            return;
+        }
+
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            const offlineSeq = deterministicClientOutreach(
+                recipientNameInput?.value?.trim() || 'Alex Rivera',
+                companyInput?.value?.trim() || 'CloudScale Inc',
+                roleInput?.value?.trim() || 'VP of Operations',
+                websiteInput?.value?.trim() || 'cloudscale.io',
+                valueProp,
+                toneSelect?.value || 'professional',
+                ctaSelect?.value || 'Book a 15-minute intro call'
+            );
+            state.currentSequence = offlineSeq;
+            state.currentSequenceId = 'seq_' + Date.now();
+            updateSequenceStatusPill('Draft');
+            switchStep(1);
+            const outreachPreviewEl = document.querySelector('#outreachWorkspace .outreach-pane-preview');
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(outreachPreviewEl, 0, {
+                id: 'outreachCreditReceipt',
+                allowZero: true,
+                note: 'Offline local engine (no charge)'
+            });
+            setStatus('You are currently offline — sequence drafted locally (0 credits charged). Reconnect for Cloud AI.', 'info');
+            state.requestInFlight = false;
+            if (generateBtn) {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> <span>Generate 3-Step Sequence</span>';
+            }
+            window.showToast?.('⚠️ You are currently offline. Reconnect to use Cloud Outreach AI.');
             return;
         }
 
@@ -627,15 +663,17 @@
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             state.currentSequence = data.sequence;
             state.currentSequenceId = data.sequence_id || null;
             state.useAlternativeSubject = false;
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(data);
-            const outreachCharged = usage?.used ?? (Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : null));
+            const outreachCharged = usage?.used ?? (Number.isInteger(data.charged_credits) ? data.charged_credits : (Number.isInteger(data.credits_used) ? data.credits_used : 1));
             const outreachRemaining = usage?.remaining ?? data.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(outreachPreview, outreachCharged, {
                 id: 'outreachCreditReceipt',
                 remaining: outreachRemaining,
+                allowZero: true,
                 tier: usage?.tier || data.tier
             });
 

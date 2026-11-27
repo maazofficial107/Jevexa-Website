@@ -239,13 +239,14 @@
         const existingRetry = document.getElementById('contentRetryAction');
         if (existingRetry) existingRetry.remove();
 
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
             requestInFlight = false;
             generateButton.disabled = false;
             setStatus('You are currently offline. Please check your internet connection before generating content.', 'error');
             if (typeof window.showToast === 'function') {
-                window.showToast('You are currently offline. Please reconnect to generate content.');
+                window.showToast('⚠️ You are currently offline. Please reconnect to generate content.');
             }
+            window.JEVEXA_CONNECTIVITY?.checkNow?.({ notifyToast: false });
             return;
         }
 
@@ -419,31 +420,41 @@
                 setStatus(responseError(response, payload), 'error');
                 return;
             }
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(payload);
             const remaining = creditUsage?.remaining ?? (
                 Number.isInteger(payload.remaining_credits)
                     ? payload.remaining_credits
                     : (Number.isInteger(payload.creditsRemaining) ? payload.creditsRemaining : window.JEVEXA_GET_CREDITS_BALANCE?.() ?? null)
             );
-            const used = creditUsage?.used ?? (
+            let used = creditUsage?.used ?? (
                 Number.isInteger(payload.credits_used)
                     ? payload.credits_used
-                    : (Number.isInteger(payload.creditsCharged) ? payload.creditsCharged : null)
+                    : (Number.isInteger(payload.creditsCharged)
+                        ? payload.creditsCharged
+                        : (Number.isInteger(payload.charged_credits) ? payload.charged_credits : null))
             );
+            if (used === null && !isNaN(cachedBalance) && Number.isInteger(remaining) && cachedBalance > remaining) {
+                used = cachedBalance - remaining;
+            }
 
             if (typeof payload?.content !== 'string' || !payload.content.trim()
-                || used === null || used < 1
+                || used === null || used < 0
                 || remaining === null || remaining < 0) {
                 throw new Error('The content response could not be verified. Please contact JEVEXA Support before retrying.');
             }
 
+            const cleanContent = typeof window.JEVEXA_SANITIZE_MARKDOWN_TEXT === 'function'
+                ? window.JEVEXA_SANITIZE_MARKDOWN_TEXT(payload.content, { keepHr: true })
+                : payload.content;
             clearContentProcessing();
-            output.textContent = payload.content;
+            output.textContent = cleanContent;
             if (typeof window.JEVEXA_RENDER_USED_CREDITS_FOOTER === 'function') {
                 window.JEVEXA_RENDER_USED_CREDITS_FOOTER(output.parentNode, used, {
                     id: 'contentCreditReceipt',
                     className: 'content-credit-receipt',
                     remaining,
+                    allowZero: true,
                     tier: creditUsage?.tier || payload?.tier
                 });
             } else {

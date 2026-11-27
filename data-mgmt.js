@@ -421,10 +421,16 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
 
         const session = await getSession();
         if (!session) {
-            // Local client cleaning for guest / offline mode
+            // Local client cleaning for guest mode
             setTimeout(() => {
                 const localResult = cleanDatasetLocally(text, operations, dedupKey);
                 renderResults(localResult, text);
+                const dataPreviewContainer = document.querySelector('#dataWorkspace .tool-pane-preview');
+                window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(dataPreviewContainer, 0, {
+                    id: 'dataCreditReceipt',
+                    allowZero: true,
+                    note: 'Local engine (no charge)'
+                });
                 state.isProcessing = false;
                 if (processBtn) {
                     processBtn.disabled = false;
@@ -436,6 +442,28 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 }
                 window.showToast?.('Dataset cleaned and normalized successfully!');
             }, 300);
+            return;
+        }
+
+        if (window.JEVEXA_CONNECTIVITY?.isOnline() === false || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+            const offlineResult = cleanDatasetLocally(text, operations, dedupKey);
+            renderResults(offlineResult, text);
+            const dataPreviewContainer = document.querySelector('#dataWorkspace .tool-pane-preview');
+            window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(dataPreviewContainer, 0, {
+                id: 'dataCreditReceipt',
+                allowZero: true,
+                note: 'Offline local engine (no charge)'
+            });
+            state.isProcessing = false;
+            if (processBtn) {
+                processBtn.disabled = false;
+                processBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Clean & Normalize Dataset';
+            }
+            if (statusEl) {
+                statusEl.textContent = `You are currently offline — cleaned ${offlineResult.summary.cleanedCount} records locally (0 credits charged). Reconnect for Cloud AI.`;
+                statusEl.className = 'data-status-msg info';
+            }
+            window.showToast?.('⚠️ You are currently offline. Reconnect to use Cloud Data AI.');
             return;
         }
 
@@ -472,13 +500,15 @@ ORD-104,Emma Watson,not-an-email,10/28/2026,45.00,Pending`
                 throw err;
             }
 
+            window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
             renderResults(result, text);
             const usage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result);
-            const dataCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : null));
+            const dataCharged = usage?.used ?? (Number.isInteger(result.charged_credits) ? result.charged_credits : (Number.isInteger(result.credits_used) ? result.credits_used : 1));
             const dataRemaining = usage?.remaining ?? result.remaining_credits;
             window.JEVEXA_RENDER_USED_CREDITS_FOOTER?.(dataPreviewContainer, dataCharged, {
                 id: 'dataCreditReceipt',
                 remaining: dataRemaining,
+                allowZero: true,
                 tier: usage?.tier || result.tier
             });
             if (typeof dataRemaining === 'number') {

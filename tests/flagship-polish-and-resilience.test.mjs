@@ -318,32 +318,75 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     await cdp.send("Page.navigate", { url: baseUrl });
     await cdp.eval(`new Promise(r => { if (document.readyState === 'complete' && window.JEVEXA_CONNECTIVITY) r(); else window.addEventListener('load', () => setTimeout(r, 150), { once: true }); })`);
 
-    // A. Verify all 10 workspaces have Online badges & Chatbot shows layered animated emblem + compact header instead of plain "New Chat"
+    // A. Verify normal '/' load keeps chatbot closed & compact hero spacing
+    const homeCheck = await cdp.eval(`(() => {
+      const navbar = document.getElementById('navbar');
+      const heroBadge = document.querySelector('.hero-badge');
+      return {
+        chatOpen: document.getElementById('chatbotWindow')?.classList.contains('open'),
+        navbarHeight: navbar ? navbar.getBoundingClientRect().height : 999,
+        heroBadgeTop: heroBadge ? heroBadge.getBoundingClientRect().top : 999
+      };
+    })()`);
+    assert.equal(homeCheck.chatOpen, false, "Normal '/' load must keep #chatbotWindow closed");
+    assert.ok(homeCheck.navbarHeight <= 72, `Navbar must be compact <= 72px (got ${homeCheck.navbarHeight})`);
+    assert.ok(homeCheck.heroBadgeTop <= 115, `Hero badge must sit compactly upward <= 115px (got ${homeCheck.heroBadgeTop})`);
+
+    // B. Verify all 10 workspaces have Online badges & Chatbot shows layered continuous-loop animated emblem + compact header
     await cdp.eval(`window.openExactServiceWorkspace('chatbot', true);`);
     await cdp.eval(`new Promise(r => setTimeout(r, 120))`);
-    const headerCheck = await cdp.eval(`(() => {
+    const headerCheck = await cdp.eval(`(async () => {
       const badges = Array.from(document.querySelectorAll('[data-jevexa-conn-badge]'));
       const header = document.querySelector('#chatbotWindow .chatbot-header');
-      const orbitOuter = document.querySelector('#chatHeaderEmblem .emblem-orbit-outer');
-      const orbitInner = document.querySelector('#chatHeaderEmblem .emblem-orbit-inner');
-      const aura = document.querySelector('#chatHeaderEmblem .emblem-core-aura');
-      const nodeA = document.querySelector('#chatHeaderEmblem .emblem-node-a');
-      const nodeB = document.querySelector('#chatHeaderEmblem .emblem-node-b');
+      const badgeWrap = document.getElementById('chatHeaderEmblemBadge');
+      const emblem = document.getElementById('chatHeaderEmblem');
+      const emblemSvg = emblem?.querySelector('svg');
+      const emptyEmblemLg = document.querySelector('#chatEmptyState .chat-empty-emblem .chat-ai-emblem-lg');
+      const layerSels = [
+        '#chatHeaderEmblem .emblem-orbit-outer',
+        '#chatHeaderEmblem .emblem-orbit-inner',
+        '#chatHeaderEmblem .emblem-core-aura',
+        '#chatHeaderEmblem .emblem-sheen-arc',
+        '#chatHeaderEmblem .emblem-sat',
+        '#chatHeaderEmblem .emblem-node-a',
+        '#chatHeaderEmblem .emblem-node-b',
+        '#chatEmptyState .chat-empty-emblem .emblem-orbit-outer',
+        '#chatEmptyState .chat-empty-emblem .emblem-sat'
+      ];
+      const snap = () => layerSels.map(sel => {
+        const el = document.querySelector(sel);
+        const s = el ? getComputedStyle(el) : null;
+        return {
+          sel,
+          name: s?.animationName || '',
+          iter: s?.animationIterationCount || '',
+          state: s?.animationPlayState || '',
+          transform: s?.transform || '',
+          rect: el ? el.getBoundingClientRect().toJSON() : null
+        };
+      });
+      const t1 = snap();
+      await new Promise(r => setTimeout(r, 380));
+      const t2 = snap();
+      const badgeAfter = badgeWrap ? getComputedStyle(badgeWrap, '::after') : null;
       return {
         badgeCount: badges.length,
         allOnline: badges.every(b => b.classList.contains('is-online') && b.querySelector('.conn-label')?.textContent.trim() === 'Online'),
         titleText: document.getElementById('chatbotTitle')?.textContent.trim(),
         chatStatusText: document.getElementById('chatbotStatusText')?.textContent.trim(),
         headerHeight: header ? header.getBoundingClientRect().height : 999,
-        hasEmblem: Boolean(document.getElementById('chatHeaderEmblem')),
+        emblemOverflow: emblem ? getComputedStyle(emblem).overflow : '',
+        svgOverflow: emblemSvg ? getComputedStyle(emblemSvg).overflow : '',
+        emptyEmblemSize: emptyEmblemLg ? emptyEmblemLg.getBoundingClientRect().width : 0,
+        badgeSheenName: badgeAfter?.animationName || '',
+        badgeSheenIter: badgeAfter?.animationIterationCount || '',
+        badgeSheenState: badgeAfter?.animationPlayState || '',
+        hasEmblem: Boolean(emblem),
         hasEmptyEmblem: Boolean(document.querySelector('#chatEmptyState .chat-empty-emblem')),
         hasGlassDisc: Boolean(document.querySelector('#chatHeaderEmblem .emblem-glass-disc')),
         hasSheenArc: Boolean(document.querySelector('#chatHeaderEmblem .emblem-sheen-arc')),
-        orbitOuterAnim: orbitOuter ? getComputedStyle(orbitOuter).animationName : '',
-        orbitInnerAnim: orbitInner ? getComputedStyle(orbitInner).animationName : '',
-        auraAnim: aura ? getComputedStyle(aura).animationName : '',
-        nodeAAnim: nodeA ? getComputedStyle(nodeA).animationName : '',
-        nodeBAnim: nodeB ? getComputedStyle(nodeB).animationName : ''
+        t1,
+        t2
       };
     })()`);
     assert.equal(headerCheck.badgeCount, 10, "All 10 workspaces must render a connectivity badge");
@@ -351,15 +394,71 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     assert.equal(headerCheck.titleText, "Jevexa AI", "Plain static New Chat must be replaced by branded Jevexa AI header emblem");
     assert.equal(headerCheck.chatStatusText, "AI chat • Online");
     assert.ok(headerCheck.headerHeight <= 48, `Compact top header must be <= 48px (got ${headerCheck.headerHeight})`);
+    assert.equal(headerCheck.emblemOverflow, "visible", "Emblem wrapper must not clip orbiting nodes");
+    assert.equal(headerCheck.svgOverflow, "visible", "Emblem SVG must not clip orbiting nodes");
+    assert.ok(headerCheck.emptyEmblemSize >= 64, `Desktop empty emblem must be >= 64px (got ${headerCheck.emptyEmblemSize})`);
+    assert.match(headerCheck.badgeSheenName, /jevBadgeSheen/);
+    assert.equal(headerCheck.badgeSheenIter, "infinite");
+    assert.equal(headerCheck.badgeSheenState, "running");
     assert.equal(headerCheck.hasEmblem, true);
     assert.equal(headerCheck.hasEmptyEmblem, true);
     assert.equal(headerCheck.hasGlassDisc, true);
     assert.equal(headerCheck.hasSheenArc, true);
-    assert.match(headerCheck.orbitOuterAnim, /jevEmblemSpinCw/);
-    assert.match(headerCheck.orbitInnerAnim, /jevEmblemSpinCcw/);
-    assert.match(headerCheck.auraAnim, /jevEmblemAuraPulse/);
-    assert.match(headerCheck.nodeAAnim, /jevEmblemSpinCcw/);
-    assert.match(headerCheck.nodeBAnim, /jevEmblemSpinCw/);
+    for (let i = 0; i < headerCheck.t1.length; i++) {
+      const a = headerCheck.t1[i];
+      const b = headerCheck.t2[i];
+      assert.ok(a.name && a.name !== "none", `${a.sel} must have active animationName (got ${a.name})`);
+      assert.ok(a.iter.includes("infinite"), `${a.sel} must loop infinitely (got ${a.iter})`);
+      assert.ok(a.state.includes("running"), `${a.sel} must be running (got ${a.state})`);
+      assert.notEqual(a.transform, b.transform, `${a.sel} transform must continuously mutate over time`);
+    }
+
+    // B2. Mobile 390x844 layout check: non-overlapping compact header, large center emblem, non-overlapping >=44px composer controls
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await cdp.eval(`new Promise(r => setTimeout(r, 120))`);
+    const mobileCheck = await cdp.eval(`(() => {
+      const r = sel => document.querySelector(sel)?.getBoundingClientRect().toJSON() || null;
+      const overlaps = (a, b) => a && b && !(a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1);
+      const header = r('#chatbotWindow .chatbot-header');
+      const left = r('#chatbotWindow .chatbot-header-left');
+      const center = r('#chatbotWindow .chatbot-header-center');
+      const right = r('#chatbotWindow .chatbot-header-right');
+      const titleEl = document.getElementById('chatbotTitle');
+      const emptyLg = r('#chatEmptyState .chat-empty-emblem .chat-ai-emblem-lg');
+      const tierTrigger = r('#chatTierTrigger');
+      const thinkTrigger = r('#chatThinkingTrigger');
+      const attachBtn = r('#chatAttachButton');
+      const webBtn = r('#chatWebSearchBtn');
+      const sendBtn = r('#chatSend');
+      return {
+        headerHeight: header?.height || 999,
+        headerLeftCenterOverlap: overlaps(left, center),
+        headerCenterRightOverlap: overlaps(center, right),
+        titleClipped: titleEl ? titleEl.scrollWidth > titleEl.clientWidth + 1 : true,
+        emptyEmblemWidth: emptyLg?.width || 0,
+        tierThinkOverlap: overlaps(tierTrigger, thinkTrigger),
+        thinkWebOverlap: overlaps(thinkTrigger, webBtn),
+        attachWebOverlap: overlaps(attachBtn, webBtn),
+        webSendOverlap: overlaps(webBtn, sendBtn),
+        webBtnHeight: webBtn?.height || 0,
+        tierHeight: tierTrigger?.height || 0,
+        thinkHeight: thinkTrigger?.height || 0
+      };
+    })()`);
+    assert.ok(mobileCheck.headerHeight <= 48, `Mobile header must be <= 48px (got ${mobileCheck.headerHeight})`);
+    assert.equal(mobileCheck.headerLeftCenterOverlap, false, "Mobile header left controls must not overlap center badge");
+    assert.equal(mobileCheck.headerCenterRightOverlap, false, "Mobile header center badge must not overlap right controls");
+    assert.equal(mobileCheck.titleClipped, false, "Mobile 'Jevexa AI' badge title must fit without ellipsis truncation");
+    assert.ok(mobileCheck.emptyEmblemWidth >= 56, `Mobile center emblem must remain >= 56px (got ${mobileCheck.emptyEmblemWidth})`);
+    assert.equal(mobileCheck.tierThinkOverlap, false, "Mobile Engine and Thinking dropdowns must not overlap");
+    assert.equal(mobileCheck.thinkWebOverlap, false, "Mobile Thinking dropdown and Web Search button must not overlap");
+    assert.equal(mobileCheck.attachWebOverlap, false, "Mobile Attach and Web Search buttons must not overlap");
+    assert.equal(mobileCheck.webSendOverlap, false, "Mobile Web Search and Send buttons must not overlap");
+    assert.ok(mobileCheck.webBtnHeight >= 44 && mobileCheck.tierHeight >= 44 && mobileCheck.thinkHeight >= 44, "Mobile composer buttons must remain >= 44px tall");
+
+    // Restore desktop viewport for remaining checks
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
+    await cdp.eval(`new Promise(r => setTimeout(r, 80))`);
 
     // B. Verify guaranteed Used Credits rendering even when server omits creditsUsed
     await cdp.eval(`

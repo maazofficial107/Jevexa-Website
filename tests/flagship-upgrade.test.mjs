@@ -668,7 +668,14 @@ test("Phase 4 E2E (Headless Chrome): Auth modal triggers, validation, session hy
 
     // 5b. Pro plan: Web Search unlocks, toggles active with Live pill, persists across New Chat, and sends webSearch: true
     await cdp.eval(`fetch('/mock-upgrade-pro').then(() => { document.getElementById('chatbotToggle').click(); })`);
-    await cdp.eval(`new Promise(r => setTimeout(r, 200))`);
+    await cdp.eval(`new Promise(r => {
+      const start = Date.now();
+      const check = () => {
+        if (document.getElementById('chatWebSearchBtn')?.dataset.locked === 'false' || Date.now() - start > 3000) r();
+        else setTimeout(check, 40);
+      };
+      check();
+    })`);
     await cdp.eval(`document.getElementById('chatWebSearchBtn').click()`);
     const proWebState = await cdp.eval(`({
       locked: document.getElementById('chatWebSearchBtn').dataset.locked,

@@ -524,7 +524,7 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 860, deviceScaleFactor: 1, mobile: false });
     await cdp.eval(`new Promise(r => setTimeout(r, 80))`);
 
-    // B. Verify guaranteed Used Credits rendering even when server omits creditsUsed
+    // B. Verify guaranteed Used Credits rendering in bottom status bar (NOT in per-message bubbles)
     await cdp.eval(`
       document.getElementById('chatInput').value = 'Test guaranteed credits';
       document.getElementById('chatSend').click();
@@ -532,9 +532,9 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     await cdp.eval(`new Promise((r, rej) => {
       const start = Date.now();
       const check = () => {
-        const rc = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt');
-        if (rc && !rc.hidden) return r();
-        if (Date.now() - start > 6000) return rej(new Error('Receipt timeout'));
+        const statusEl = document.getElementById('chatCreditStatus');
+        if (statusEl && /Used credit/.test(statusEl.textContent)) return r();
+        if (Date.now() - start > 6000) return rej(new Error('Status bar credit timeout'));
         setTimeout(check, 40);
       };
       check();
@@ -544,15 +544,16 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
       const statusEl = document.getElementById('chatCreditStatus');
       const statusParts = statusEl ? Array.from(statusEl.children).map(el => el.textContent.trim()) : [];
       return {
-        receiptText: bot.querySelector('.chat-credit-receipt')?.textContent.trim() || '',
+        noBubbleReceipt: !bot.querySelector('.chat-credit-receipt'),
+        dataUsed: bot.querySelector('.msg-content')?.dataset.usedCredits || '',
         bodyHtml: bot.querySelector('.msg-body')?.innerHTML || '',
         bottomStatusText: statusEl?.textContent.trim() || '',
         statusParts,
         statusGap: statusEl ? getComputedStyle(statusEl).columnGap : ''
       };
     })()`);
-    assert.match(chatOutputState.receiptText, /Used credit:\s*2/);
-    assert.match(chatOutputState.receiptText, /Remaining credit:\s*248/);
+    assert.equal(chatOutputState.noBubbleReceipt, true, "No .chat-credit-receipt pill must appear inside assistant message bubbles");
+    assert.match(chatOutputState.dataUsed, /^2$/, "Used credits stored in data-* attribute on content element");
     assert.match(chatOutputState.bottomStatusText, /^Core Engine\s+Used credit:\s*2\s+Remaining credit:\s*248$/);
     assert.equal(chatOutputState.statusParts.length, 3, "Bottom credit line must render 3 distinct parts: engine, used credit, remaining credit");
     assert.equal(chatOutputState.statusParts[0], "Core Engine");
@@ -574,13 +575,13 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     const postReloadState = await cdp.eval(`(() => {
       const userMsgs = Array.from(document.querySelectorAll('#chatMessages .message.user .msg-body')).map(el => el.textContent.trim());
       const botMsgs = Array.from(document.querySelectorAll('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body')).map(el => el.textContent.trim());
-      const receipt = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt')?.textContent.trim() || '';
+      const noBubbleReceipt = !document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt');
       const sidebarRows = document.querySelectorAll('#chatHistoryList .chat-history-row').length;
       return {
         chatOpen: document.getElementById('chatbotWindow')?.classList.contains('open'),
         userMsgs,
         botMsgs,
-        receipt,
+        noBubbleReceipt,
         sidebarRows,
         draftValue: document.getElementById('chatInput')?.value || '',
         emptyHidden: Boolean(document.getElementById('chatEmptyState')?.hidden)
@@ -589,7 +590,7 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     assert.equal(postReloadState.chatOpen, true, "Reloading /tools/chatbot must keep chatbot open");
     assert.ok(postReloadState.userMsgs.some(t => t.includes('Test guaranteed credits')), "User prompt must survive page refresh");
     assert.ok(postReloadState.botMsgs.some(t => t.includes('Spacious flagship reply')), "Assistant reply must survive page refresh");
-    assert.match(postReloadState.receipt, /Used credit:\s*2/, "Used Credits receipt must survive page refresh");
+    assert.equal(postReloadState.noBubbleReceipt, true, "No credit receipt pill must appear inside message bubbles after reload");
     assert.ok(postReloadState.sidebarRows >= 1, "Sidebar session history must survive page refresh");
     assert.equal(postReloadState.draftValue, "Unsent draft message after reload", "Draft input must survive page refresh");
     assert.equal(postReloadState.emptyHidden, true, "Welcome empty state must stay hidden when conversation is restored");
@@ -615,12 +616,12 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     const reLoginState = await cdp.eval(`(() => ({
       userMsgs: Array.from(document.querySelectorAll('#chatMessages .message.user .msg-body')).map(el => el.textContent.trim()),
       botMsgs: Array.from(document.querySelectorAll('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body')).map(el => el.textContent.trim()),
-      receipt: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt')?.textContent.trim() || '',
+      noBubbleReceipt: !document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt'),
       sidebarRows: document.querySelectorAll('#chatHistoryList .chat-history-row').length
     }))()`);
     assert.ok(reLoginState.userMsgs.some(t => t.includes('Test guaranteed credits')), "User prompt must be restored after logout -> login");
     assert.ok(reLoginState.botMsgs.some(t => t.includes('Spacious flagship reply')), "Assistant reply must be restored after logout -> login");
-    assert.match(reLoginState.receipt, /Used credit:\s*2/, "Used Credits receipt must be restored after logout -> login");
+    assert.equal(reLoginState.noBubbleReceipt, true, "No credit receipt pill inside message bubbles after re-login");
     assert.ok(reLoginState.sidebarRows >= 1, "Sidebar sessions must be restored after logout -> login");
 
     // Simulate clean-storage login (e.g. cleared localStorage) restoring from /api/chat/sessions backend
@@ -641,11 +642,11 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     })`);
     const remoteRestoreState = await cdp.eval(`(() => ({
       botText: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body')?.textContent.trim() || '',
-      receipt: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt')?.textContent.trim() || '',
+      noBubbleReceipt: !document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt'),
       sidebarRows: document.querySelectorAll('#chatHistoryList .chat-history-row').length
     }))()`);
     assert.match(remoteRestoreState.botText, /Spacious flagship reply/);
-    assert.match(remoteRestoreState.receipt, /Used credit:\s*2/);
+    assert.equal(remoteRestoreState.noBubbleReceipt, true, "No credit receipt pill inside message bubbles after remote restore");
     assert.ok(remoteRestoreState.sidebarRows >= 1, "Remote /api/chat/sessions restore must populate sidebar and canvas");
 
     // C. Verify Offline -> blocked send notice -> Online recovery across ALL 10 workspaces

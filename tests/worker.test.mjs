@@ -4364,9 +4364,11 @@ test("credit receipt footer & real-time balance sync across chat and content gen
   assert.match(workerSrc, /tokensUsed:\s*totalTokens/);
   assert.match(workerSrc, /providerUsed:/);
 
-  // Chatbot message receipt footer
+  // Chatbot credit usage shown ONLY on bottom status bar (#chatCreditStatus), NOT in per-message bubbles
+  // .chat-credit-receipt selector still exists in the cleanup querySelectorAll for correctness
   assert.match(creditsCode, /chat-credit-receipt/);
-  assert.match(creditsCode, /⚡ Used credit:/);
+  // Credit data stored as data-* attributes on content element instead of a DOM receipt pill
+  assert.match(creditsCode, /content\.dataset\.usedCredits/);
   assert.match(creditsCode, /Remaining credit:/);
 
   // Content generator receipt footer
@@ -4806,8 +4808,8 @@ test("Fix 2: Clean minimal telemetry status — remove legacy (1 cr / 500 tok) a
   assert.match(creditsJs, /function formatMinimalStatus\(/);
   assert.match(creditsJs, /Remaining credit:/);
 
-  // Hidden receipt node remains intact for structured balance tracking
-  assert.match(creditsJs, /⚡ Used credit:/);
+  // Credit usage tracked via data-* attributes on content element (no DOM receipt pill in bubbles)
+  assert.match(creditsJs, /content\.dataset\.usedCredits/);
   assert.match(creditsJs, /Remaining credit:/);
 });
 
@@ -5104,8 +5106,8 @@ test("Active Model Identity: /api/chat passes active Jevexa tier identity, syste
     globalThis.fetch = originalFetch;
   }
 
-  // Frontend credit receipt and status incorporate active model tag
-  assert.match(creditsCode, /chat-receipt-tier/);
+  // Frontend status bar incorporates active model tag (chat-receipt-tier is CSS class, not in credits.js DOM anymore)
+  assert.match(creditsCode, /getActiveEngineLabel/);
   assert.match(creditsCode, /generateChatbotGuestReply/);
   assert.match(creditsCode, /I am currently operating as \*\*.*?\*\* in JEVEXA AI Studio/);
 });
@@ -5336,11 +5338,14 @@ test("Chatbot upgrade: Stop-abort control, non-promotional system rules & bottom
   // Stop-abort button styling in styles.css
   assert.match(styles, /\.chat-send\.chat-stop-btn\s*\{/);
 
-  // Receipt appears at bottom end of messages in .chat-credit-receipt, status line stays minimal
-  assert.match(credits, /receipt\.className = 'chat-credit-receipt'/);
-  assert.match(credits, /⚡ Used credit:/);
+  // Credit usage shown ONLY on bottom status bar (#chatCreditStatus), NOT in per-message bubbles.
+  // The .chat-credit-receipt selector still exists in the cleanup querySelectorAll for correctness.
+  assert.match(credits, /chat-credit-receipt/);
+  // Bottom status bar uses formatMinimalStatus: Core Engine -> Used credit -> Remaining credit
   assert.match(credits, /Remaining credit:/);
   assert.match(credits, /setStatus\(formatMinimalStatus\(/);
+  // No per-message receipt pill appended inside assistant bubbles
+  assert.doesNotMatch(credits, /receipt\.className = 'chat-credit-receipt'/);
 });
 
 test("Flagship upgrade: Mobile virtual keyboard viewport & visualViewport tracking", async () => {

@@ -610,29 +610,34 @@ test("A-to-Z 3: Headless Browser Full Verification across Desktop & Mobile viewp
     await cdp.eval(`new Promise((r, rej) => {
       const start = Date.now();
       const check = () => {
-        const rc = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt');
-        if (rc && !rc.hidden) return r();
-        if (Date.now() - start > 6000) return rej(new Error('Chat receipt timeout'));
+        // Credit usage is now ONLY on bottom status bar, not in per-message bubbles.
+        // Wait for the bot message to finish streaming (no longer streaming class).
+        const bot = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]):not(.is-streaming)');
+        const statusEl = document.getElementById('chatCreditStatus');
+        if (bot && statusEl && /Used credit/.test(statusEl.textContent)) return r();
+        if (Date.now() - start > 6000) return rej(new Error('Status bar credit timeout'));
         setTimeout(check, 40);
       };
       check();
     })`);
     const chatState = await cdp.eval(`(() => {
       const botMsg = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome])');
-      const receipt = botMsg.querySelector('.chat-credit-receipt');
-      const style = getComputedStyle(receipt);
+      const statusEl = document.getElementById('chatCreditStatus');
       const msgWidth = botMsg.getBoundingClientRect().width;
       botMsg.querySelector('[data-chat-action="copy"]').click();
       return {
-        receiptVisible: style.display !== 'none' && !receipt.hidden,
-        receiptText: receipt.textContent.trim(),
+        noBubbleReceipt: !botMsg.querySelector('.chat-credit-receipt'),
+        statusText: statusEl?.textContent.trim() || '',
         msgWidth,
         copied: window.__COPIED
       };
     })()`);
-    assert.equal(chatState.receiptVisible, true);
+    assert.equal(chatState.noBubbleReceipt, true, "No .chat-credit-receipt pill must appear inside assistant message bubbles");
     assert.ok(chatState.msgWidth <= 845, `Centered chat reading column should be <= 845px (got ${chatState.msgWidth})`);
-    assertUsedBeforeRemaining(chatState.receiptText, 3, 9947, "Chatbot");
+    // Credit usage shown exclusively on bottom status bar
+    assert.match(chatState.statusText, /Core Engine/, "Bottom status bar must show engine label");
+    assert.match(chatState.statusText, /Used credit/, "Bottom status bar must show used credit");
+    assert.match(chatState.statusText, /Remaining credit/, "Bottom status bar must show remaining credit");
     assert.equal(chatState.copied, "Clean AI response without footer pollution.");
     assert.doesNotMatch(chatState.copied, /Used credit/);
 

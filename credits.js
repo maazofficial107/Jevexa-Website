@@ -3018,26 +3018,15 @@
             webBadge.innerHTML = `<i class="fas fa-globe" aria-hidden="true"></i><span>Web Grounded</span>`;
             content.appendChild(webBadge);
         }
+        // Per-message credit receipt pills are intentionally NOT rendered inside assistant
+        // message bubbles. All credit usage is shown exclusively on the bottom status bar
+        // (#chatCreditStatus) in the order: Core Engine → Used credit → Remaining credit.
+        // We store the values as data-* attributes on the content element for test introspection.
         if (used !== null && used >= 0) {
-            const receipt = document.createElement('div');
-            receipt.className = 'chat-credit-receipt';
-            receipt.setAttribute('role', 'status');
-            receipt.setAttribute('aria-live', 'polite');
-            receipt.dataset.usedCredits = String(used);
+            content.dataset.usedCredits = String(used);
             if (remaining !== null && remaining >= 0) {
-                receipt.dataset.remainingCredits = String(remaining);
+                content.dataset.remainingCredits = String(remaining);
             }
-            const remHtml = (remaining !== null && remaining >= 0)
-                ? ` <span class="chat-receipt-rem">Remaining credit: <strong>${remaining}</strong></span>`
-                : '';
-            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span class="chat-receipt-used">⚡ Used credit: <strong>${used}</strong></span>${remHtml}`;
-            content.appendChild(receipt);
-        } else if (meta.unconfirmedSettlement) {
-            const receipt = document.createElement('div');
-            receipt.className = 'chat-credit-receipt';
-            receipt.setAttribute('role', 'status');
-            receipt.innerHTML = `<span class="chat-receipt-tier">${escapeHtml(activeModel)}</span> <span class="chat-receipt-used">⚡ Credit settlement pending reconciliation</span>`;
-            content.appendChild(receipt);
         }
     }
 

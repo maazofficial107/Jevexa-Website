@@ -5511,7 +5511,8 @@ test("Flagship upgrade: Session resumption continuity, highlighted bottom credit
   assert.match(credits, /window\.JEVEXA_RESUME_CHAT\s*=\s*resumeChatSession/);
   assert.match(credits, /earlyPersistedUid/);
   assert.match(credits, /visibilitychange/);
-  assert.match(script, /localStorage\.setItem\('jevexa_last_workspace',\s*'chatbot'\)/);
+  assert.doesNotMatch(script, /localStorage\.setItem\(['"]jevexa_last_workspace['"]/);
+  assert.doesNotMatch(script, /sessionStorage\.setItem\(['"]jevexa_last_workspace['"]/);
   assert.match(script, /localStorage\.removeItem\('jevexa_last_workspace'\)/);
   assert.match(script, /window\.JEVEXA_RESUME_CHAT\?\.\(\)/);
 

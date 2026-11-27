@@ -4309,7 +4309,7 @@
     });
 
     window.addEventListener('storage', event => {
-        if (event.key && historyUserId && (event.key.includes(historyUserId) || event.key === 'jevexa_persisted_credits' || event.key === 'jevexa_last_workspace')) {
+        if (event.key && historyUserId && (event.key.includes(historyUserId) || event.key === 'jevexa_persisted_credits')) {
             const chatbotWin = document.getElementById('chatbotWindow');
             if (chatbotWin && chatbotWin.classList.contains('open')) {
                 resumeChatSession(false);

@@ -109,7 +109,7 @@ window.JEVEXA_SAFE_INTERACTION.bind(document, 'click', event => {
         : null;
     if (!action) return;
     event.preventDefault();
-    if (action === 'close-login') closeLogin();
+    if (action === 'close-login') closeLogin(true);
     else if (action === 'login-google') return loginWithGoogle();
     else if (action === 'login-github') return loginWithGithub();
     else if (action === 'toggle-auth-mode') toggleAuthMode();
@@ -924,7 +924,10 @@ function openLogin() {
     showLoginModal();
 }
 
-function closeLogin() {
+function closeLogin(clearPending = false) {
+    if (clearPending && typeof getAndClearPendingServiceIntent === 'function') {
+        getAndClearPendingServiceIntent();
+    }
     const modal = document.getElementById('loginModal');
     if (modal) {
         modal.classList.remove('open');
@@ -958,6 +961,7 @@ if (loginModalBackdropTarget) {
     window.JEVEXA_SAFE_INTERACTION.bind(loginModalBackdropTarget, 'click', event => {
         if (event.target === loginModalBackdropTarget) {
             closeLogin();
+            getAndClearPendingServiceIntent();
         }
     }, { matches: event => event.target === loginModalBackdropTarget, getKey: () => loginModalBackdropTarget });
 }
@@ -978,7 +982,7 @@ document.addEventListener('keydown', event => {
     if (!modal?.classList.contains('open')) return;
     if (event.key === 'Escape') {
         event.preventDefault();
-        closeLogin();
+        closeLogin(true);
         return;
     }
     if (event.key !== 'Tab') return;
@@ -1405,13 +1409,24 @@ function toggleAuthMode() {
 }
 
 let pendingServiceIntent = null;
+const PENDING_SERVICE_INTENT_TTL_MS = 10 * 60 * 1000;
+
+function clearLastWorkspaceState() {
+    try {
+        localStorage.removeItem('jevexa_last_workspace');
+        sessionStorage.removeItem('jevexa_last_workspace');
+    } catch (_) {}
+}
 
 function storePendingServiceIntent(serviceKey) {
     if (!serviceKey) return;
     pendingServiceIntent = String(serviceKey).toLowerCase().trim();
+    const ts = String(Date.now());
     try {
         sessionStorage.setItem('jevexa_pending_service_intent', pendingServiceIntent);
+        sessionStorage.setItem('jevexa_pending_service_intent_ts', ts);
         localStorage.setItem('jevexa_pending_service_intent', pendingServiceIntent);
+        localStorage.setItem('jevexa_pending_service_intent_ts', ts);
     } catch (_) {}
     window.jevexaPendingServiceIntent = pendingServiceIntent;
 }
@@ -1420,10 +1435,24 @@ window.storePendingServiceIntent = storePendingServiceIntent;
 function getAndClearPendingServiceIntent() {
     let intent = pendingServiceIntent || window.jevexaPendingServiceIntent || null;
     try {
-        if (!intent) intent = sessionStorage.getItem('jevexa_pending_service_intent');
-        if (!intent) intent = localStorage.getItem('jevexa_pending_service_intent');
+        if (!intent) {
+            const sessIntent = sessionStorage.getItem('jevexa_pending_service_intent');
+            const sessTs = Number(sessionStorage.getItem('jevexa_pending_service_intent_ts') || '0');
+            if (sessIntent && (!sessTs || (Date.now() - sessTs) <= PENDING_SERVICE_INTENT_TTL_MS)) {
+                intent = sessIntent;
+            }
+        }
+        if (!intent) {
+            const localIntent = localStorage.getItem('jevexa_pending_service_intent');
+            const localTs = Number(localStorage.getItem('jevexa_pending_service_intent_ts') || '0');
+            if (localIntent && localTs > 0 && (Date.now() - localTs) <= PENDING_SERVICE_INTENT_TTL_MS) {
+                intent = localIntent;
+            }
+        }
         sessionStorage.removeItem('jevexa_pending_service_intent');
+        sessionStorage.removeItem('jevexa_pending_service_intent_ts');
         localStorage.removeItem('jevexa_pending_service_intent');
+        localStorage.removeItem('jevexa_pending_service_intent_ts');
     } catch (_) {}
     pendingServiceIntent = null;
     window.jevexaPendingServiceIntent = null;
@@ -3912,10 +3941,7 @@ function closeChatbot() {
     window.JEVEXA_CLOSE_SELECTORS?.();
     window.closeChatMenu?.();
     window.closeChatConfirmModal?.();
-    try {
-        localStorage.removeItem('jevexa_last_workspace');
-        sessionStorage.removeItem('jevexa_last_workspace');
-    } catch (_) {}
+    clearLastWorkspaceState();
     chatbotWindow?.classList.remove('open', 'chat-history-open');
     chatbotWindow?.setAttribute('aria-hidden', 'true');
     setChatbotToggleHidden(false);
@@ -3937,19 +3963,12 @@ window.JEVEXA_SAFE_INTERACTION.bind(chatbotToggle, 'click', () => {
         '.ct-badge, .toggle-badge'
     );
     if (badge) badge.style.display = 'none';
+    clearLastWorkspaceState();
     if (isOpen) {
-        try {
-            localStorage.setItem('jevexa_last_workspace', 'chatbot');
-            sessionStorage.setItem('jevexa_last_workspace', 'chatbot');
-        } catch (_) {}
         window.JEVEXA_RESUME_CHAT?.();
         window.JEVEXA_UPDATE_VIEWPORT?.();
         document.getElementById('chatInput')?.focus();
     } else {
-        try {
-            localStorage.removeItem('jevexa_last_workspace');
-            sessionStorage.removeItem('jevexa_last_workspace');
-        } catch (_) {}
         chatbotToggle.focus({ preventScroll: true });
     }
 });
@@ -5288,10 +5307,7 @@ const JEVEXA_PLANS = {
     function openChatWorkspace(pushState = true) {
         captureStudioScroll(pushState);
         closeAllWorkspaces('chat');
-        try {
-            localStorage.setItem('jevexa_last_workspace', 'chatbot');
-            sessionStorage.setItem('jevexa_last_workspace', 'chatbot');
-        } catch (_) {}
+        clearLastWorkspaceState();
         if (chatbotWindow) {
             chatbotWindow.removeAttribute('hidden');
             chatbotWindow.hidden = false;
@@ -5317,10 +5333,7 @@ const JEVEXA_PLANS = {
         window.closeChatCustomizationModal?.();
         window.closeChatMenu?.();
         window.closeChatConfirmModal?.();
-        try {
-            localStorage.removeItem('jevexa_last_workspace');
-            sessionStorage.removeItem('jevexa_last_workspace');
-        } catch (_) {}
+        clearLastWorkspaceState();
         if (chatbotWindow) {
             chatbotWindow.classList.remove('open', 'chat-history-open');
             chatbotWindow.setAttribute('aria-hidden', 'true');
@@ -5672,10 +5685,10 @@ const JEVEXA_PLANS = {
         lastReturnHandledAt = now;
 
         closeAllWorkspaces();
-        try {
-            localStorage.removeItem('jevexa_last_workspace');
-            sessionStorage.removeItem('jevexa_last_workspace');
-        } catch (_) {}
+        clearLastWorkspaceState();
+        if (!document.getElementById('loginModal')?.classList.contains('open')) {
+            getAndClearPendingServiceIntent();
+        }
         const currentPath = window.location.pathname;
         const currentHash = window.location.hash;
         if (currentPath.startsWith('/tools') || currentHash.startsWith('#/tools') || currentHash === '#chatbot' || currentHash === '#chatTool' || currentHash.endsWith('Tool')) {
@@ -5732,10 +5745,34 @@ const JEVEXA_PLANS = {
     }
 
     function handleCurrentRoute() {
+        clearLastWorkspaceState();
         const path = window.location.pathname;
         const hash = window.location.hash;
         const cleanPath = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
         const cleanHash = hash.length > 1 && hash.endsWith('/') ? hash.slice(0, -1) : hash;
+        const searchParams = new URLSearchParams(window.location.search || '');
+        const explicitToolParam = (searchParams.get('tool') || searchParams.get('workspace') || '').trim().toLowerCase();
+        const aliasMap = {
+            'ai-chatbot': 'chatbot',
+            'chat': 'chatbot',
+            'content': 'content-generator',
+            'ocr': 'ocr',
+            'ocr-extractor': 'ocr',
+            'social': 'social',
+            'social-media-assistant': 'social',
+            'analytics': 'analytics',
+            'business-analytics': 'analytics',
+            'team': 'admin',
+            'team-admin': 'admin',
+            'workflows': 'workflows',
+            'workflow-automation': 'workflows',
+            'data': 'data',
+            'data-management': 'data',
+            'crm': 'crm',
+            'mini-crm': 'crm',
+            'outreach': 'email-outreach',
+            'outreach-generator': 'email-outreach'
+        };
         updateClientSeoForRoute(cleanPath);
 
         if (cleanPath === '/login' || cleanHash === '#login') {
@@ -5764,48 +5801,36 @@ const JEVEXA_PLANS = {
 
         if (cleanPath === '/tools/ai-chatbot' || cleanPath === '/tools/chatbot' || cleanHash === '#/tools/ai-chatbot' || cleanHash === '#/tools/chatbot' || cleanHash === '#chatbot' || cleanHash === '#chatbotWindow' || cleanHash === '#chatTool') {
             openChatWorkspace(false);
-        } else if ((cleanPath === '/' || cleanPath === '') && !cleanHash && localStorage.getItem('jevexa_last_workspace') === 'chatbot') {
-            openChatWorkspace(false);
+            return;
         } else if (cleanPath === '/tools/content-generator' || cleanPath === '/tools/content' || cleanHash === '#/tools/content-generator' || cleanHash === '#/tools/content' || cleanHash === '#contentWorkspace' || cleanHash === '#contentTool') {
             openContentWorkspace(false);
+            return;
         } else if (cleanPath === '/tools/mini-crm' || cleanPath === '/tools/crm' || cleanHash === '#/tools/mini-crm' || cleanHash === '#/tools/crm' || cleanHash === '#crmWorkspace' || cleanHash === '#crmTool') {
             openExactServiceWorkspace('crm', false);
+            return;
         } else if (cleanPath === '/tools/outreach-generator' || cleanPath === '/tools/outreach' || cleanPath === '/tools/email-outreach' || cleanHash === '#/tools/outreach-generator' || cleanHash === '#/tools/outreach' || cleanHash === '#/tools/email-outreach' || cleanHash === '#outreachWorkspace' || cleanHash === '#outreachTool') {
             openExactServiceWorkspace('outreach', false);
+            return;
         } else if (cleanPath === '/tools/ocr-extractor' || cleanPath === '/tools/ocr' || cleanHash === '#/tools/ocr-extractor' || cleanHash === '#/tools/ocr' || cleanHash === '#ocrWorkspace' || cleanHash === '#ocrTool') {
             openOcrWorkspace(false);
+            return;
         } else if (cleanPath === '/tools/social-media-assistant' || cleanPath === '/tools/social' || cleanHash === '#/tools/social-media-assistant' || cleanHash === '#/tools/social' || cleanHash === '#socialWorkspace' || cleanHash === '#socialTool') {
             openSocialWorkspace(false);
+            return;
         } else if (cleanPath === '/tools/business-analytics' || cleanPath === '/tools/analytics' || cleanHash === '#/tools/business-analytics' || cleanHash === '#/tools/analytics' || cleanHash === '#analyticsWorkspace' || cleanHash === '#analyticsTool') {
             openAnalyticsWorkspace(false);
+            return;
         } else if (cleanPath === '/tools/team-admin' || cleanPath === '/tools/admin' || cleanPath === '/tools/team' || cleanHash === '#/tools/team-admin' || cleanHash === '#/tools/admin' || cleanHash === '#/tools/team' || cleanHash === '#teamAdminWorkspace' || cleanHash === '#teamTool') {
             openExactServiceWorkspace('admin', false);
+            return;
         } else if (cleanPath === '/tools/workflow-automation' || cleanPath === '/tools/workflows' || cleanHash === '#/tools/workflow-automation' || cleanHash === '#/tools/workflows' || cleanHash === '#workflowsWorkspace' || cleanHash === '#workflowsTool') {
             openExactServiceWorkspace('workflows', false);
+            return;
         } else if (cleanPath === '/tools/data-management' || cleanPath === '/tools/data' || cleanHash === '#/tools/data-management' || cleanHash === '#/tools/data' || cleanHash === '#dataWorkspace' || cleanHash === '#dataTool') {
             openDataWorkspace(false);
+            return;
         } else if (cleanPath.startsWith('/tools/') || cleanHash.startsWith('#/tools/')) {
             const rawId = cleanPath.replace(/^\/tools\//, '') || cleanHash.replace(/^#\/tools\//, '');
-            const aliasMap = {
-                'ai-chatbot': 'chatbot',
-                'content': 'content-generator',
-                'ocr': 'ocr',
-                'ocr-extractor': 'ocr',
-                'social': 'social',
-                'social-media-assistant': 'social',
-                'analytics': 'analytics',
-                'business-analytics': 'analytics',
-                'team': 'admin',
-                'team-admin': 'admin',
-                'workflows': 'workflows',
-                'workflow-automation': 'workflows',
-                'data': 'data',
-                'data-management': 'data',
-                'crm': 'crm',
-                'mini-crm': 'crm',
-                'outreach': 'email-outreach',
-                'outreach-generator': 'email-outreach'
-            };
             const toolId = aliasMap[rawId] || rawId;
             const tool = toolsConfig.find(t => t.id === toolId || t.route === cleanPath || t.route === cleanHash.replace(/^#/, ''));
             if (tool) {
@@ -5823,6 +5848,13 @@ const JEVEXA_PLANS = {
                 returnToStudio();
             }
             return;
+        }
+
+        if ((cleanPath === '/' || cleanPath === '') && explicitToolParam) {
+            const resolvedToolId = aliasMap[explicitToolParam] || explicitToolParam;
+            if (openExactServiceWorkspace(resolvedToolId, false)) {
+                return;
+            }
         }
 
         // Section anchor (e.g. #how, #contact, #pricing, #features, #faq, #reviews, #home)
@@ -5845,6 +5877,11 @@ const JEVEXA_PLANS = {
                 }, 50);
                 return;
             }
+        }
+
+        // Normal studio / landing page route (or browser Back to '/'): keep all workspaces closed
+        if (cleanPath === '/' || cleanPath === '') {
+            closeAllWorkspaces();
         }
     }
 

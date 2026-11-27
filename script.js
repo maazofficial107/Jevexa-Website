@@ -2252,6 +2252,7 @@ function openSettingsView(user) {
         if (error) { console.error(error); showToast('Could not sign out all devices.'); }
         else {
           applyAuthState(null);
+          window.JEVEXA_CLEAR_ACCOUNT_STATE?.();
           backdrop.style.display = 'none';
           showToast('Signed out of all devices.');
         }
@@ -2527,6 +2528,9 @@ function applyAuthState(user) {
             void updateCreditsHeader(currentUser, revision);
         }
     }, 0);
+    try {
+        window.dispatchEvent(new CustomEvent('jevexa:auth-changed', { detail: { user: currentUser } }));
+    } catch (_) {}
 }
 
 // Immediate synchronous UI restoration from persisted session before async getSession()

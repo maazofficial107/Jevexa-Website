@@ -540,11 +540,22 @@
     }
 
     function clearAccountChatState() {
+        const prevUserId = historyUserId || activeAuthUserId;
+        if (prevUserId && activeChatId && conversation.length > 0) {
+            const activeSess = chatSessions.find(item => item.id === activeChatId);
+            if (activeSess) {
+                activeSess.messages = conversation.slice(-100);
+                activeSess.updatedAt = Date.now();
+                saveChatSessions();
+            }
+        }
+        saveChatDraft(prevUserId);
         abortInFlightChatRequest();
         conversation.length = 0;
         chatSessions = [];
         activeChatId = null;
         historyUserId = null;
+        activeAuthUserId = null;
         ambiguousRequestId = null;
         lastTurnCreditUsage = null;
         currentUserPlan = 'free';
@@ -582,6 +593,11 @@
         renderChatHistory();
         updateChatWelcome(null);
         updateChatHeaderTitle('Jevexa AI');
+        if (input) {
+            input.value = '';
+            input.style.height = 'auto';
+        }
+        restoreChatDraft(null);
         setStatus('Please sign in to use the AI chatbot.');
     }
 
@@ -591,6 +607,54 @@
 
     function activeChatKey(userId) {
         return `jevexa_${userId}_active_chat_id`;
+    }
+
+    function explicitNewChatKey(userId) {
+        return `jevexa_${userId}_explicit_new_chat`;
+    }
+
+    function draftKey(userId) {
+        return userId ? `jevexa_${userId}_chat_draft` : 'jevexa_guest_chat_draft';
+    }
+
+    function saveChatDraft(userIdOverride = undefined) {
+        if (!input) return;
+        const uid = userIdOverride !== undefined
+            ? userIdOverride
+            : (historyUserId || activeAuthUserId || getPersistedUserId());
+        const key = draftKey(uid);
+        try {
+            const val = input.value;
+            if (val && val.length > 0) {
+                localStorage.setItem(key, val.slice(0, 16000));
+            } else {
+                localStorage.removeItem(key);
+            }
+        } catch (_) {}
+    }
+
+    function restoreChatDraft(userIdOverride = undefined) {
+        if (!input) return;
+        const uid = userIdOverride !== undefined
+            ? userIdOverride
+            : (historyUserId || activeAuthUserId || getPersistedUserId());
+        try {
+            const savedDraft = localStorage.getItem(draftKey(uid));
+            if (typeof savedDraft === 'string' && savedDraft.length > 0 && !input.value) {
+                input.value = savedDraft;
+                input.style.height = 'auto';
+                input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+            }
+        } catch (_) {}
+    }
+
+    function clearChatDraft(userIdOverride = undefined) {
+        const uid = userIdOverride !== undefined
+            ? userIdOverride
+            : (historyUserId || activeAuthUserId || getPersistedUserId());
+        try {
+            localStorage.removeItem(draftKey(uid));
+        } catch (_) {}
     }
 
     function getPersistedUserId() {
@@ -827,6 +891,7 @@
             session.updatedAt = Date.now();
             closeChatMenu();
             saveChatSessions();
+            if (historyUserId) void syncChatSessionToServer('PUT', session);
             if (typeof window.showToast === 'function') {
                 window.showToast(session.pinned ? 'Chat pinned to top' : 'Chat unpinned');
             }
@@ -1036,6 +1101,8 @@
                     session.updatedAt = Date.now();
                     renamingSessionId = null;
                     saveChatSessions();
+                    if (historyUserId) void syncChatSessionToServer('PUT', session);
+                    if (session.id === activeChatId) updateChatHeaderTitle(newTitle);
                 };
 
                 const doCancel = () => {
@@ -1173,11 +1240,47 @@
         }
     }
 
+    function hydrateChatSessionToCanvas(session) {
+        if (!session) return;
+        activeChatId = session.id;
+        webSearchEnabled = isWebSearchAllowed()
+            ? (typeof session.webSearch === 'boolean' ? session.webSearch : getStoredWebSearchPref(historyUserId || activeAuthUserId))
+            : false;
+        syncWebSearchUI();
+        updateChatHeaderTitle(session.title || 'Jevexa AI');
+        setStatus(formatMinimalStatus());
+        if (historyUserId) {
+            try {
+                localStorage.removeItem(explicitNewChatKey(historyUserId));
+                localStorage.setItem(activeChatKey(historyUserId), session.id);
+            } catch (_) {}
+        }
+        conversation.splice(0, conversation.length, ...(Array.isArray(session.messages) ? session.messages : []));
+        messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
+        const welcome = messages?.querySelector('[data-chat-welcome]');
+        if (welcome) welcome.hidden = conversation.length > 0;
+        conversation.forEach((item, index) => {
+            const histMeta = item.meta ? { ...item.meta, _fromHistory: true } : null;
+            appendMessage(item.text, item.role === 'user', index, histMeta);
+        });
+        const emptyState = document.getElementById('chatEmptyState');
+        if (emptyState) emptyState.hidden = conversation.length > 0;
+        updateChatWelcome();
+        renderChatHistory();
+    }
+
     function createChatSession() {
         abortInFlightChatRequest();
         activeChatId = null;
         lastTurnCreditUsage = null;
         conversation.length = 0;
+        const uid = historyUserId || activeAuthUserId;
+        if (uid) {
+            try {
+                localStorage.removeItem(activeChatKey(uid));
+                localStorage.setItem(explicitNewChatKey(uid), 'true');
+            } catch (_) {}
+        }
         messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
         const welcome = messages?.querySelector('[data-chat-welcome]');
         if (welcome) welcome.hidden = false;
@@ -1205,30 +1308,7 @@
                 currentSession.updatedAt = Date.now();
             }
         }
-        activeChatId = sessionId;
-        webSearchEnabled = isWebSearchAllowed()
-            ? (typeof session.webSearch === 'boolean' ? session.webSearch : getStoredWebSearchPref(historyUserId || activeAuthUserId))
-            : false;
-        syncWebSearchUI();
-        updateChatHeaderTitle(session.title || 'Jevexa AI');
-        setStatus(formatMinimalStatus());
-        if (historyUserId) {
-            try {
-                localStorage.setItem(activeChatKey(historyUserId), sessionId);
-            } catch (_) {}
-        }
-        conversation.splice(0, conversation.length, ...session.messages);
-        messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
-        const welcome = messages?.querySelector('[data-chat-welcome]');
-        if (welcome) welcome.hidden = conversation.length > 0;
-        conversation.forEach((item, index) => {
-            const histMeta = item.meta ? { ...item.meta, _fromHistory: true } : null;
-            appendMessage(item.text, item.role === 'user', index, histMeta);
-        });
-        const emptyState = document.getElementById('chatEmptyState');
-        if (emptyState) emptyState.hidden = conversation.length > 0;
-        updateChatWelcome();
-        renderChatHistory();
+        hydrateChatSessionToCanvas(session);
 
         if (window.innerWidth <= 767) {
             document.getElementById('chatSidebar')?.classList.remove('open');
@@ -1238,7 +1318,7 @@
 
     // Serialized per-session Supabase sync queue to prevent out-of-order race conditions
     const sessionSyncQueue = new Map();
-    async function syncChatSessionToServer(method, payload) {
+    async function syncChatSessionToServer(method, payload, { keepalive = false } = {}) {
         if (!historyUserId || typeof window.supabaseClient?.auth?.getSession !== 'function') return;
         const queueKey = payload?.id || '__all__';
         const prev = sessionSyncQueue.get(queueKey) || Promise.resolve();
@@ -1251,6 +1331,7 @@
                     : '/api/chat/sessions';
                 await fetch(url, {
                     method,
+                    keepalive: Boolean(keepalive),
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${session.access_token}`
@@ -1273,19 +1354,25 @@
             });
             if (!res.ok) return;
             const data = await res.json().catch(() => null);
-            if (!data?.ok || !Array.isArray(data.sessions) || data.sessions.length === 0) return;
+            if (!data?.ok || !Array.isArray(data.sessions)) return;
             if (historyUserId !== userId) return;
 
             const byId = new Map(chatSessions.map(s => [s.id, s]));
+            const remoteById = new Map();
             let changed = false;
             for (const remote of data.sessions) {
                 if (!remote?.id || !Array.isArray(remote.messages)) continue;
+                remoteById.set(remote.id, remote);
                 const local = byId.get(remote.id);
-                if (!local || (Number(remote.updatedAt) > Number(local.updatedAt || 0))) {
+                const remoteUpdated = Number(remote.updatedAt) || 0;
+                const localUpdated = Number(local?.updatedAt || 0);
+                const remoteLen = remote.messages.length;
+                const localLen = Array.isArray(local?.messages) ? local.messages.length : 0;
+                if (!local || remoteUpdated > localUpdated || (remoteUpdated === localUpdated && remoteLen > localLen)) {
                     byId.set(remote.id, {
                         id: remote.id,
                         title: typeof remote.title === 'string' ? remote.title.slice(0, 48) : 'New chat',
-                        updatedAt: Number(remote.updatedAt) || Date.now(),
+                        updatedAt: remoteUpdated || Date.now(),
                         pinned: Boolean(remote.pinned),
                         languageOverride: remote.languageOverride || null,
                         ...(typeof local?.webSearch === 'boolean' ? { webSearch: local.webSearch } : {}),
@@ -1294,9 +1381,39 @@
                     changed = true;
                 }
             }
+
+            // Push any local-only or newer local sessions up to Supabase so logout->login across devices never loses them
+            for (const localSess of chatSessions) {
+                if (!localSess?.id || !Array.isArray(localSess.messages) || localSess.messages.length === 0) continue;
+                const remoteMatch = remoteById.get(localSess.id);
+                if (!remoteMatch || Number(localSess.updatedAt || 0) > Number(remoteMatch.updatedAt || 0)) {
+                    void syncChatSessionToServer('PUT', localSess);
+                }
+            }
+
             if (changed) {
-                chatSessions = Array.from(byId.values()).slice(0, 30);
+                chatSessions = Array.from(byId.values())
+                    .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+                    .slice(0, 30);
                 saveChatSessions();
+
+                let savedActiveId = null;
+                let explicitNew = false;
+                try {
+                    savedActiveId = localStorage.getItem(activeChatKey(userId));
+                    explicitNew = localStorage.getItem(explicitNewChatKey(userId)) === 'true';
+                } catch (_) {}
+
+                const targetId = activeChatId || savedActiveId;
+                const activeMatch = targetId ? chatSessions.find(s => s.id === targetId) : null;
+                if (activeMatch && activeMatch.messages.length > conversation.length) {
+                    hydrateChatSessionToCanvas(activeMatch);
+                } else if (!activeChatId && conversation.length === 0 && !explicitNew) {
+                    const candidate = activeMatch || chatSessions.find(s => Array.isArray(s.messages) && s.messages.length > 0);
+                    if (candidate) {
+                        hydrateChatSessionToCanvas(candidate);
+                    }
+                }
             }
         } catch (_) {}
     }
@@ -1318,6 +1435,7 @@
             }
             if (userId) {
                 try {
+                    localStorage.removeItem(explicitNewChatKey(userId));
                     localStorage.setItem(activeChatKey(userId), activeChatId);
                 } catch (_) {}
             }
@@ -1333,6 +1451,7 @@
     function loadConversation(userId, force = false) {
         if (!userId) return;
         if (historyUserId === userId && !force && chatSessions.length > 0) {
+            restoreChatDraft(userId);
             return;
         }
         historyUserId = userId;
@@ -1357,7 +1476,11 @@
                     messages: item.messages.slice(-100).filter(message =>
                         message && ['user', 'assistant'].includes(message.role)
                         && typeof message.text === 'string' && message.text.length <= 16000
-                    )
+                    ).map(message => (
+                        message.meta && typeof message.meta === 'object'
+                            ? { role: message.role, text: message.text, meta: message.meta }
+                            : { role: message.role, text: message.text }
+                    ))
                 }));
             const legacy = JSON.parse(localStorage.getItem(`jevexa_${userId}_chat_history`) || '[]');
             if (!chatSessions.length && Array.isArray(legacy) && legacy.length) {
@@ -1370,22 +1493,35 @@
                         && typeof item.text === 'string' && item.text.length <= 16000).slice(-100)
                 }];
             }
-            // FRESH CHAT ON REOPEN:
-            // Past conversations remain intact and accessible in the sidebar history list,
-            // but the main chat canvas always starts as a fresh clean chat session on launch/reopen.
-            // Past chats only load when the user explicitly clicks a chat in the sidebar history.
-            activeChatId = null;
-            conversation.length = 0;
-            messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
-            const welcome = messages?.querySelector('[data-chat-welcome]');
-            if (welcome) welcome.hidden = false;
-            const emptyState = document.getElementById('chatEmptyState');
-            if (emptyState) emptyState.hidden = false;
-            updateChatWelcome();
-            updateChatHeaderTitle('New Chat');
+
+            let savedActiveId = null;
+            let explicitNew = false;
+            try {
+                savedActiveId = localStorage.getItem(activeChatKey(userId));
+                explicitNew = localStorage.getItem(explicitNewChatKey(userId)) === 'true';
+            } catch (_) {}
+
+            const activeToRestore = (savedActiveId && chatSessions.find(s => s.id === savedActiveId && s.messages.length > 0))
+                || (!explicitNew && savedActiveId && chatSessions.find(s => s.id === savedActiveId))
+                || (!explicitNew && chatSessions.find(s => Array.isArray(s.messages) && s.messages.length > 0));
+
+            if (activeToRestore && activeToRestore.messages.length > 0) {
+                hydrateChatSessionToCanvas(activeToRestore);
+            } else {
+                activeChatId = null;
+                conversation.length = 0;
+                messages?.querySelectorAll('.message:not([data-chat-welcome])').forEach(message => message.remove());
+                const welcome = messages?.querySelector('[data-chat-welcome]');
+                if (welcome) welcome.hidden = false;
+                const emptyState = document.getElementById('chatEmptyState');
+                if (emptyState) emptyState.hidden = false;
+                updateChatWelcome();
+                updateChatHeaderTitle('Jevexa AI');
+            }
             loadCustomSettings(userId);
             loadMemories(userId);
             renderChatHistory();
+            restoreChatDraft(userId);
         } catch (error) {
             console.warn('Chat history restore notice:', error?.message || error);
             chatSessions = [];
@@ -1394,6 +1530,7 @@
             loadCustomSettings(userId);
             loadMemories(userId);
             renderChatHistory();
+            restoreChatDraft(userId);
         }
     }
 
@@ -2254,24 +2391,27 @@
         statusText.textContent = onlineNow ? onlineLabel : 'Offline';
     }
 
-    async function initializeChatSession() {
+    async function initializeChatSession(explicitSession = null) {
         try {
             const session = await getSession();
+            const resolvedSession = session || (explicitSession?.user?.id ? explicitSession : null);
             const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-            if (!session) {
+            if (!resolvedSession?.user?.id) {
                 setChatHeaderConnLabel(statusText, 'AI chat • Sign-in required');
                 lockChatTiers();
                 updateChatWelcome(null);
                 return;
             }
             setChatHeaderConnLabel(statusText, 'AI chat • Online');
-            loadConversation(session.user.id);
-            updateChatWelcome(session.user);
-            await refreshTierAccess(session);
-            void reconcilePendingRequest(session);
-            void fetchRemoteChatSessions(session.user.id);
+            loadConversation(resolvedSession.user.id);
+            updateChatWelcome(resolvedSession.user);
+            if (resolvedSession.access_token) {
+                await refreshTierAccess(resolvedSession);
+                void reconcilePendingRequest(resolvedSession);
+                void fetchRemoteChatSessions(resolvedSession.user.id);
+            }
             try {
-                const savedTheme = localStorage.getItem(`jevexa_${session.user.id}_chat_theme`);
+                const savedTheme = localStorage.getItem(`jevexa_${resolvedSession.user.id}_chat_theme`);
                 const theme = ['dark', 'light', 'system'].includes(savedTheme)
                     ? savedTheme
                     : (['dark', 'light', 'system'].includes(chatCustomSettings.theme) ? chatCustomSettings.theme : 'dark');
@@ -2283,7 +2423,7 @@
                 const reducedMotionEl = document.getElementById('chatReducedMotion') || document.getElementById('chatModalReducedMotion');
                 if (reducedMotionEl) {
                     reducedMotionEl.checked =
-                        localStorage.getItem(`jevexa_${session.user.id}_chat_reduced_motion`) === 'true';
+                        localStorage.getItem(`jevexa_${resolvedSession.user.id}_chat_reduced_motion`) === 'true';
                     document.documentElement.classList.toggle(
                         'jevexa-reduce-motion',
                         reducedMotionEl.checked
@@ -3541,6 +3681,10 @@
         // Guarantee active session and user ID
         historyUserId = session.user.id;
         activeAuthUserId = session.user.id;
+        try {
+            localStorage.removeItem(explicitNewChatKey(historyUserId));
+        } catch (_) {}
+        clearChatDraft(historyUserId);
         if (!activeChatId) {
             activeChatId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
             chatSessions.unshift({
@@ -3550,10 +3694,10 @@
                 pinned: false,
                 messages: []
             });
-            try {
-                localStorage.setItem(activeChatKey(historyUserId), activeChatId);
-            } catch (_) {}
         }
+        try {
+            localStorage.setItem(activeChatKey(historyUserId), activeChatId);
+        } catch (_) {}
 
         // Setup unique AbortController and RequestId for this exact send
         abortInFlightChatRequest();
@@ -3595,6 +3739,7 @@
                 activeSess.title = (text || 'New chat').slice(0, 48);
             }
             saveChatSessions();
+            void syncChatSessionToServer('PUT', activeSess);
         }
         renderChatHistory();
 
@@ -3720,9 +3865,17 @@
                     const partial = streamedText.trim();
                     if (partial) {
                         streamBubble.body.innerHTML = renderMarkdown(partial, { streaming: false });
-                        conversation.push({ role: 'assistant', text: partial });
+                        const partialRem = getCachedRemainingCredits();
+                        const partialMeta = {
+                            tier: selectedTier,
+                            creditsUsed: 0,
+                            ...(Number.isInteger(partialRem) && partialRem >= 0 ? { remainingCredits: partialRem } : {}),
+                            stoppedEarly: true
+                        };
+                        conversation.push({ role: 'assistant', text: partial, meta: partialMeta });
                         trimConversationToMax(100);
                         streamBubble.row.dataset.messageIndex = String(conversation.length - 1);
+                        applyBotMetaStatus(streamBubble.content, partialMeta);
                         (streamBubble.col || streamBubble.content).appendChild(buildBotActionButtons());
                         persistConversation(session.user.id);
                     } else {
@@ -4057,6 +4210,7 @@
     input?.addEventListener('input', () => {
         input.style.height = 'auto';
         input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+        saveChatDraft();
     });
 
     async function writeClipboardText(text) {
@@ -4325,7 +4479,47 @@
         } catch (e) {
             console.warn('Early chat hydration notice:', e);
         }
+    } else {
+        restoreChatDraft(null);
     }
+
+    function flushChatStateBeforeUnload() {
+        saveChatDraft();
+        if (sending && typeof activeStreamFinalizeFn === 'function') {
+            try { activeStreamFinalizeFn(); } catch (_) {}
+        } else if (historyUserId && activeChatId && conversation.length > 0) {
+            const activeSess = chatSessions.find(item => item.id === activeChatId);
+            if (activeSess) {
+                activeSess.messages = conversation.slice(-100);
+                activeSess.updatedAt = Date.now();
+                saveChatSessions();
+                try {
+                    localStorage.setItem(activeChatKey(historyUserId), activeChatId);
+                } catch (_) {}
+                void syncChatSessionToServer('PUT', activeSess, { keepalive: true });
+            }
+        }
+    }
+    window.addEventListener('pagehide', flushChatStateBeforeUnload);
+    window.addEventListener('beforeunload', flushChatStateBeforeUnload);
+
+    window.JEVEXA_SYNC_CHAT_AUTH = (user, explicitSession = null) => {
+        const userId = user?.id || explicitSession?.user?.id || null;
+        if (activeAuthUserId && activeAuthUserId !== userId) clearAccountChatState();
+        activeAuthUserId = userId;
+        const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
+        setChatHeaderConnLabel(statusText, userId ? 'AI chat • Online' : 'AI chat • Sign-in required');
+        updateChatWelcome(user || explicitSession?.user || null);
+        if (userId) {
+            loadConversation(userId);
+            void initializeChatSession(explicitSession || { user: user || { id: userId } });
+        } else {
+            lockChatTiers();
+        }
+    };
+    window.addEventListener('jevexa:auth-changed', (evt) => {
+        window.JEVEXA_SYNC_CHAT_AUTH?.(evt?.detail?.user || null);
+    });
 
     window.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
@@ -4352,17 +4546,7 @@
     });
     if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth?.onAuthStateChange) {
         supabaseClient.auth.onAuthStateChange((_event, session) => {
-            const userId = session?.user?.id || null;
-            if (activeAuthUserId && activeAuthUserId !== userId) clearAccountChatState();
-            activeAuthUserId = userId;
-            const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-            setChatHeaderConnLabel(statusText, userId ? 'AI chat • Online' : 'AI chat • Sign-in required');
-            updateChatWelcome(session?.user || null);
-            if (userId) {
-                void initializeChatSession();
-            } else {
-                lockChatTiers();
-            }
+            window.JEVEXA_SYNC_CHAT_AUTH?.(session?.user || null, session || null);
         });
     }
     if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth?.getSession) {

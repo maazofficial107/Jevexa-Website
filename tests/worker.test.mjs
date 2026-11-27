@@ -5565,24 +5565,28 @@ test("Flagship upgrade: Sidebar chat history three-dots menu (Pin, Rename, Delet
   assert.match(styles, /\.menu-dropup/);
 });
 
-test("Flagship upgrade: Fresh chat on reopen with click-to-load sidebar history", async () => {
+test("Flagship upgrade: Persistent active chat & sidebar history across refresh and logout -> login", async () => {
   const credits = await readFile(new URL("../credits.js", import.meta.url), "utf8");
 
-  // loadConversation keeps past chat sessions intact in sidebar history list
+  // loadConversation restores saved chatSessions and active conversation + draft across reload & re-login
   assert.match(credits, /function loadConversation\(userId,\s*force = false\)/);
   assert.match(credits, /chatSessions = saved\.filter/);
   assert.match(credits, /pinned: Boolean\(item\.pinned\)/);
+  assert.match(credits, /function hydrateChatSessionToCanvas\(session\)/);
+  assert.match(credits, /localStorage\.getItem\(activeChatKey\(userId\)\)/);
+  assert.match(credits, /function restoreChatDraft\(/);
 
-  // But starts main chat box as a fresh clean session by default on reopen
-  assert.match(credits, /\/\/ FRESH CHAT ON REOPEN:/);
-  assert.match(credits, /activeChatId = null;/);
-  assert.match(credits, /conversation\.length = 0;/);
-  assert.match(credits, /messages\?\.querySelectorAll\('\.message:not\(\[data-chat-welcome\]\)'\)\.forEach/);
+  // clearAccountChatState resets in-memory UI on logout without wiping user-scoped localStorage history
+  assert.match(credits, /function clearAccountChatState\(\)/);
+  const clearStart = credits.indexOf("function clearAccountChatState()");
+  const clearEnd = credits.indexOf("function conversationKey(", clearStart);
+  assert.ok(clearStart !== -1 && clearEnd !== -1);
+  assert.doesNotMatch(credits.slice(clearStart, clearEnd), /localStorage\.removeItem\(conversationKey/);
 
-  // Only loads a past chat into canvas when user explicitly clicks that chat in sidebar
+  // Clicking a chat in sidebar loads it into canvas
   assert.match(credits, /bindSafe\(select, 'click', \(\) => selectChatSession\(session\.id\)\);/);
   assert.match(credits, /function selectChatSession\(sessionId\)/);
-  assert.match(credits, /conversation\.splice\(0, conversation\.length, \.\.\.session\.messages\);/);
+  assert.match(credits, /conversation\.splice\(0, conversation\.length, \.\.\.\(Array\.isArray\(session\.messages\)/);
 });
 
 test("Flagship upgrade: Live working Settings end-to-end and 0 badge removal", async () => {

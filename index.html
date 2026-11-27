@@ -3581,40 +3581,44 @@
                     <div class="chatbot-info">
                         <div class="chat-header-brand-badge" id="chatHeaderEmblemBadge">
                             <span class="chat-ai-emblem" id="chatHeaderEmblem" aria-hidden="true">
-                                <svg viewBox="0 0 44 44" fill="none">
+                                <svg viewBox="0 0 48 48" fill="none">
                                     <defs>
-                                        <linearGradient id="jevEmblemGrad" x1="4" y1="4" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                                            <stop offset="0%" stop-color="#c084fc"/>
-                                            <stop offset="50%" stop-color="#38bdf8"/>
-                                            <stop offset="100%" stop-color="#22d3ee"/>
-                                        </linearGradient>
-                                        <linearGradient id="jevEmblemAccent" x1="40" y1="4" x2="4" y2="40" gradientUnits="userSpaceOnUse">
-                                            <stop offset="0%" stop-color="#f472b6"/>
-                                            <stop offset="50%" stop-color="#a855f7"/>
+                                        <linearGradient id="jevWandHdrShaft" x1="8" y1="40" x2="35" y2="13" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#8b5cf6"/>
+                                            <stop offset="52%" stop-color="#6366f1"/>
                                             <stop offset="100%" stop-color="#38bdf8"/>
                                         </linearGradient>
-                                        <linearGradient id="jevSheenGrad" x1="2" y1="10" x2="36" y2="28" gradientUnits="userSpaceOnUse">
-                                            <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-                                            <stop offset="45%" stop-color="#e0f2fe" stop-opacity="0.95"/>
-                                            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+                                        <linearGradient id="jevWandHdrTip" x1="25" y1="23" x2="36" y2="12" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#67e8f9"/>
+                                            <stop offset="55%" stop-color="#e0f2fe"/>
+                                            <stop offset="100%" stop-color="#ffffff"/>
                                         </linearGradient>
-                                        <radialGradient id="jevCoreGrad" cx="50%" cy="50%" r="50%">
-                                            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.52"/>
-                                            <stop offset="55%" stop-color="#8b5cf6" stop-opacity="0.28"/>
+                                        <linearGradient id="jevWandHdrSpark" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#ffffff"/>
+                                            <stop offset="55%" stop-color="#a5f3fc"/>
+                                            <stop offset="100%" stop-color="#c084fc"/>
+                                        </linearGradient>
+                                        <radialGradient id="jevWandHdrAura" cx="50%" cy="50%" r="50%">
+                                            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.55"/>
+                                            <stop offset="55%" stop-color="#a855f7" stop-opacity="0.28"/>
                                             <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
                                         </radialGradient>
+                                        <linearGradient id="jevWandHdrSheen" x1="8" y1="40" x2="38" y2="10" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+                                            <stop offset="50%" stop-color="#ffffff" stop-opacity="0.85"/>
+                                            <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                                        </linearGradient>
                                     </defs>
-                                    <circle class="emblem-core-aura" cx="22" cy="22" r="20" fill="url(#jevCoreGrad)"/>
-                                    <circle class="emblem-glass-disc" cx="22" cy="22" r="14.5" fill="rgba(10, 14, 32, 0.86)" stroke="rgba(167, 139, 250, 0.36)" stroke-width="1"/>
-                                    <polygon class="emblem-prism-ring" points="22,6.5 33,11 37.5,22 33,33 22,37.5 11,33 6.5,22 11,11" stroke="rgba(196, 181, 253, 0.42)" stroke-width="1" fill="none"/>
-                                    <circle class="emblem-orbit-outer" cx="22" cy="22" r="18.2" stroke="url(#jevEmblemGrad)" stroke-width="2" stroke-dasharray="28 11 10 11" stroke-linecap="round"/>
-                                    <circle class="emblem-orbit-inner" cx="22" cy="22" r="11.8" stroke="url(#jevEmblemAccent)" stroke-width="1.75" stroke-dasharray="18 8 6 8" stroke-linecap="round"/>
-                                    <path class="emblem-sheen-arc" d="M6.5 15.5A16.5 16.5 0 0 1 31.5 8.5" stroke="url(#jevSheenGrad)" stroke-width="2.1" stroke-linecap="round"/>
-                                    <circle class="emblem-core-glow" cx="22" cy="22" r="6.4" fill="url(#jevEmblemGrad)"/>
-                                    <path class="emblem-spark" d="M22 14L23.7 20.3L30 22L23.7 23.7L22 30L20.3 23.7L14 22L20.3 20.3L22 14Z" fill="#ffffff"/>
-                                    <g class="emblem-sat"><circle cx="22" cy="3.8" r="3.8" fill="rgba(56, 189, 248, 0.32)"/><circle cx="22" cy="3.8" r="2.2" fill="#67e8f9"/></g>
-                                    <g class="emblem-node-a"><circle cx="22" cy="10.2" r="2.8" fill="rgba(232, 121, 249, 0.3)"/><circle cx="22" cy="10.2" r="1.65" fill="#f472b6"/></g>
-                                    <g class="emblem-node-b"><circle cx="38.5" cy="22" r="2.6" fill="rgba(167, 139, 250, 0.32)"/><circle cx="38.5" cy="22" r="1.55" fill="#c4b5fd"/></g>
+                                    <ellipse class="wand-aura" cx="27" cy="21" rx="18" ry="18" fill="url(#jevWandHdrAura)"/>
+                                    <g class="wand-actor">
+                                        <rect class="wand-shaft" x="18.2" y="13.5" width="5.8" height="27.5" rx="2.9" transform="rotate(45 21.1 27.25)" fill="url(#jevWandHdrShaft)"/>
+                                        <rect class="wand-tip" x="26.1" y="12.1" width="5.8" height="8.2" rx="2.4" transform="rotate(45 29 16.2)" fill="url(#jevWandHdrTip)"/>
+                                        <path class="wand-sheen" d="M12.5 34.5L32.5 14.5" stroke="url(#jevWandHdrSheen)" stroke-width="1.9" stroke-linecap="round"/>
+                                    </g>
+                                    <path class="wand-sparkle wand-sparkle-1" d="M14 7L15.45 11.55L20 13L15.45 14.45L14 19L12.55 14.45L8 13L12.55 11.55L14 7Z" fill="url(#jevWandHdrSpark)"/>
+                                    <path class="wand-sparkle wand-sparkle-2" d="M35.5 4.5L36.55 7.95L40 9L36.55 10.05L35.5 13.5L34.45 10.05L31 9L34.45 7.95L35.5 4.5Z" fill="#67e8f9"/>
+                                    <path class="wand-sparkle wand-sparkle-3" d="M38.5 22L39.4 25.1L42.5 26L39.4 26.9L38.5 30L37.6 26.9L34.5 26L37.6 25.1L38.5 22Z" fill="#e879f9"/>
+                                    <path class="wand-sparkle wand-sparkle-4" d="M27.5 33L28.15 35.15L30.3 35.8L28.15 36.45L27.5 38.6L26.85 36.45L24.7 35.8L26.85 35.15L27.5 33Z" fill="#a5f3fc"/>
                                 </svg>
                             </span>
                             <h4 id="chatbotTitle" class="chat-header-title-text">Jevexa AI</h4>
@@ -3641,40 +3645,44 @@
             <div class="chat-empty-state" id="chatEmptyState">
                 <div class="chat-empty-emblem" aria-hidden="true">
                     <span class="chat-ai-emblem chat-ai-emblem-lg">
-                        <svg viewBox="0 0 44 44" fill="none">
+                        <svg viewBox="0 0 48 48" fill="none">
                             <defs>
-                                <linearGradient id="jevEmblemGradLg" x1="4" y1="4" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                                    <stop offset="0%" stop-color="#c084fc"/>
-                                    <stop offset="50%" stop-color="#38bdf8"/>
-                                    <stop offset="100%" stop-color="#22d3ee"/>
-                                </linearGradient>
-                                <linearGradient id="jevEmblemAccentLg" x1="40" y1="4" x2="4" y2="40" gradientUnits="userSpaceOnUse">
-                                    <stop offset="0%" stop-color="#f472b6"/>
-                                    <stop offset="50%" stop-color="#a855f7"/>
+                                <linearGradient id="jevWandHeroShaft" x1="8" y1="40" x2="35" y2="13" gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#8b5cf6"/>
+                                    <stop offset="52%" stop-color="#6366f1"/>
                                     <stop offset="100%" stop-color="#38bdf8"/>
                                 </linearGradient>
-                                <linearGradient id="jevSheenGradLg" x1="2" y1="10" x2="36" y2="28" gradientUnits="userSpaceOnUse">
-                                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-                                    <stop offset="45%" stop-color="#e0f2fe" stop-opacity="0.95"/>
-                                    <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+                                <linearGradient id="jevWandHeroTip" x1="25" y1="23" x2="36" y2="12" gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#67e8f9"/>
+                                    <stop offset="55%" stop-color="#e0f2fe"/>
+                                    <stop offset="100%" stop-color="#ffffff"/>
                                 </linearGradient>
-                                <radialGradient id="jevCoreGradLg" cx="50%" cy="50%" r="50%">
-                                    <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.5"/>
-                                    <stop offset="55%" stop-color="#8b5cf6" stop-opacity="0.26"/>
+                                <linearGradient id="jevWandHeroSpark" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#ffffff"/>
+                                    <stop offset="55%" stop-color="#a5f3fc"/>
+                                    <stop offset="100%" stop-color="#c084fc"/>
+                                </linearGradient>
+                                <radialGradient id="jevWandHeroAura" cx="50%" cy="50%" r="50%">
+                                    <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.52"/>
+                                    <stop offset="55%" stop-color="#a855f7" stop-opacity="0.26"/>
                                     <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
                                 </radialGradient>
+                                <linearGradient id="jevWandHeroSheen" x1="8" y1="40" x2="38" y2="10" gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+                                    <stop offset="50%" stop-color="#ffffff" stop-opacity="0.88"/>
+                                    <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+                                </linearGradient>
                             </defs>
-                            <circle class="emblem-core-aura" cx="22" cy="22" r="20" fill="url(#jevCoreGradLg)"/>
-                            <circle class="emblem-glass-disc" cx="22" cy="22" r="14.5" fill="rgba(10, 14, 32, 0.86)" stroke="rgba(167, 139, 250, 0.36)" stroke-width="0.95"/>
-                            <polygon class="emblem-prism-ring" points="22,6.5 33,11 37.5,22 33,33 22,37.5 11,33 6.5,22 11,11" stroke="rgba(196, 181, 253, 0.42)" stroke-width="0.9" fill="none"/>
-                            <circle class="emblem-orbit-outer" cx="22" cy="22" r="18.2" stroke="url(#jevEmblemGradLg)" stroke-width="1.85" stroke-dasharray="28 11 10 11" stroke-linecap="round"/>
-                            <circle class="emblem-orbit-inner" cx="22" cy="22" r="11.8" stroke="url(#jevEmblemAccentLg)" stroke-width="1.6" stroke-dasharray="18 8 6 8" stroke-linecap="round"/>
-                            <path class="emblem-sheen-arc" d="M6.5 15.5A16.5 16.5 0 0 1 31.5 8.5" stroke="url(#jevSheenGradLg)" stroke-width="1.9" stroke-linecap="round"/>
-                            <circle class="emblem-core-glow" cx="22" cy="22" r="6.2" fill="url(#jevEmblemGradLg)"/>
-                            <path class="emblem-spark" d="M22 14L23.7 20.3L30 22L23.7 23.7L22 30L20.3 23.7L14 22L20.3 20.3L22 14Z" fill="#ffffff"/>
-                            <g class="emblem-sat"><circle cx="22" cy="3.8" r="3.6" fill="rgba(56, 189, 248, 0.32)"/><circle cx="22" cy="3.8" r="2.1" fill="#67e8f9"/></g>
-                            <g class="emblem-node-a"><circle cx="22" cy="10.2" r="2.6" fill="rgba(232, 121, 249, 0.3)"/><circle cx="22" cy="10.2" r="1.55" fill="#f472b6"/></g>
-                            <g class="emblem-node-b"><circle cx="38.5" cy="22" r="2.5" fill="rgba(167, 139, 250, 0.32)"/><circle cx="38.5" cy="22" r="1.45" fill="#c4b5fd"/></g>
+                            <ellipse class="wand-aura" cx="27" cy="21" rx="18" ry="18" fill="url(#jevWandHeroAura)"/>
+                            <g class="wand-actor">
+                                <rect class="wand-shaft" x="18.2" y="13.5" width="5.8" height="27.5" rx="2.9" transform="rotate(45 21.1 27.25)" fill="url(#jevWandHeroShaft)"/>
+                                <rect class="wand-tip" x="26.1" y="12.1" width="5.8" height="8.2" rx="2.4" transform="rotate(45 29 16.2)" fill="url(#jevWandHeroTip)"/>
+                                <path class="wand-sheen" d="M12.5 34.5L32.5 14.5" stroke="url(#jevWandHeroSheen)" stroke-width="1.9" stroke-linecap="round"/>
+                            </g>
+                            <path class="wand-sparkle wand-sparkle-1" d="M14 7L15.45 11.55L20 13L15.45 14.45L14 19L12.55 14.45L8 13L12.55 11.55L14 7Z" fill="url(#jevWandHeroSpark)"/>
+                            <path class="wand-sparkle wand-sparkle-2" d="M35.5 4.5L36.55 7.95L40 9L36.55 10.05L35.5 13.5L34.45 10.05L31 9L34.45 7.95L35.5 4.5Z" fill="#67e8f9"/>
+                            <path class="wand-sparkle wand-sparkle-3" d="M38.5 22L39.4 25.1L42.5 26L39.4 26.9L38.5 30L37.6 26.9L34.5 26L37.6 25.1L38.5 22Z" fill="#e879f9"/>
+                            <path class="wand-sparkle wand-sparkle-4" d="M27.5 33L28.15 35.15L30.3 35.8L28.15 36.45L27.5 38.6L26.85 36.45L24.7 35.8L26.85 35.15L27.5 33Z" fill="#a5f3fc"/>
                         </svg>
                     </span>
                 </div>

@@ -197,6 +197,7 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
   let balance = 250;
   const userId = "55555555-5555-4555-8555-555555555555";
   const mockUser = { id: userId, email: "flagship@jevexa.net", user_metadata: { full_name: "Flagship Tester" } };
+  const remoteSessions = new Map();
 
   const server = http.createServer(async (req, res) => {
     const pathname = new URL(req.url, "http://127.0.0.1").pathname;
@@ -213,13 +214,30 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     if (pathname === "/mock-supabase.js") {
       res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
       res.end(`
-        window.__MOCK_AUTH = { session: { access_token: "e2e-jwt", user: ${JSON.stringify(mockUser)} }, listeners: [] };
+        window.__MOCK_USER = ${JSON.stringify(mockUser)};
+        window.__MOCK_AUTH = {
+          session: localStorage.getItem('__mock_logged_out') === '1'
+            ? null
+            : { access_token: "e2e-jwt", user: window.__MOCK_USER },
+          listeners: []
+        };
+        window.__MOCK_LOGIN = () => {
+          localStorage.removeItem('__mock_logged_out');
+          window.__MOCK_AUTH.session = { access_token: "e2e-jwt", user: window.__MOCK_USER };
+          window.__MOCK_AUTH.listeners.forEach(cb => cb('SIGNED_IN', window.__MOCK_AUTH.session));
+        };
         window.supabase = {
           createClient() {
             return {
               auth: {
                 async getSession() { return { data: { session: window.__MOCK_AUTH.session }, error: null }; },
                 async getUser() { return { data: { user: window.__MOCK_AUTH.session?.user || null }, error: null }; },
+                async signOut() {
+                  localStorage.setItem('__mock_logged_out', '1');
+                  window.__MOCK_AUTH.session = null;
+                  window.__MOCK_AUTH.listeners.forEach(cb => cb('SIGNED_OUT', null));
+                  return { error: null };
+                },
                 onAuthStateChange(cb) { window.__MOCK_AUTH.listeners.push(cb); return { data: { subscription: { unsubscribe() {} } } }; }
               },
               from() {
@@ -239,9 +257,30 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
       res.end(JSON.stringify({ estimatedCredits: 2 }));
       return;
     }
-    if (pathname === "/api/memories" || pathname === "/api/chat/sessions") {
+    if (pathname === "/api/memories") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true, memories: [], sessions: [] }));
+      res.end(JSON.stringify({ ok: true, memories: [] }));
+      return;
+    }
+    if (pathname === "/api/chat/sessions") {
+      if (req.method === "PUT" || req.method === "POST") {
+        let body = "";
+        for await (const c of req) body += c;
+        const parsed = JSON.parse(body || "{}");
+        const s = parsed.session || parsed;
+        if (s?.id) remoteSessions.set(s.id, s);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, id: s?.id || null }));
+        return;
+      }
+      if (req.method === "DELETE") {
+        remoteSessions.clear();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, sessions: Array.from(remoteSessions.values()) }));
       return;
     }
     if (pathname === "/api/chat" && req.method === "POST") {
@@ -265,7 +304,7 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
       return;
     }
 
-    const rel = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+    const rel = (pathname === "/" || pathname.startsWith("/tools/")) ? "index.html" : pathname.replace(/^\/+/, "");
     const filePath = path.join(ROOT_DIR, rel);
     if (!filePath.startsWith(ROOT_DIR) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       res.writeHead(404);
@@ -332,7 +371,7 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     assert.ok(homeCheck.navbarHeight <= 72, `Navbar must be compact <= 72px (got ${homeCheck.navbarHeight})`);
     assert.ok(homeCheck.heroBadgeTop <= 115, `Hero badge must sit compactly upward <= 115px (got ${homeCheck.heroBadgeTop})`);
 
-    // B. Verify all 10 workspaces have Online badges & Chatbot shows layered continuous-loop animated emblem + compact header
+    // B. Verify all 10 workspaces have Online badges & Chatbot shows Sparkle-Wand AI logo (no old circular rings) + compact header
     await cdp.eval(`window.openExactServiceWorkspace('chatbot', true);`);
     await cdp.eval(`new Promise(r => setTimeout(r, 120))`);
     const headerCheck = await cdp.eval(`(async () => {
@@ -342,16 +381,28 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
       const emblem = document.getElementById('chatHeaderEmblem');
       const emblemSvg = emblem?.querySelector('svg');
       const emptyEmblemLg = document.querySelector('#chatEmptyState .chat-empty-emblem .chat-ai-emblem-lg');
+      const oldRingSelectors = [
+        '.emblem-orbit-outer',
+        '.emblem-orbit-inner',
+        '.emblem-prism-ring',
+        '.emblem-glass-disc',
+        '.emblem-sheen-arc',
+        '.emblem-sat',
+        '.emblem-node-a',
+        '.emblem-node-b'
+      ];
+      const oldRingCount = oldRingSelectors.reduce((sum, sel) => sum + document.querySelectorAll(sel).length, 0);
       const layerSels = [
-        '#chatHeaderEmblem .emblem-orbit-outer',
-        '#chatHeaderEmblem .emblem-orbit-inner',
-        '#chatHeaderEmblem .emblem-core-aura',
-        '#chatHeaderEmblem .emblem-sheen-arc',
-        '#chatHeaderEmblem .emblem-sat',
-        '#chatHeaderEmblem .emblem-node-a',
-        '#chatHeaderEmblem .emblem-node-b',
-        '#chatEmptyState .chat-empty-emblem .emblem-orbit-outer',
-        '#chatEmptyState .chat-empty-emblem .emblem-sat'
+        '#chatHeaderEmblem .wand-actor',
+        '#chatHeaderEmblem .wand-aura',
+        '#chatHeaderEmblem .wand-sparkle-1',
+        '#chatHeaderEmblem .wand-sparkle-2',
+        '#chatHeaderEmblem .wand-sparkle-3',
+        '#chatHeaderEmblem .wand-sparkle-4',
+        '#chatEmptyState .chat-empty-emblem .wand-actor',
+        '#chatEmptyState .chat-empty-emblem .wand-aura',
+        '#chatEmptyState .chat-empty-emblem .wand-sparkle-1',
+        '#chatEmptyState .chat-empty-emblem .wand-sparkle-2'
       ];
       const snap = () => layerSels.map(sel => {
         const el = document.querySelector(sel);
@@ -369,6 +420,9 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
       await new Promise(r => setTimeout(r, 380));
       const t2 = snap();
       const badgeAfter = badgeWrap ? getComputedStyle(badgeWrap, '::after') : null;
+      const emptySheenAfter = document.querySelector('#chatEmptyState .chat-empty-emblem')
+        ? getComputedStyle(document.querySelector('#chatEmptyState .chat-empty-emblem'), '::after')
+        : null;
       return {
         badgeCount: badges.length,
         allOnline: badges.every(b => b.classList.contains('is-online') && b.querySelector('.conn-label')?.textContent.trim() === 'Online'),
@@ -377,33 +431,41 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
         headerHeight: header ? header.getBoundingClientRect().height : 999,
         emblemOverflow: emblem ? getComputedStyle(emblem).overflow : '',
         svgOverflow: emblemSvg ? getComputedStyle(emblemSvg).overflow : '',
+        emblemRadius: emblem ? getComputedStyle(emblem).borderRadius : '',
         emptyEmblemSize: emptyEmblemLg ? emptyEmblemLg.getBoundingClientRect().width : 0,
         badgeSheenName: badgeAfter?.animationName || '',
         badgeSheenIter: badgeAfter?.animationIterationCount || '',
         badgeSheenState: badgeAfter?.animationPlayState || '',
+        emptySheenName: emptySheenAfter?.animationName || '',
         hasEmblem: Boolean(emblem),
         hasEmptyEmblem: Boolean(document.querySelector('#chatEmptyState .chat-empty-emblem')),
-        hasGlassDisc: Boolean(document.querySelector('#chatHeaderEmblem .emblem-glass-disc')),
-        hasSheenArc: Boolean(document.querySelector('#chatHeaderEmblem .emblem-sheen-arc')),
+        oldRingCount,
+        hasWandShaft: Boolean(document.querySelector('#chatHeaderEmblem .wand-shaft')),
+        hasWandTip: Boolean(document.querySelector('#chatHeaderEmblem .wand-tip')),
+        hasEmptyWand: Boolean(document.querySelector('#chatEmptyState .chat-empty-emblem .wand-actor')),
         t1,
         t2
       };
     })()`);
     assert.equal(headerCheck.badgeCount, 10, "All 10 workspaces must render a connectivity badge");
     assert.equal(headerCheck.allOnline, true, "All 10 connectivity badges must initialize to Online");
-    assert.equal(headerCheck.titleText, "Jevexa AI", "Plain static New Chat must be replaced by branded Jevexa AI header emblem");
+    assert.equal(headerCheck.titleText, "Jevexa AI", "Header badge must show Jevexa AI");
     assert.equal(headerCheck.chatStatusText, "AI chat • Online");
     assert.ok(headerCheck.headerHeight <= 48, `Compact top header must be <= 48px (got ${headerCheck.headerHeight})`);
-    assert.equal(headerCheck.emblemOverflow, "visible", "Emblem wrapper must not clip orbiting nodes");
-    assert.equal(headerCheck.svgOverflow, "visible", "Emblem SVG must not clip orbiting nodes");
-    assert.ok(headerCheck.emptyEmblemSize >= 64, `Desktop empty emblem must be >= 64px (got ${headerCheck.emptyEmblemSize})`);
+    assert.equal(headerCheck.emblemOverflow, "visible", "Emblem wrapper must not clip animated sparkles");
+    assert.equal(headerCheck.svgOverflow, "visible", "Emblem SVG must not clip animated sparkles");
+    assert.notEqual(headerCheck.emblemRadius, "50%", "Old circular badge shape must be replaced by sleek rounded-square badge");
+    assert.ok(headerCheck.emptyEmblemSize >= 60, `Desktop empty emblem must be >= 60px (got ${headerCheck.emptyEmblemSize})`);
     assert.match(headerCheck.badgeSheenName, /jevBadgeSheen/);
+    assert.match(headerCheck.emptySheenName, /jevBadgeSheen/);
     assert.equal(headerCheck.badgeSheenIter, "infinite");
     assert.equal(headerCheck.badgeSheenState, "running");
     assert.equal(headerCheck.hasEmblem, true);
     assert.equal(headerCheck.hasEmptyEmblem, true);
-    assert.equal(headerCheck.hasGlassDisc, true);
-    assert.equal(headerCheck.hasSheenArc, true);
+    assert.equal(headerCheck.oldRingCount, 0, "All old circular/radar/crosshair ring elements must be completely removed");
+    assert.equal(headerCheck.hasWandShaft, true, "Sparkle-wand shaft must be present");
+    assert.equal(headerCheck.hasWandTip, true, "Sparkle-wand luminous tip must be present");
+    assert.equal(headerCheck.hasEmptyWand, true, "Welcome empty state must display Sparkle-Wand AI logo");
     for (let i = 0; i < headerCheck.t1.length; i++) {
       const a = headerCheck.t1[i];
       const b = headerCheck.t2[i];
@@ -486,6 +548,92 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     assert.match(chatOutputState.receiptText, /Remaining credit:\s*248/);
     assert.doesNotMatch(chatOutputState.bodyHtml, /\*\*\*/);
     assert.match(chatOutputState.bodyHtml, /<strong><em>Bold Emphasis<\/em><\/strong>/);
+
+    // B3. Verify Page Refresh (F5 / Reload) preserves active messages, Used Credits receipt, sidebar session & draft input
+    await cdp.eval(`
+      const inp = document.getElementById('chatInput');
+      inp.value = 'Unsent draft message after reload';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    `);
+    await cdp.send("Page.navigate", { url: `${baseUrl}/tools/chatbot` });
+    await cdp.eval(`new Promise(r => { if (document.readyState === 'complete' && window.JEVEXA_RESUME_CHAT) r(); else window.addEventListener('load', () => setTimeout(r, 150), { once: true }); })`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 180))`);
+    const postReloadState = await cdp.eval(`(() => {
+      const userMsgs = Array.from(document.querySelectorAll('#chatMessages .message.user .msg-body')).map(el => el.textContent.trim());
+      const botMsgs = Array.from(document.querySelectorAll('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body')).map(el => el.textContent.trim());
+      const receipt = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt')?.textContent.trim() || '';
+      const sidebarRows = document.querySelectorAll('#chatHistoryList .chat-history-row').length;
+      return {
+        chatOpen: document.getElementById('chatbotWindow')?.classList.contains('open'),
+        userMsgs,
+        botMsgs,
+        receipt,
+        sidebarRows,
+        draftValue: document.getElementById('chatInput')?.value || '',
+        emptyHidden: Boolean(document.getElementById('chatEmptyState')?.hidden)
+      };
+    })()`);
+    assert.equal(postReloadState.chatOpen, true, "Reloading /tools/chatbot must keep chatbot open");
+    assert.ok(postReloadState.userMsgs.some(t => t.includes('Test guaranteed credits')), "User prompt must survive page refresh");
+    assert.ok(postReloadState.botMsgs.some(t => t.includes('Spacious flagship reply')), "Assistant reply must survive page refresh");
+    assert.match(postReloadState.receipt, /Used credit:\s*2/, "Used Credits receipt must survive page refresh");
+    assert.ok(postReloadState.sidebarRows >= 1, "Sidebar session history must survive page refresh");
+    assert.equal(postReloadState.draftValue, "Unsent draft message after reload", "Draft input must survive page refresh");
+    assert.equal(postReloadState.emptyHidden, true, "Welcome empty state must stay hidden when conversation is restored");
+
+    // B4. Verify Logout -> Login preserves chat history (both local & remote Supabase session restore)
+    await cdp.eval(`(async () => { await window.logoutUser(); })()`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 150))`);
+    const loggedOutState = await cdp.eval(`(() => ({
+      botCount: document.querySelectorAll('#chatMessages .message.bot:not([data-chat-welcome])').length,
+      sidebarRows: document.querySelectorAll('#chatHistoryList .chat-history-row').length,
+      savedLocalSessions: Boolean(localStorage.getItem('jevexa_${userId}_chat_sessions'))
+    }))()`);
+    assert.equal(loggedOutState.botCount, 0, "Logged-out UI must not expose previous account messages");
+    assert.equal(loggedOutState.sidebarRows, 0, "Logged-out sidebar must clear in-memory rows");
+    assert.equal(loggedOutState.savedLocalSessions, true, "Logout must NOT wipe user-scoped saved chat sessions");
+
+    // Simulate logging back into the same account
+    await cdp.eval(`
+      window.__MOCK_LOGIN();
+      window.openExactServiceWorkspace('chatbot', true);
+    `);
+    await cdp.eval(`new Promise(r => setTimeout(r, 220))`);
+    const reLoginState = await cdp.eval(`(() => ({
+      userMsgs: Array.from(document.querySelectorAll('#chatMessages .message.user .msg-body')).map(el => el.textContent.trim()),
+      botMsgs: Array.from(document.querySelectorAll('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body')).map(el => el.textContent.trim()),
+      receipt: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt')?.textContent.trim() || '',
+      sidebarRows: document.querySelectorAll('#chatHistoryList .chat-history-row').length
+    }))()`);
+    assert.ok(reLoginState.userMsgs.some(t => t.includes('Test guaranteed credits')), "User prompt must be restored after logout -> login");
+    assert.ok(reLoginState.botMsgs.some(t => t.includes('Spacious flagship reply')), "Assistant reply must be restored after logout -> login");
+    assert.match(reLoginState.receipt, /Used credit:\s*2/, "Used Credits receipt must be restored after logout -> login");
+    assert.ok(reLoginState.sidebarRows >= 1, "Sidebar sessions must be restored after logout -> login");
+
+    // Simulate clean-storage login (e.g. cleared localStorage) restoring from /api/chat/sessions backend
+    await cdp.eval(`(async () => { await window.logoutUser(); localStorage.removeItem('jevexa_${userId}_chat_sessions'); localStorage.removeItem('jevexa_${userId}_active_chat_id'); })()`);
+    await cdp.eval(`new Promise(r => setTimeout(r, 120))`);
+    await cdp.eval(`
+      window.__MOCK_LOGIN();
+      window.openExactServiceWorkspace('chatbot', true);
+    `);
+    await cdp.eval(`new Promise((r, rej) => {
+      const start = Date.now();
+      const check = () => {
+        if (document.querySelectorAll('#chatMessages .message.bot:not([data-chat-welcome])').length > 0) return r();
+        if (Date.now() - start > 5000) return rej(new Error('Remote restore timeout'));
+        setTimeout(check, 40);
+      };
+      check();
+    })`);
+    const remoteRestoreState = await cdp.eval(`(() => ({
+      botText: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .msg-body')?.textContent.trim() || '',
+      receipt: document.querySelector('#chatMessages .message.bot:not([data-chat-welcome]) .chat-credit-receipt')?.textContent.trim() || '',
+      sidebarRows: document.querySelectorAll('#chatHistoryList .chat-history-row').length
+    }))()`);
+    assert.match(remoteRestoreState.botText, /Spacious flagship reply/);
+    assert.match(remoteRestoreState.receipt, /Used credit:\s*2/);
+    assert.ok(remoteRestoreState.sidebarRows >= 1, "Remote /api/chat/sessions restore must populate sidebar and canvas");
 
     // C. Verify Offline -> blocked send notice -> Online recovery across ALL 10 workspaces
     await cdp.eval(`

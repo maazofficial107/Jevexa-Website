@@ -2839,12 +2839,17 @@
         const extracted = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(meta, {
             fallbackToLiveBalance: !meta._fromHistory
         });
-        const used = extracted?.used ?? (
+        let used = extracted?.used ?? (
             Number.isInteger(meta.creditsUsed) ? meta.creditsUsed
                 : (Number.isInteger(meta.credits_used) ? meta.credits_used
                     : (Number.isInteger(meta.creditsCharged) ? meta.creditsCharged
                         : (Number.isInteger(meta.charged_credits) ? meta.charged_credits : null)))
         );
+        if (used === null && !meta.unconfirmedSettlement && !meta._fromHistory) {
+            used = 1;
+        } else if (used === null && meta._fromHistory && !meta.unconfirmedSettlement && (meta.tier || meta.modelName || meta.model)) {
+            used = 1;
+        }
         let remaining = extracted?.remaining ?? (
             Number.isInteger(meta.remainingCredits) ? meta.remainingCredits
                 : (Number.isInteger(meta.remaining_credits) ? meta.remaining_credits
@@ -2965,6 +2970,7 @@
         const emptyState = document.getElementById('chatEmptyState');
         if (emptyState) emptyState.hidden = true;
         scrollChatToBottom(user);
+        return content;
     }
 
     let activeChatAbortController = null;
@@ -3813,16 +3819,18 @@
                     activeSess.languageOverride = result.switchedLanguage === 'auto' ? null : result.switchedLanguage;
                 }
 
+                let renderedBotContent = null;
                 if (streamBubble) {
                     streamFinalized = true;
                     streamBubble.row.classList.remove('is-streaming');
                     streamBubble.row.dataset.messageIndex = String(assistantMsgIndex);
                     streamBubble.body.innerHTML = renderMarkdown(replyText, { streaming: false });
                     applyBotMetaStatus(streamBubble.content, resolvedMeta);
+                    renderedBotContent = streamBubble.content;
                     (streamBubble.col || streamBubble.content).appendChild(buildBotActionButtons());
                     if (!userScrolledUpDuringStream) scrollChatToBottom(false);
                 } else {
-                    appendMessage(replyText, false, assistantMsgIndex, resolvedMeta);
+                    renderedBotContent = appendMessage(replyText, false, assistantMsgIndex, resolvedMeta);
                 }
 
                 persistConversation(session.user.id);
@@ -3848,6 +3856,26 @@
                     remaining: remaining !== null ? remaining : undefined
                 }));
                 await refreshDisplayedCredits();
+                if (remaining === null) {
+                    const postRefreshRemaining = getCachedRemainingCredits();
+                    if (Number.isInteger(postRefreshRemaining) && postRefreshRemaining >= 0) {
+                        resolvedMeta.remainingCredits = postRefreshRemaining;
+                        if (conversation[assistantMsgIndex]?.meta) {
+                            conversation[assistantMsgIndex].meta.remainingCredits = postRefreshRemaining;
+                        }
+                        if (renderedBotContent) {
+                            applyBotMetaStatus(renderedBotContent, resolvedMeta);
+                        }
+                        lastTurnCreditUsage = { used: usedCreditsMeta, remaining: postRefreshRemaining };
+                        persistConversation(session.user.id);
+                        setStatus(formatMinimalStatus({
+                            tier: selectedTier,
+                            webSearch: Boolean(result?.webSearch),
+                            used: usedCreditsMeta,
+                            remaining: postRefreshRemaining
+                        }));
+                    }
+                }
             } catch (error) {
                 if (rafId !== null) {
                     cancelAnimationFrame(rafId);
@@ -4424,16 +4452,9 @@
         }
         currentTier = tier;
         updateSelectorDisplay('tier');
-        const tierStatusLabels = {
-            lite: 'Core Engine (1.0x)',
-            pro: 'Pro Engine (3.0x)',
-            max: 'Deep Reasoning (18.0x)',
-            ultra: 'Ultra Reasoning'
-        };
-        const activeModelName = tierStatusLabels[tier] || 'Core Engine (1.0x)';
         setStatus(formatMinimalStatus({ tier, webSearch: webSearchEnabled }));
         const statusText = document.getElementById('chatbotStatusText') || document.querySelector('.chatbot-info .status');
-        if (statusText && activeAuthUserId) setChatHeaderConnLabel(statusText, `${activeModelName} • Online`);
+        if (statusText && activeAuthUserId) setChatHeaderConnLabel(statusText, 'AI chat • Online');
     });
     document.getElementById('chatThinking')?.addEventListener('change', () => {
         const selected = thinkingSelect.value;

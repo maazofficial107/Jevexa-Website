@@ -318,27 +318,48 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     await cdp.send("Page.navigate", { url: baseUrl });
     await cdp.eval(`new Promise(r => { if (document.readyState === 'complete' && window.JEVEXA_CONNECTIVITY) r(); else window.addEventListener('load', () => setTimeout(r, 150), { once: true }); })`);
 
-    // A. Verify all 10 workspaces have Online badges & Chatbot shows animated emblem instead of plain "New Chat"
+    // A. Verify all 10 workspaces have Online badges & Chatbot shows layered animated emblem + compact header instead of plain "New Chat"
     await cdp.eval(`window.openExactServiceWorkspace('chatbot', true);`);
     await cdp.eval(`new Promise(r => setTimeout(r, 120))`);
     const headerCheck = await cdp.eval(`(() => {
       const badges = Array.from(document.querySelectorAll('[data-jevexa-conn-badge]'));
-      const orbit = document.querySelector('#chatHeaderEmblem .emblem-orbit-outer');
+      const header = document.querySelector('#chatbotWindow .chatbot-header');
+      const orbitOuter = document.querySelector('#chatHeaderEmblem .emblem-orbit-outer');
+      const orbitInner = document.querySelector('#chatHeaderEmblem .emblem-orbit-inner');
+      const aura = document.querySelector('#chatHeaderEmblem .emblem-core-aura');
+      const nodeA = document.querySelector('#chatHeaderEmblem .emblem-node-a');
+      const nodeB = document.querySelector('#chatHeaderEmblem .emblem-node-b');
       return {
         badgeCount: badges.length,
         allOnline: badges.every(b => b.classList.contains('is-online') && b.querySelector('.conn-label')?.textContent.trim() === 'Online'),
         titleText: document.getElementById('chatbotTitle')?.textContent.trim(),
+        chatStatusText: document.getElementById('chatbotStatusText')?.textContent.trim(),
+        headerHeight: header ? header.getBoundingClientRect().height : 999,
         hasEmblem: Boolean(document.getElementById('chatHeaderEmblem')),
         hasEmptyEmblem: Boolean(document.querySelector('#chatEmptyState .chat-empty-emblem')),
-        orbitAnimation: orbit ? getComputedStyle(orbit).animationName : ''
+        hasGlassDisc: Boolean(document.querySelector('#chatHeaderEmblem .emblem-glass-disc')),
+        hasSheenArc: Boolean(document.querySelector('#chatHeaderEmblem .emblem-sheen-arc')),
+        orbitOuterAnim: orbitOuter ? getComputedStyle(orbitOuter).animationName : '',
+        orbitInnerAnim: orbitInner ? getComputedStyle(orbitInner).animationName : '',
+        auraAnim: aura ? getComputedStyle(aura).animationName : '',
+        nodeAAnim: nodeA ? getComputedStyle(nodeA).animationName : '',
+        nodeBAnim: nodeB ? getComputedStyle(nodeB).animationName : ''
       };
     })()`);
     assert.equal(headerCheck.badgeCount, 10, "All 10 workspaces must render a connectivity badge");
     assert.equal(headerCheck.allOnline, true, "All 10 connectivity badges must initialize to Online");
     assert.equal(headerCheck.titleText, "Jevexa AI", "Plain static New Chat must be replaced by branded Jevexa AI header emblem");
+    assert.equal(headerCheck.chatStatusText, "AI chat • Online");
+    assert.ok(headerCheck.headerHeight <= 48, `Compact top header must be <= 48px (got ${headerCheck.headerHeight})`);
     assert.equal(headerCheck.hasEmblem, true);
     assert.equal(headerCheck.hasEmptyEmblem, true);
-    assert.match(headerCheck.orbitAnimation, /jevEmblemSpinCw/);
+    assert.equal(headerCheck.hasGlassDisc, true);
+    assert.equal(headerCheck.hasSheenArc, true);
+    assert.match(headerCheck.orbitOuterAnim, /jevEmblemSpinCw/);
+    assert.match(headerCheck.orbitInnerAnim, /jevEmblemSpinCcw/);
+    assert.match(headerCheck.auraAnim, /jevEmblemAuraPulse/);
+    assert.match(headerCheck.nodeAAnim, /jevEmblemSpinCcw/);
+    assert.match(headerCheck.nodeBAnim, /jevEmblemSpinCw/);
 
     // B. Verify guaranteed Used Credits rendering even when server omits creditsUsed
     await cdp.eval(`

@@ -275,10 +275,14 @@ test("Headless E2E: Normal website visit never auto-opens chatbot even with stal
     assert.equal(state.localLastWorkspace, null, "Stale localStorage.jevexa_last_workspace must be cleaned up on '/' load");
     assert.equal(state.sessionLastWorkspace, null, "Stale sessionStorage.jevexa_last_workspace must be cleaned up on '/' load");
 
-    // 3. Normal query params & section hashes do NOT open chatbot
+    // 3. Normal query params, /index.html & section hashes do NOT open chatbot
     await navigateAndWait(`${baseUrl}/?utm_source=google&ref=home#features`);
     state = await readUiState();
     assert.equal(state.chatOpenClass, false, "Marketing query params + #features must NOT open chatbot");
+
+    await navigateAndWait(`${baseUrl}/index.html`);
+    state = await readUiState();
+    assert.equal(state.chatOpenClass, false, "/index.html must NOT auto-open chatbot");
 
     // 4. Explicit floating chatbot toggle click opens chatbot, and reloading '/' afterwards loads normal website cleanly
     await cdp.eval(`document.getElementById('chatbotToggle').click();`);

@@ -1442,7 +1442,11 @@ function getAndClearPendingServiceIntent() {
                 intent = sessIntent;
             }
         }
-        if (!intent) {
+        const hasAuthCallback = typeof window !== 'undefined' && (
+            /(?:access_token|refresh_token|type=(?:recovery|signup|magiclink|invite))=/.test(window.location.hash || '')
+            || /(?:code|auth)=/.test(window.location.search || '')
+        );
+        if (!intent && hasAuthCallback) {
             const localIntent = localStorage.getItem('jevexa_pending_service_intent');
             const localTs = Number(localStorage.getItem('jevexa_pending_service_intent_ts') || '0');
             if (localIntent && localTs > 0 && (Date.now() - localTs) <= PENDING_SERVICE_INTENT_TTL_MS) {
@@ -5880,7 +5884,7 @@ const JEVEXA_PLANS = {
         }
 
         // Normal studio / landing page route (or browser Back to '/'): keep all workspaces closed
-        if (cleanPath === '/' || cleanPath === '') {
+        if (cleanPath === '/' || cleanPath === '' || cleanPath === '/index.html') {
             closeAllWorkspaces();
         }
     }

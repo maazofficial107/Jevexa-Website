@@ -9704,25 +9704,39 @@ body.chat-is-resizing {
     padding-top: 14px;
     padding-bottom: 12px;
 }
-.chatbot-header { min-height: 48px; height: 50px; padding: 0 clamp(14px, 2.5vw, 24px); border-bottom: 1px solid rgba(255,255,255,.065); background: rgba(9, 11, 22, 0.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.chatbot-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.chatbot-header { min-height: 44px; height: 46px; padding: 0 clamp(12px, 2vw, 20px); border-bottom: 1px solid rgba(255,255,255,.065); background: rgba(9, 11, 22, 0.78); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.chatbot-info { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .chat-header-brand-badge {
+    position: relative;
+    overflow: hidden;
     display: inline-flex;
     align-items: center;
-    gap: 9px;
-    padding: 4px 12px 4px 6px;
+    gap: 8px;
+    padding: 3px 11px 3px 5px;
     border-radius: 999px;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.14), rgba(34, 211, 238, 0.08));
-    border: 1px solid rgba(167, 139, 250, 0.24);
-    box-shadow: 0 2px 14px rgba(139, 92, 246, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.16), rgba(56, 189, 248, 0.1) 55%, rgba(34, 211, 238, 0.12));
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    box-shadow: 0 2px 14px rgba(139, 92, 246, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     min-width: 0;
     max-width: min(40vw, 360px);
     transition: border-color 220ms ease, background 220ms ease, box-shadow 220ms ease;
 }
+.chat-header-brand-badge::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.18) 48%, transparent 75%);
+    transform: translateX(-140%);
+    will-change: transform;
+    pointer-events: none;
+    animation: jevBadgeSheen 4.8s ease-in-out infinite;
+}
 .chat-header-brand-badge.is-active-thread {
-    background: rgba(255, 255, 255, 0.045);
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow: none;
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 .chat-ai-emblem {
     position: relative;
@@ -9733,6 +9747,8 @@ body.chat-is-resizing {
     height: 24px;
     flex-shrink: 0;
     border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.18), rgba(139, 92, 246, 0.12) 55%, rgba(15, 23, 42, 0.45) 100%);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.25);
 }
 .chat-ai-emblem svg {
     width: 100%;
@@ -9740,33 +9756,58 @@ body.chat-is-resizing {
     display: block;
     overflow: visible;
 }
-.chat-ai-emblem .emblem-orbit-outer {
-    transform-origin: 18px 18px;
+.chat-ai-emblem .emblem-core-aura {
+    transform-origin: 20px 20px;
+    will-change: transform, opacity;
+    animation: jevEmblemAuraPulse 3.2s ease-in-out infinite;
+}
+.chat-ai-emblem .emblem-prism-ring {
+    transform-origin: 20px 20px;
     will-change: transform;
-    animation: jevEmblemSpinCw 11s linear infinite;
+    animation: jevEmblemSpinCcw 15s linear infinite;
+}
+.chat-ai-emblem .emblem-orbit-outer {
+    transform-origin: 20px 20px;
+    will-change: transform;
+    animation: jevEmblemSpinCw 9.5s linear infinite;
 }
 .chat-ai-emblem .emblem-orbit-inner {
-    transform-origin: 18px 18px;
+    transform-origin: 20px 20px;
     will-change: transform;
-    animation: jevEmblemSpinCcw 7.5s linear infinite;
+    animation: jevEmblemSpinCcw 6.2s linear infinite;
+}
+.chat-ai-emblem .emblem-sheen-arc {
+    transform-origin: 20px 20px;
+    will-change: transform, opacity;
+    animation: jevEmblemSpinCw 3.8s linear infinite;
 }
 .chat-ai-emblem .emblem-core-glow {
-    transform-origin: 18px 18px;
+    transform-origin: 20px 20px;
     will-change: transform, opacity;
-    animation: jevEmblemPulse 2.8s ease-in-out infinite;
+    animation: jevEmblemPulse 2.6s ease-in-out infinite;
 }
 .chat-ai-emblem .emblem-spark {
-    transform-origin: 18px 18px;
+    transform-origin: 20px 20px;
     will-change: transform, opacity;
-    animation: jevEmblemSpark 3.4s ease-in-out infinite;
+    animation: jevEmblemSpark 3.2s ease-in-out infinite;
 }
 .chat-ai-emblem .emblem-sat {
-    transform-origin: 18px 18px;
+    transform-origin: 20px 20px;
     will-change: transform;
-    animation: jevEmblemSpinCw 5.5s linear infinite;
+    animation: jevEmblemSpinCw 5.2s linear infinite;
+}
+.chat-ai-emblem .emblem-node-a {
+    transform-origin: 20px 20px;
+    will-change: transform, opacity;
+    animation: jevEmblemSpinCcw 4.4s linear infinite, jevEmblemNodeBlink 2.4s ease-in-out infinite;
+}
+.chat-ai-emblem .emblem-node-b {
+    transform-origin: 20px 20px;
+    will-change: transform, opacity;
+    animation: jevEmblemSpinCw 7.8s linear infinite, jevEmblemNodeBlink 3.1s ease-in-out infinite reverse;
 }
 .chat-empty-emblem {
-    margin-bottom: 18px;
+    margin-bottom: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -9774,7 +9815,15 @@ body.chat-is-resizing {
 .chat-ai-emblem-lg {
     width: 60px;
     height: 60px;
-    filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.35));
+    filter: drop-shadow(0 0 24px rgba(139, 92, 246, 0.4));
+}
+@keyframes jevBadgeSheen {
+    0%, 55% { transform: translateX(-140%); }
+    100% { transform: translateX(160%); }
+}
+@keyframes jevEmblemAuraPulse {
+    0%, 100% { transform: scale(0.92); opacity: 0.55; }
+    50% { transform: scale(1.12); opacity: 0.92; }
 }
 @keyframes jevEmblemSpinCw {
     from { transform: rotate(0deg); }
@@ -9785,23 +9834,27 @@ body.chat-is-resizing {
     to { transform: rotate(0deg); }
 }
 @keyframes jevEmblemPulse {
-    0%, 100% { transform: scale(0.94); opacity: 0.88; }
-    50% { transform: scale(1.1); opacity: 1; }
+    0%, 100% { transform: scale(0.92); opacity: 0.86; }
+    50% { transform: scale(1.12); opacity: 1; }
 }
 @keyframes jevEmblemSpark {
-    0%, 100% { transform: scale(0.92) rotate(0deg); opacity: 0.92; }
-    50% { transform: scale(1.08) rotate(12deg); opacity: 1; }
+    0%, 100% { transform: scale(0.9) rotate(0deg); opacity: 0.9; }
+    50% { transform: scale(1.1) rotate(14deg); opacity: 1; }
+}
+@keyframes jevEmblemNodeBlink {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
 }
 .chatbot-info h4,
 .chat-header-title-text { margin: 0; font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: min(32vw, 310px); }
 .chatbot-info .status { font-size: 11px; font-weight: 600; color: #34d399; padding: 2px 9px; border-radius: 999px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(52, 211, 153, 0.25); white-space: nowrap; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
 .chatbot-info .status[data-conn-state="offline"] { color: #fca5a5; background: rgba(239, 68, 68, 0.14); border-color: rgba(248, 113, 113, 0.35); }
-.chat-empty-state { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 36px clamp(20px, 5vw, 48px); text-align: center; }
+.chat-empty-state { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px clamp(18px, 4vw, 44px); text-align: center; }
 .chat-empty-state[hidden] { display: none !important; }
 .chat-main:has(#chatEmptyState:not([hidden])) .chat-messages { flex: 0 0 0 !important; min-height: 0 !important; height: 0 !important; padding: 0 !important; overflow: hidden !important; }
-.chat-empty-state h2 { margin: 0 0 10px; color: #f8fafc; font-size: clamp(23px, 3.1vw, 30px); font-weight: 700; letter-spacing: -0.025em; }
-.chat-empty-state p { margin: 0; color: #94a3b8; font-size: 14.5px; line-height: 1.6; max-width: 480px; }
-.chat-messages { flex: 1 1 auto; min-height: 0; max-height: none; width: 100%; margin: 0; padding: 28px clamp(20px, 5vw, 56px) 24px; gap: 26px; position: relative; scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.28) transparent; }
+.chat-empty-state h2 { margin: 0 0 8px; color: #f8fafc; font-size: clamp(22px, 3vw, 28px); font-weight: 700; letter-spacing: -0.025em; }
+.chat-empty-state p { margin: 0; color: #94a3b8; font-size: 14px; line-height: 1.55; max-width: 480px; }
+.chat-messages { flex: 1 1 auto; min-height: 0; max-height: none; width: 100%; margin: 0; padding: 18px clamp(18px, 4.5vw, 52px) 16px; gap: 18px; position: relative; scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, 0.28) transparent; }
 .message { width: 100%; max-width: 840px; margin-inline: auto; gap: 16px; align-items: flex-start; }
 .message[data-chat-welcome] { display: none; }
 .message[data-chat-welcome][hidden] { display: none !important; }
@@ -11230,10 +11283,10 @@ body.coming-soon-open {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    min-height: 48px;
-    height: 50px;
-    padding: 0 18px;
+    gap: 10px;
+    min-height: 44px;
+    height: 46px;
+    padding: 0 16px;
     background: rgba(10, 11, 22, 0.9);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
@@ -17466,6 +17519,7 @@ html.jevexa-reduce-motion *::after {
     .chat-messages { scroll-behavior: auto; }
     .message.bot.is-streaming .msg-body::after { animation: none !important; }
     .chat-scroll-bottom-btn { transition: none !important; }
+    .chat-header-brand-badge::after,
     .chat-ai-emblem *,
     .jevexa-conn-badge .conn-dot { animation: none !important; }
 }
@@ -17499,8 +17553,9 @@ html.jevexa-reduce-motion *::after {
 }
 
 .chatbot-window .workspace-back-btn {
-    min-height: 38px;
-    padding: 0 13px;
+    min-height: 34px;
+    height: 34px;
+    padding: 0 12px;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -17516,8 +17571,9 @@ html.jevexa-reduce-motion *::after {
     box-shadow: none;
 }
 .chatbot-window .workspace-credits-badge {
-    min-height: 34px;
-    padding: 0 12px;
+    min-height: 32px;
+    height: 32px;
+    padding: 0 11px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: none;
@@ -17527,10 +17583,10 @@ html.jevexa-reduce-motion *::after {
 }
 .chatbot-window .chatbot-header-settings-btn,
 .chatbot-window .chatbot-close {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);

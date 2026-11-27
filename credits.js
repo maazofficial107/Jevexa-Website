@@ -3920,12 +3920,12 @@
                 window.JEVEXA_CONNECTIVITY?.reportSuccess?.();
                 const replyText = String(result.reply || streamedText || '').trim();
                 const creditUsage = window.JEVEXA_EXTRACT_CREDIT_USAGE?.(result, { fallbackToLiveBalance: false });
-                const remaining = creditUsage?.remaining ?? (
+                let remaining = creditUsage?.remaining ?? (
                     Number.isInteger(result.remainingCredits)
                         ? result.remainingCredits
                         : (Number.isInteger(result.remaining_credits)
                             ? result.remaining_credits
-                            : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : getCachedRemainingCredits()))
+                            : (Number.isInteger(result.creditsRemaining) ? result.creditsRemaining : null))
                 );
                 let usedCreditsMeta = creditUsage?.used ?? (
                     Number.isInteger(result?.creditsUsed)
@@ -3936,6 +3936,7 @@
                                 ? result.creditsCharged
                                 : (Number.isInteger(result?.charged_credits) ? result.charged_credits : null)))
                 );
+                const hasExplicitUsed = usedCreditsMeta !== null;
                 if (usedCreditsMeta === null) {
                     if (Number.isInteger(prevCreditsBeforeSend) && Number.isInteger(remaining) && prevCreditsBeforeSend > remaining) {
                         usedCreditsMeta = prevCreditsBeforeSend - remaining;
@@ -4009,25 +4010,33 @@
                     remaining: remaining !== null ? remaining : undefined
                 }));
                 await refreshDisplayedCredits();
-                if (remaining === null) {
-                    const postRefreshRemaining = getCachedRemainingCredits();
-                    if (Number.isInteger(postRefreshRemaining) && postRefreshRemaining >= 0) {
-                        resolvedMeta.remainingCredits = postRefreshRemaining;
-                        if (conversation[assistantMsgIndex]?.meta) {
-                            conversation[assistantMsgIndex].meta.remainingCredits = postRefreshRemaining;
-                        }
-                        if (renderedBotContent) {
-                            applyBotMetaStatus(renderedBotContent, resolvedMeta);
-                        }
-                        lastTurnCreditUsage = { used: usedCreditsMeta, remaining: postRefreshRemaining };
-                        persistConversation(session.user.id);
-                        setStatus(formatMinimalStatus({
-                            tier: selectedTier,
-                            webSearch: Boolean(result?.webSearch),
-                            used: usedCreditsMeta,
-                            remaining: postRefreshRemaining
-                        }));
+                const postRefreshRemaining = getCachedRemainingCredits();
+                const finalRemaining = (remaining !== null && remaining >= 0)
+                    ? remaining
+                    : (Number.isInteger(postRefreshRemaining) && postRefreshRemaining >= 0 ? postRefreshRemaining : null);
+                if (remaining === null && finalRemaining !== null) {
+                    if (!hasExplicitUsed && Number.isInteger(prevCreditsBeforeSend) && prevCreditsBeforeSend > finalRemaining) {
+                        usedCreditsMeta = prevCreditsBeforeSend - finalRemaining;
                     }
+                    resolvedMeta.creditsUsed = usedCreditsMeta;
+                    resolvedMeta.remainingCredits = finalRemaining;
+                    if (conversation[assistantMsgIndex]?.meta) {
+                        conversation[assistantMsgIndex].meta.creditsUsed = usedCreditsMeta;
+                        conversation[assistantMsgIndex].meta.remainingCredits = finalRemaining;
+                    }
+                    if (renderedBotContent) {
+                        applyBotMetaStatus(renderedBotContent, resolvedMeta);
+                    }
+                    persistConversation(session.user.id);
+                }
+                if (usedCreditsMeta !== null && usedCreditsMeta >= 0 && Number.isInteger(finalRemaining) && finalRemaining >= 0) {
+                    lastTurnCreditUsage = { used: usedCreditsMeta, remaining: finalRemaining };
+                    setStatus(formatMinimalStatus({
+                        tier: selectedTier,
+                        webSearch: Boolean(result?.webSearch),
+                        used: usedCreditsMeta,
+                        remaining: finalRemaining
+                    }));
                 }
             } catch (error) {
                 if (rafId !== null) {

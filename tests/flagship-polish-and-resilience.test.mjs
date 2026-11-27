@@ -429,6 +429,7 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
         titleText: document.getElementById('chatbotTitle')?.textContent.trim(),
         chatStatusText: document.getElementById('chatbotStatusText')?.textContent.trim(),
         headerHeight: header ? header.getBoundingClientRect().height : 999,
+        headerEmblemSize: emblem ? emblem.getBoundingClientRect().width : 0,
         emblemOverflow: emblem ? getComputedStyle(emblem).overflow : '',
         svgOverflow: emblemSvg ? getComputedStyle(emblemSvg).overflow : '',
         emblemRadius: emblem ? getComputedStyle(emblem).borderRadius : '',
@@ -451,11 +452,12 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     assert.equal(headerCheck.allOnline, true, "All 10 connectivity badges must initialize to Online");
     assert.equal(headerCheck.titleText, "Jevexa AI", "Header badge must show Jevexa AI");
     assert.equal(headerCheck.chatStatusText, "AI chat • Online");
-    assert.ok(headerCheck.headerHeight <= 48, `Compact top header must be <= 48px (got ${headerCheck.headerHeight})`);
+    assert.ok(headerCheck.headerHeight <= 40, `Compact top header must be <= 40px (got ${headerCheck.headerHeight})`);
+    assert.ok(headerCheck.headerEmblemSize > 0 && headerCheck.headerEmblemSize <= 24, `Header wand emblem must be compact <= 24px (got ${headerCheck.headerEmblemSize})`);
     assert.equal(headerCheck.emblemOverflow, "visible", "Emblem wrapper must not clip animated sparkles");
     assert.equal(headerCheck.svgOverflow, "visible", "Emblem SVG must not clip animated sparkles");
     assert.notEqual(headerCheck.emblemRadius, "50%", "Old circular badge shape must be replaced by sleek rounded-square badge");
-    assert.ok(headerCheck.emptyEmblemSize >= 60, `Desktop empty emblem must be >= 60px (got ${headerCheck.emptyEmblemSize})`);
+    assert.ok(headerCheck.emptyEmblemSize >= 48 && headerCheck.emptyEmblemSize <= 56, `Desktop empty emblem must be compact 48-56px (got ${headerCheck.emptyEmblemSize})`);
     assert.match(headerCheck.badgeSheenName, /jevBadgeSheen/);
     assert.match(headerCheck.emptySheenName, /jevBadgeSheen/);
     assert.equal(headerCheck.badgeSheenIter, "infinite");
@@ -507,11 +509,11 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
         thinkHeight: thinkTrigger?.height || 0
       };
     })()`);
-    assert.ok(mobileCheck.headerHeight <= 48, `Mobile header must be <= 48px (got ${mobileCheck.headerHeight})`);
+    assert.ok(mobileCheck.headerHeight <= 40, `Mobile header must be <= 40px (got ${mobileCheck.headerHeight})`);
     assert.equal(mobileCheck.headerLeftCenterOverlap, false, "Mobile header left controls must not overlap center badge");
     assert.equal(mobileCheck.headerCenterRightOverlap, false, "Mobile header center badge must not overlap right controls");
     assert.equal(mobileCheck.titleClipped, false, "Mobile 'Jevexa AI' badge title must fit without ellipsis truncation");
-    assert.ok(mobileCheck.emptyEmblemWidth >= 56, `Mobile center emblem must remain >= 56px (got ${mobileCheck.emptyEmblemWidth})`);
+    assert.ok(mobileCheck.emptyEmblemWidth >= 42 && mobileCheck.emptyEmblemWidth <= 50, `Mobile center emblem must be compact 42-50px (got ${mobileCheck.emptyEmblemWidth})`);
     assert.equal(mobileCheck.tierThinkOverlap, false, "Mobile Engine and Thinking dropdowns must not overlap");
     assert.equal(mobileCheck.thinkWebOverlap, false, "Mobile Thinking dropdown and Web Search button must not overlap");
     assert.equal(mobileCheck.attachWebOverlap, false, "Mobile Attach and Web Search buttons must not overlap");
@@ -539,13 +541,24 @@ test("4. E2E (Headless Chrome): Animated emblem, spacious chat, live Online->Off
     })`);
     const chatOutputState = await cdp.eval(`(() => {
       const bot = document.querySelector('#chatMessages .message.bot:not([data-chat-welcome])');
+      const statusEl = document.getElementById('chatCreditStatus');
+      const statusParts = statusEl ? Array.from(statusEl.children).map(el => el.textContent.trim()) : [];
       return {
         receiptText: bot.querySelector('.chat-credit-receipt')?.textContent.trim() || '',
-        bodyHtml: bot.querySelector('.msg-body')?.innerHTML || ''
+        bodyHtml: bot.querySelector('.msg-body')?.innerHTML || '',
+        bottomStatusText: statusEl?.textContent.trim() || '',
+        statusParts,
+        statusGap: statusEl ? getComputedStyle(statusEl).columnGap : ''
       };
     })()`);
     assert.match(chatOutputState.receiptText, /Used credit:\s*2/);
     assert.match(chatOutputState.receiptText, /Remaining credit:\s*248/);
+    assert.match(chatOutputState.bottomStatusText, /^Core Engine\s+Used credit:\s*2\s+Remaining credit:\s*248$/);
+    assert.equal(chatOutputState.statusParts.length, 3, "Bottom credit line must render 3 distinct parts: engine, used credit, remaining credit");
+    assert.equal(chatOutputState.statusParts[0], "Core Engine");
+    assert.match(chatOutputState.statusParts[1], /^Used credit:\s*2$/);
+    assert.match(chatOutputState.statusParts[2], /^Remaining credit:\s*248$/);
+    assert.notEqual(chatOutputState.statusGap, "0px", "Bottom credit line parts must have clean spacing gap");
     assert.doesNotMatch(chatOutputState.bodyHtml, /\*\*\*/);
     assert.match(chatOutputState.bodyHtml, /<strong><em>Bold Emphasis<\/em><\/strong>/);
 
